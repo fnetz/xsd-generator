@@ -1,0 +1,32 @@
+<!-- Example from https://www.w3schools.blog/xsd-example -->
+<?xml version="1.0" encoding="UTF-8" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+<xs:element name="employee">
+  <xs:complexType>
+    <xs:sequence>
+      <xs:element name="name" type="xs:string"></xs:element>
+      <xs:element name="department">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="departmentname" type="xs:string"></xs:element>
+            <xs:element name="address" type="xs:string"></xs:element>
+            <xs:element name="city" type="xs:string"></xs:element>
+            <xs:element name="country" type="xs:string"></xs:element>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="experience" maxOccurs="unbounded">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="title" type="xs:string"></xs:element>
+            <xs:element name="note" type="xs:string" minOccurs="0"></xs:element>
+            <xs:element name="year" type="xs:positiveInteger"></xs:element>
+            <xs:element name="grade" type="xs:decimal"></xs:element>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+    <xs:attribute name="employeeid" type="xs:string" use="required"></xs:attribute>
+  </xs:complexType>
+</xs:element>
+</xs:schema>
