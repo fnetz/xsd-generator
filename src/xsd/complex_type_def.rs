@@ -3,6 +3,7 @@ use super::{
     assertion::Assertion,
     attribute_decl,
     attribute_use::AttributeUse,
+    builtins::XS_NAMESPACE,
     element_decl::ElementDeclaration,
     model_group::Compositor,
     particle::{MaxOccurs, Particle},
@@ -132,13 +133,10 @@ impl ComplexTypeDefinition {
         ancestor_element: Option<Ref<ElementDeclaration>>,
     ) {
         // {base type definition} ·xs:anyType·
-        // TODO is this the right way? default?
-        let xs = complex_type.lookup_namespace_uri(Some("xs")).unwrap();
-        let base_type_definition = Some(
-            context
-                .components
-                .resolve_type_def(&QName(xs.into(), "anyType".into()), Resolution::Immediate),
-        );
+        let base_type_definition = Some(context.components.resolve_type_def(
+            &QName(XS_NAMESPACE.into(), "anyType".into()),
+            Resolution::Immediate,
+        ));
 
         // {derivation method}    restriction
         let derivation_method = Some(DerivationMethod::Restriction);
