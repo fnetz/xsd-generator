@@ -48,13 +48,14 @@ pub struct IntermediateComponentContainer {
     type_definitions: Vec<Intermediate<TypeDefinition>>,
     constraining_facets: Vec<Intermediate<ConstrainingFacet>>,
 
-    // TODO merge?
     unresolved_type_definitions: Vec<QName>,
     unresolved_simple_type_definitions: Vec<QName>,
     unresolved_complex_type_definitions: Vec<QName>,
+    unresolved_attribute_declarations: Vec<QName>,
 
     // Simple and complex type definitions share a symbol space
     type_definition_lookup: HashMap<QName, RRef<TypeDefinition>>,
+    attribute_declaration_lookup: HashMap<QName, RRef<AttributeDeclaration>>,
 }
 
 #[derive(Debug)]
@@ -155,10 +156,21 @@ impl IntermediateComponentContainer {
 
     pub fn resolve_attribute_declaration(
         &mut self,
-        _name: &QName,
-        _when: Resolution,
+        name: &QName,
+        when: Resolution,
     ) -> Ref<AttributeDeclaration> {
-        todo!()
+        match when {
+            Resolution::Immediate => *self
+                .attribute_declaration_lookup
+                .get(name)
+                .copied()
+                .unwrap(),
+            Resolution::Deferred => {
+                let id = self.unresolved_attribute_declarations.len() as u32;
+                self.unresolved_attribute_declarations.push(name.clone());
+                Ref::new_unresolved(id)
+            }
+        }
     }
 
     pub fn resolve_element_declaration(
@@ -201,6 +213,22 @@ impl IntermediateComponentContainer {
         let qname = QName(namespace_name.unwrap_or_default(), name);
 
         self.type_definition_lookup.insert(qname, type_def);
+    }
+
+    pub(super) fn register_attribute_decl(&mut self, attribute_decl: Ref<AttributeDeclaration>) {
+        let attribute_decl = attribute_decl
+            .as_resolved()
+            .expect("Tried to register unresolved attribute declaration");
+        let attribute_decl_res = attribute_decl.get_intermediate(self).unwrap();
+
+        let namespace_name = attribute_decl_res
+            .target_namespace
+            .clone()
+            .unwrap_or_default();
+        let qname = QName(namespace_name, attribute_decl_res.name.clone());
+
+        self.attribute_declaration_lookup
+            .insert(qname, attribute_decl);
     }
 
     pub fn perform_ref_resolution_pass(self) -> SchemaComponentContainer {
@@ -261,10 +289,18 @@ impl IntermediateComponentContainer {
             resolved_complex_type_definitions.push(complex_type_def);
         }
 
+        let mut resolved_attribute_declarations =
+            Vec::with_capacity(self.unresolved_attribute_declarations.len());
+        for name in self.unresolved_attribute_declarations.iter() {
+            let resolved = *self.attribute_declaration_lookup.get(name).unwrap();
+            resolved_attribute_declarations.push(resolved);
+        }
+
         let mut rv = ARefVisitor {
             resolved_type_definitions,
             resolved_simple_type_definitions,
             resolved_complex_type_definitions,
+            resolved_attribute_declarations,
         };
 
         // Step 2
@@ -386,6 +422,7 @@ struct ARefVisitor {
     resolved_type_definitions: Vec<RRef<TypeDefinition>>,
     resolved_simple_type_definitions: Vec<RRef<SimpleTypeDefinition>>,
     resolved_complex_type_definitions: Vec<RRef<ComplexTypeDefinition>>,
+    resolved_attribute_declarations: Vec<RRef<AttributeDeclaration>>,
 }
 
 impl ConcreteRefVisitor for ARefVisitor {
@@ -399,6 +436,10 @@ impl ConcreteRefVisitor for ARefVisitor {
 
     fn complex_type_definitions(&mut self, ref_: &mut Ref<ComplexTypeDefinition>) {
         *ref_ = *self.resolved_complex_type_definitions[ref_.index()];
+    }
+
+    fn attribute_declarations(&mut self, ref_: &mut Ref<AttributeDeclaration>) {
+        *ref_ = *self.resolved_attribute_declarations[ref_.index()];
     }
 }
 

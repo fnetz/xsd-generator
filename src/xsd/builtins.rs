@@ -1,11 +1,15 @@
 use super::complex_type_def::{self, ComplexTypeDefinition};
-use super::components::{IntermediateComponentContainer, Ref};
+use super::components::{IntermediateComponentContainer, Ref, Resolution};
 use super::constraining_facet::{ConstrainingFacet, WhiteSpace, WhiteSpaceValue};
 use super::fundamental_facet::{CardinalityValue, FundamentalFacet, OrderedValue};
 use super::simple_type_def::{self, SimpleTypeDefinition};
-use super::{Sequence, Set, TypeDefinition};
+use super::xstypes::QName;
+use super::{attribute_decl, AttributeDeclaration, Sequence, Set, TypeDefinition};
 
+// Namespaces used by the specification (pt. 1, §1.3.1)
 pub const XS_NAMESPACE: &str = "http://www.w3.org/2001/XMLSchema";
+pub const XSI_NAMESPACE: &str = "http://www.w3.org/2001/XMLSchema-instance";
+pub const VC_NAMESPACE: &str = " http://www.w3.org/2007/XMLSchema-versioning";
 
 fn gen_primitive_type_def(
     components: &mut IntermediateComponentContainer,
@@ -120,6 +124,11 @@ fn gen_ordinary_type_def(
 }
 
 pub fn register_builtins(components: &mut IntermediateComponentContainer) {
+    register_builtin_types(components);
+    register_builtin_attribute_decls(components);
+}
+
+fn register_builtin_types(components: &mut IntermediateComponentContainer) {
     let xs_any_type = components.create(ComplexTypeDefinition {
         annotations: Sequence::new(),
         name: Some("anyType".into()),
@@ -235,7 +244,11 @@ pub fn register_builtins(components: &mut IntermediateComponentContainer) {
     let xs_any_uri = gen_primitive_type_def(components, xs_any_atomic_type_def, "anyURI");
     components.register_type(xs_any_uri);
 
-    // TODO QName, NOTATION
+    let xs_qname = gen_primitive_type_def(components, xs_any_atomic_type_def, "QName");
+    components.register_type(xs_qname);
+
+    let xs_notation = gen_primitive_type_def(components, xs_any_atomic_type_def, "NOTATION");
+    components.register_type(xs_notation);
 
     // ordinary data types
 
@@ -271,4 +284,86 @@ pub fn register_builtins(components: &mut IntermediateComponentContainer) {
         None,
     );
     components.register_type(xs_positive_integer);
+}
+
+fn register_builtin_attribute_decls(components: &mut IntermediateComponentContainer) {
+    let qname = components.resolve_simple_type_def(
+        &QName(XS_NAMESPACE.into(), "QName".into()),
+        Resolution::Immediate,
+    );
+    let boolean = components.resolve_simple_type_def(
+        &QName(XS_NAMESPACE.into(), "boolean".into()),
+        Resolution::Immediate,
+    );
+    let any_uri = components.resolve_simple_type_def(
+        &QName(XS_NAMESPACE.into(), "anyURI".into()),
+        Resolution::Immediate,
+    );
+    let any_simple_type = components.resolve_type_def(
+        &QName(XS_NAMESPACE.into(), "anySimpleType".into()),
+        Resolution::Immediate,
+    );
+
+    // Built-in Attribute Declarations according to pt. 1, §3.2.7
+    // The {inheritable} property is not specified by the 1.1 spec;
+    // assuming `false` for now.
+
+    let xsi_type = components.create(AttributeDeclaration {
+        name: "type".into(),
+        target_namespace: Some(XSI_NAMESPACE.into()),
+        type_definition: qname,
+        scope: attribute_decl::Scope::new_global(),
+        value_constraint: None,
+        annotations: Sequence::new(),
+        inheritable: false,
+    });
+    components.register_attribute_decl(xsi_type);
+
+    let xsi_nil = components.create(AttributeDeclaration {
+        name: "nil".into(),
+        target_namespace: Some(XSI_NAMESPACE.into()),
+        type_definition: boolean,
+        scope: attribute_decl::Scope::new_global(),
+        value_constraint: None,
+        annotations: Sequence::new(),
+        inheritable: false,
+    });
+    components.register_attribute_decl(xsi_nil);
+
+    let schema_location_simple_type = components.create(SimpleTypeDefinition {
+        name: None,
+        target_namespace: Some(XSI_NAMESPACE.into()),
+        base_type_definition: Some(any_simple_type),
+        facets: Set::new(), // TODO spec says absent?
+        variety: Some(simple_type_def::Variety::List),
+        item_type_definition: Some(any_uri),
+        annotations: Sequence::new(),
+
+        final_: Set::new(),
+        context: None,
+        fundamental_facets: Set::new(), // TODO
+        primitive_type_definition: None,
+        member_type_definitions: None,
+    });
+    let xsi_schema_location = components.create(AttributeDeclaration {
+        name: "schemaLocation".into(),
+        target_namespace: Some(XSI_NAMESPACE.into()),
+        type_definition: schema_location_simple_type,
+        scope: attribute_decl::Scope::new_global(),
+        value_constraint: None,
+        annotations: Sequence::new(),
+        inheritable: false,
+    });
+    components.register_attribute_decl(xsi_schema_location);
+
+    let xsi_no_namespace_schema_location = components.create(AttributeDeclaration {
+        name: "noNamespaceSchemaLocation".into(),
+        target_namespace: Some(XSI_NAMESPACE.into()),
+        type_definition: any_uri,
+        scope: attribute_decl::Scope::new_global(),
+        value_constraint: None,
+        annotations: Sequence::new(),
+        inheritable: false,
+    });
+    components.register_attribute_decl(xsi_no_namespace_schema_location);
 }
