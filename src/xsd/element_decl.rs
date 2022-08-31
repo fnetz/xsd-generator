@@ -238,8 +238,7 @@ impl ElementDeclaration {
         //   <unique>, <key> and <keyref> [children] with a ref [attribute], as
         //   defined in XML Representation of Annotation Schema Components
         //   (§3.15.2).
-        let mut annot_elements = Vec::new();
-        annot_elements.push(element);
+        let mut annot_elements = vec![element];
         element
             .children()
             .filter(|e| ["unique", "key", "keyref"].contains(&e.tag_name().name()))

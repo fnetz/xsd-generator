@@ -216,8 +216,7 @@ impl ComplexTypeDefinition {
         //   and <extension> [children], if present, and their <openContent> and <attributeGroup>
         //   [children], if present, as defined in XML Representation of Annotation Schema
         //   Components (§3.15.2).
-        let mut annot_elements = Vec::new();
-        annot_elements.push(complex_type);
+        let mut annot_elements = vec![complex_type];
         complex_type
             .children()
             // TODO children of simple/complexContent
@@ -329,33 +328,30 @@ impl RefsVisitable for ComplexTypeDefinition {
         self.annotations.iter_mut().for_each(|annotation| {
             visitor.visit_ref(annotation);
         });
-        self.base_type_definition
-            .as_mut()
-            .map(|base_type_definition| {
-                visitor.visit_ref(base_type_definition);
-            });
-        self.context.as_mut().map(|context| match context {
-            Context::Element(element) => visitor.visit_ref(element),
-            Context::ComplexType(complex_type) => visitor.visit_ref(complex_type),
-        });
+        if let Some(base_type_definition) = self.base_type_definition.as_mut() {
+            visitor.visit_ref(base_type_definition);
+        }
+        if let Some(context) = self.context.as_mut() {
+            match context {
+                Context::Element(element) => visitor.visit_ref(element),
+                Context::ComplexType(complex_type) => visitor.visit_ref(complex_type),
+            }
+        }
         self.attribute_uses.iter_mut().for_each(|attribute_use| {
             visitor.visit_ref(attribute_use);
         });
-        self.attribute_wildcard.as_mut().map(|attribute_wildcard| {
+        if let Some(attribute_wildcard) = self.attribute_wildcard.as_mut() {
             visitor.visit_ref(attribute_wildcard);
-        });
-        self.content_type.particle.as_mut().map(|particle| {
+        }
+        if let Some(particle) = self.content_type.particle.as_mut() {
             visitor.visit_ref(particle);
-        });
-        self.content_type.open_content.as_mut().map(|open_content| {
+        }
+        if let Some(open_content) = self.content_type.open_content.as_mut() {
             visitor.visit_ref(&mut open_content.wildcard);
-        });
-        self.content_type
-            .simple_type_definition
-            .as_mut()
-            .map(|simple_type_def| {
-                visitor.visit_ref(simple_type_def);
-            });
+        }
+        if let Some(simple_type_def) = self.content_type.simple_type_definition.as_mut() {
+            visitor.visit_ref(simple_type_def);
+        }
         self.assertions.iter_mut().for_each(|assertion| {
             visitor.visit_ref(assertion);
         });

@@ -198,12 +198,12 @@ impl IntermediateComponentContainer {
             }
         };
 
-        let qname = QName(namespace_name.unwrap_or_else(String::new), name);
+        let qname = QName(namespace_name.unwrap_or_default(), name);
 
         self.type_definition_lookup.insert(qname, type_def);
     }
 
-    pub fn perform_ref_resolution_pass(mut self) -> SchemaComponentContainer {
+    pub fn perform_ref_resolution_pass(self) -> SchemaComponentContainer {
         // The Ref resolution pass generally can be divided into two parts:
         // 1. Resolve all unresolved components
         // 2. Visit all Refs and set them to the resolved value's Ref.
@@ -242,7 +242,7 @@ impl IntermediateComponentContainer {
                 println!("{:?} -> {:?}", key, **ref_);
             }
             let type_def = *self.type_definition_lookup.get(&name).unwrap();
-            let type_def = type_def.get_intermediate(&mut self).unwrap().to_owned();
+            let type_def = type_def.get_intermediate(&self).unwrap().to_owned();
             let simple_type_def = type_def.simple().unwrap();
             let simple_type_def = simple_type_def
                 .as_resolved()
@@ -253,7 +253,7 @@ impl IntermediateComponentContainer {
         for i in 0..self.unresolved_complex_type_definitions.len() {
             let name = self.unresolved_complex_type_definitions[i].clone();
             let type_def = *self.type_definition_lookup.get(&name).unwrap();
-            let type_def = type_def.get_intermediate(&mut self).unwrap().to_owned();
+            let type_def = type_def.get_intermediate(&self).unwrap().to_owned();
             let complex_type_def = type_def.complex().unwrap();
             let complex_type_def = complex_type_def
                 .as_resolved()

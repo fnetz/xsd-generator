@@ -104,13 +104,14 @@ impl AttributeDeclaration {
         //     {lexical form} the ·normalized value· (with respect to the {type definition}) of the
         //                    [attribute]
         let value_constraint = {
-            let attrib = if let Some(default) = attribute.attribute("default") {
-                Some((default, ValueConstraintVariety::Default))
-            } else if let Some(fixed) = attribute.attribute("fixed") {
-                Some((fixed, ValueConstraintVariety::Fixed))
-            } else {
-                None
-            };
+            let attrib = attribute
+                .attribute("default")
+                .map(|default| (default, ValueConstraintVariety::Default))
+                .or_else(|| {
+                    attribute
+                        .attribute("fixed")
+                        .map(|fixed| (fixed, ValueConstraintVariety::Fixed))
+                });
 
             attrib.map(|(value, variety)| ValueConstraint {
                 variety,
@@ -192,13 +193,14 @@ impl AttributeDeclaration {
             //       the ·normalized value· of the [attribute] (with respect to {attribute
             //       declaration}.{type definition})
             let value_constraint = {
-                let attrib = if let Some(default) = attribute.attribute("default") {
-                    Some((default, ValueConstraintVariety::Default))
-                } else if let Some(fixed) = attribute.attribute("fixed") {
-                    Some((fixed, ValueConstraintVariety::Fixed))
-                } else {
-                    None
-                };
+                let attrib = attribute
+                    .attribute("default")
+                    .map(|default| (default, ValueConstraintVariety::Default))
+                    .or_else(|| {
+                        attribute
+                            .attribute("fixed")
+                            .map(|fixed| (fixed, ValueConstraintVariety::Fixed))
+                    });
 
                 attrib.map(|(value, variety)| ValueConstraint {
                     variety,
@@ -336,13 +338,14 @@ impl AttributeDeclaration {
             //       the ·normalized value· of the [attribute] (with respect to {attribute
             //       declaration}.{type definition})
             let value_constraint = {
-                let attrib = if let Some(default) = attribute.attribute("default") {
-                    Some((default, ValueConstraintVariety::Default))
-                } else if let Some(fixed) = attribute.attribute("fixed") {
-                    Some((fixed, ValueConstraintVariety::Fixed))
-                } else {
-                    None
-                };
+                let attrib = attribute
+                    .attribute("default")
+                    .map(|default| (default, ValueConstraintVariety::Default))
+                    .or_else(|| {
+                        attribute
+                            .attribute("fixed")
+                            .map(|fixed| (fixed, ValueConstraintVariety::Fixed))
+                    });
 
                 attrib.map(|(value, variety)| ValueConstraint {
                     variety,

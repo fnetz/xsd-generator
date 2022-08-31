@@ -71,8 +71,7 @@ impl AttributeGroupDefinition {
         //   The ·annotation mapping· of the <attributeGroup> element and its <attributeGroup>
         //   [children], if present, as defined in XML Representation of Annotation Schema
         //   Components (§3.15.2).
-        let mut annot_elements = Vec::new();
-        annot_elements.push(attribute_group);
+        let mut annot_elements = vec![attribute_group];
         attribute_group
             .children()
             .filter(|c| c.tag_name().name() == "attributeGroup")

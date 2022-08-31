@@ -29,8 +29,8 @@ impl RefsVisitable for IdentityConstraintDefinition {
         self.annotations
             .iter_mut()
             .for_each(|annot| visitor.visit_ref(annot));
-        self.referenced_key
-            .as_mut()
-            .map(|key| visitor.visit_ref(key));
+        if let Some(key) = self.referenced_key.as_mut() {
+            visitor.visit_ref(key)
+        }
     }
 }

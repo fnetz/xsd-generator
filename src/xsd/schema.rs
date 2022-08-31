@@ -125,8 +125,7 @@ impl Schema {
         //   The ·annotation mapping· of the set of elements containing the <schema> and all the
         //   <include>, <redefine>, <override>, <import>, and <defaultOpenContent> [children], if
         //   any, as defined in XML Representation of Annotation Schema Components (§3.15.2).
-        let mut annot_elements = Vec::new();
-        annot_elements.push(schema);
+        let mut annot_elements = vec![schema];
         schema
             .children()
             .filter(|e| {

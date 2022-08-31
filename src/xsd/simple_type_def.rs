@@ -68,26 +68,28 @@ impl RefsVisitable for SimpleTypeDefinition {
         self.annotations
             .iter_mut()
             .for_each(|annot| visitor.visit_ref(annot));
-        self.context.as_mut().map(|context| match context {
-            Context::Attribute(attr) => visitor.visit_ref(attr),
-            Context::Element(element) => visitor.visit_ref(element),
-            Context::ComplexType(complex_type) => visitor.visit_ref(complex_type),
-            Context::SimpleType(simple_type) => visitor.visit_ref(simple_type),
-        });
-        self.base_type_definition
-            .as_mut()
-            .map(|base| visitor.visit_ref(base));
-        self.member_type_definitions
-            .as_mut()
-            .map(|types| types.iter_mut().for_each(|type_| visitor.visit_ref(type_)));
-        self.primitive_type_definition
-            .as_mut()
-            .map(|type_| visitor.visit_ref(type_));
-        self.item_type_definition
-            .as_mut()
-            .map(|type_| visitor.visit_ref(type_));
-        self.member_type_definitions
-            .as_mut()
-            .map(|types| types.iter_mut().for_each(|type_| visitor.visit_ref(type_)));
+        if let Some(context) = self.context.as_mut() {
+            match context {
+                Context::Attribute(attr) => visitor.visit_ref(attr),
+                Context::Element(element) => visitor.visit_ref(element),
+                Context::ComplexType(complex_type) => visitor.visit_ref(complex_type),
+                Context::SimpleType(simple_type) => visitor.visit_ref(simple_type),
+            }
+        }
+        if let Some(base) = self.base_type_definition.as_mut() {
+            visitor.visit_ref(base)
+        }
+        if let Some(types) = self.member_type_definitions.as_mut() {
+            types.iter_mut().for_each(|type_| visitor.visit_ref(type_))
+        }
+        if let Some(type_) = self.primitive_type_definition.as_mut() {
+            visitor.visit_ref(type_)
+        }
+        if let Some(type_) = self.item_type_definition.as_mut() {
+            visitor.visit_ref(type_)
+        }
+        if let Some(types) = self.member_type_definitions.as_mut() {
+            types.iter_mut().for_each(|type_| visitor.visit_ref(type_))
+        }
     }
 }
