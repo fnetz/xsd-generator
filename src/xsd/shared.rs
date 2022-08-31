@@ -6,10 +6,59 @@ use super::{
 
 /// Common type for [attribute_decl::ScopeVariety](super::attribute_decl::ScopeVariety) and
 /// [element_decl::ScopeVariety](super::element_decl::ScopeVariety)
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum ScopeVariety {
     Global,
     Local,
+}
+
+/// Base type for [attribute_decl::Scope](super::attribute_decl::Scope) and
+/// [element_decl::Scope](super::element_decl::Scope), with `P` being the Scope's parent
+/// type.
+///
+/// This type deviates slightly from the specification to better represent the fact that {parent} is
+/// required when the variety is local, and must be absent when the variety is global.
+#[derive(Clone, Debug)]
+pub enum Scope<P> {
+    Global,
+    Local(P),
+}
+
+impl<P> Scope<P> {
+    /// Constructs a new scope with {variety} = global and {parent} = ·absent·
+    pub const fn new_global() -> Self {
+        Self::Global
+    }
+
+    /// Constructs a new scope with {variety} = local and {parent} = `parent`
+    pub const fn new_local(parent: P) -> Self {
+        Self::Local(parent)
+    }
+
+    /// Corresponds to the {variety} property of Scope.
+    pub fn variety(&self) -> ScopeVariety {
+        match self {
+            Self::Global => ScopeVariety::Global,
+            Self::Local(_) => ScopeVariety::Local,
+        }
+    }
+
+    /// Corresponds to the {parent} property of Scope. `Some` if the variety is local,
+    /// `None` otherwise
+    pub fn parent(&self) -> Option<&P> {
+        match self {
+            Self::Global => None,
+            Self::Local(p) => Some(p),
+        }
+    }
+
+    /// Same as [`parent()`](Self::parent()) but mutable
+    pub(super) fn parent_mut(&mut self) -> Option<&mut P> {
+        match self {
+            Self::Global => None,
+            Self::Local(p) => Some(p),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]

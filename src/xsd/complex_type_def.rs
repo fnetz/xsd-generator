@@ -145,6 +145,7 @@ impl ComplexTypeDefinition {
 
         let content_type = ContentType::map_complex(
             context,
+            complex_type_ref,
             complex_type,
             None,
             schema,
@@ -377,6 +378,7 @@ impl RefsVisitable for ComplexTypeDefinition {
 impl ContentType {
     fn map_complex(
         context: &mut MappingContext,
+        complex_type_ref: Ref<ComplexTypeDefinition>,
         complex_type: Node,
         complex_content: Option<Node>,
         schema: Node,
@@ -432,9 +434,12 @@ impl ContentType {
                 children_elem
                     .children()
                     .find_map(|c| match c.tag_name().name() {
-                        "all" | "choice" | "sequence" => {
-                            Some(Particle::map_from_xml_model_group(context, c, schema))
-                        }
+                        "all" | "choice" | "sequence" => Some(Particle::map_from_xml_model_group(
+                            context,
+                            c,
+                            schema,
+                            complex_type_ref,
+                        )),
                         "group" => Some(Particle::map_from_xml_group_reference(context, c)),
                         _ => None,
                     }),

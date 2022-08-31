@@ -46,11 +46,7 @@ pub struct TypeTable {
 }
 
 /// Property Record: Scope (§3.3)
-#[derive(Clone, Debug)]
-pub struct Scope {
-    pub variety: ScopeVariety,
-    pub parent: Option<ScopeParent>,
-}
+pub type Scope = shared::Scope<ScopeParent>;
 
 pub use shared::ScopeVariety;
 
@@ -270,10 +266,7 @@ impl ElementDeclaration {
 
             // Populated by the specific implementations below
             target_namespace: None,
-            scope: Scope {
-                variety: ScopeVariety::Global,
-                parent: None,
-            },
+            scope: Scope::new_global(),
         }
     }
 
@@ -293,14 +286,9 @@ impl ElementDeclaration {
 
         // {scope}
         //   A Scope as follows:
-        let scope = Scope {
-            // {variety}
-            //   global
-            variety: ScopeVariety::Global,
-            // {parent}
-            //   ·absent·
-            parent: None,
-        };
+        //     {variety} global
+        //     {parent}  ·absent·
+        let scope = Scope::new_global();
 
         let common = Self::map_from_xml_common(context, self_ref, element, schema);
 
@@ -319,6 +307,7 @@ impl ElementDeclaration {
         context: &mut MappingContext,
         element: Node,
         schema: Node,
+        parent: ScopeParent,
     ) -> Ref<Self> {
         let self_ref = context.components.reserve();
 
@@ -347,16 +336,13 @@ impl ElementDeclaration {
         };
 
         // {scope} A Scope as follows:
-        let scope = Scope {
-            // {variety} local
-            variety: ScopeVariety::Local,
-            // {parent}  If the <element> element information item has <complexType> as an
-            //           ancestor, the Complex Type Definition corresponding to that item,
-            //           otherwise (the <element> element information item is within a named
-            //           <group> element information item), the Model Group Definition
-            //           corresponding to that item.
-            parent: None, // TODO
-        };
+        //    {variety} local
+        //    {parent}  If the <element> element information item has <complexType> as an
+        //              ancestor, the Complex Type Definition corresponding to that item,
+        //              otherwise (the <element> element information item is within a named
+        //              <group> element information item), the Model Group Definition
+        //              corresponding to that item.
+        let scope = Scope::new_local(parent);
 
         let common = Self::map_from_xml_common(context, self_ref, element, schema);
 
@@ -385,7 +371,7 @@ impl RefsVisitable for ElementDeclaration {
                 .for_each(|alternative| visitor.visit_ref(alternative));
             visitor.visit_ref(&mut type_table.default_type_definition);
         }
-        if let Some(ref mut scope_parent) = self.scope.parent {
+        if let Some(scope_parent) = self.scope.parent_mut() {
             match scope_parent {
                 ScopeParent::ComplexType(ref mut complex_type) => {
                     visitor.visit_ref(complex_type);

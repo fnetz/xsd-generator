@@ -21,11 +21,7 @@ pub struct AttributeDeclaration {
 }
 
 /// Property Record: Scope (§3.2)
-#[derive(Clone, Debug)]
-pub struct Scope {
-    pub variety: ScopeVariety,
-    pub parent: Option<ScopeParent>,
-}
+pub type Scope = shared::Scope<ScopeParent>;
 
 pub use shared::ScopeVariety;
 
@@ -90,10 +86,7 @@ impl AttributeDeclaration {
         //   A scope as follows:
         //     {variety} global
         //     {parent}  ·absent·
-        let scope = Scope {
-            variety: ScopeVariety::Global,
-            parent: None,
-        };
+        let scope = Scope::new_global();
 
         // {value constraint}
         //   If there is a default or a fixed [attribute], then a Value Constraint as follows,
@@ -286,19 +279,14 @@ impl AttributeDeclaration {
                 todo!("xs:anySimpleType")
             };
 
-            // {scope}
-            //   A Scope as follows:
-            //     {variety}
-            //       local
-            //     {parent}
-            //       If the <attribute> element information item has <complexType> as an ancestor, the
-            //       Complex Type Definition corresponding to that item, otherwise (the <attribute> element
-            //       information item is within an <attributeGroup> element information item), the
-            //       Attribute Group Definition corresponding to that item.
-            let scope = Scope {
-                variety: ScopeVariety::Local,
-                parent: Some(parent),
-            };
+            // {scope} A Scope as follows:
+            //   {variety} local
+            //   {parent}  If the <attribute> element information item has <complexType> as an
+            //             ancestor, the Complex Type Definition corresponding to that item,
+            //             otherwise (the <attribute> element information item is within an
+            //             <attributeGroup> element information item), the Attribute Group
+            //             Definition corresponding to that item.
+            let scope = Scope::new_local(parent);
 
             // {value constraint}
             //   ·absent·.
@@ -376,7 +364,7 @@ impl RefsVisitable for AttributeDeclaration {
             .iter_mut()
             .for_each(|annotation| visitor.visit_ref(annotation));
         visitor.visit_ref(&mut self.type_definition);
-        if let Some(ref mut scope_parent) = self.scope.parent {
+        if let Some(scope_parent) = self.scope.parent_mut() {
             match scope_parent {
                 ScopeParent::ComplexType(complex_type) => visitor.visit_ref(complex_type),
                 ScopeParent::AttributeGroup(attribute_group) => visitor.visit_ref(attribute_group),

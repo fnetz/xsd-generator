@@ -1,8 +1,8 @@
 use crate::xsd::{model_group::Compositor, ElementDeclaration, ModelGroup};
 
 use super::{
-    annotation::Annotation, shared::Term, values::actual_value, xstypes::Sequence, MappingContext,
-    Ref, RefVisitor, RefsVisitable,
+    annotation::Annotation, element_decl, shared::Term, values::actual_value, xstypes::Sequence,
+    ComplexTypeDefinition, MappingContext, Ref, RefVisitor, RefsVisitable,
 };
 use roxmltree::Node;
 
@@ -26,6 +26,7 @@ impl Particle {
         context: &mut MappingContext,
         particle: Node,
         schema: Node,
+        element_parent: Ref<ComplexTypeDefinition>,
     ) -> Ref<Self> {
         assert_eq!(particle.tag_name().name(), "element");
 
@@ -52,7 +53,12 @@ impl Particle {
 
         // {term}
         //   A (local) element declaration as given below.
-        let element = ElementDeclaration::map_from_xml_local(context, particle, schema);
+        let element = ElementDeclaration::map_from_xml_local(
+            context,
+            particle,
+            schema,
+            element_decl::ScopeParent::ComplexType(element_parent),
+        );
         let term = Term::ElementDeclaration(element);
 
         // {annotations}
@@ -80,6 +86,7 @@ impl Particle {
         context: &mut MappingContext,
         particle: Node,
         schema: Node,
+        element_parent: Ref<ComplexTypeDefinition>,
     ) -> Ref<Self> {
         assert!(matches!(
             particle.tag_name().name(),
@@ -129,12 +136,20 @@ impl Particle {
             let particles = particle
                 .children()
                 .filter_map(|child| match child.tag_name().name() {
-                    "all" | "choice" | "sequence" => {
-                        Some(Self::map_from_xml_model_group(context, child, schema))
-                    }
+                    "all" | "choice" | "sequence" => Some(Self::map_from_xml_model_group(
+                        context,
+                        child,
+                        schema,
+                        element_parent,
+                    )),
                     "any" => Some(Particle::map_from_xml_wildcard_any(context, child)),
                     "group" => Some(Particle::map_from_xml_group_reference(context, child)),
-                    "element" => Some(Particle::map_from_xml_local_element(context, child, schema)),
+                    "element" => Some(Particle::map_from_xml_local_element(
+                        context,
+                        child,
+                        schema,
+                        element_parent,
+                    )),
                     _ => None,
                 })
                 .collect();
