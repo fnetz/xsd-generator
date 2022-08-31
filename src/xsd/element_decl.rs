@@ -64,7 +64,12 @@ pub enum ScopeParent {
 pub type ValueConstraint = shared::ValueConstraint;
 
 impl ElementDeclaration {
-    fn map_from_xml_common(context: &mut MappingContext, element: Node, schema: Node) -> Self {
+    fn map_from_xml_common(
+        context: &mut MappingContext,
+        self_ref: Ref<Self>,
+        element: Node,
+        schema: Node,
+    ) -> Self {
         // {name}
         //   The ·actual value· of the name [attribute].
         let name = element
@@ -98,8 +103,12 @@ impl ElementDeclaration {
                     .children()
                     .find(|c| c.tag_name().name() == "complexType")
                     .map(|complex_type| {
-                        let complex_type_def =
-                            ComplexTypeDefinition::map_from_xml(context, complex_type, schema);
+                        let complex_type_def = ComplexTypeDefinition::map_from_xml(
+                            context,
+                            complex_type,
+                            schema,
+                            Some(self_ref),
+                        );
                         context
                             .components
                             .create(TypeDefinition::Complex(complex_type_def))
@@ -273,6 +282,8 @@ impl ElementDeclaration {
         element: Node,
         schema: Node,
     ) -> Ref<Self> {
+        let self_ref = context.components.reserve();
+
         // {target namespace}
         //   The ·actual value· of the targetNamespace [attribute] of the parent
         //   <schema> element information item, or ·absent· if there is none.
@@ -291,13 +302,17 @@ impl ElementDeclaration {
             parent: None,
         };
 
-        let common = Self::map_from_xml_common(context, element, schema);
+        let common = Self::map_from_xml_common(context, self_ref, element, schema);
 
-        context.components.create(Self {
-            target_namespace,
-            scope,
-            ..common
-        })
+        context.components.populate(
+            self_ref,
+            Self {
+                target_namespace,
+                scope,
+                ..common
+            },
+        );
+        self_ref
     }
 
     pub fn map_from_xml_local(
@@ -305,6 +320,8 @@ impl ElementDeclaration {
         element: Node,
         schema: Node,
     ) -> Ref<Self> {
+        let self_ref = context.components.reserve();
+
         // {target namespace}
         //   The appropriate case among the following:
         let target_namespace = if let Some(target_namespace) = schema.attribute("targetNamespace") {
@@ -341,13 +358,17 @@ impl ElementDeclaration {
             parent: None, // TODO
         };
 
-        let common = Self::map_from_xml_common(context, element, schema);
+        let common = Self::map_from_xml_common(context, self_ref, element, schema);
 
-        context.components.create(Self {
-            target_namespace,
-            scope,
-            ..common
-        })
+        context.components.populate(
+            self_ref,
+            Self {
+                target_namespace,
+                scope,
+                ..common
+            },
+        );
+        self_ref
     }
 }
 

@@ -81,6 +81,7 @@ impl ComplexTypeDefinition {
         context: &mut MappingContext,
         complex_type: Node,
         schema: Node,
+        ancestor_element: Option<Ref<ElementDeclaration>>,
     ) -> Ref<Self> {
         let complex_type_ref = context.components.reserve::<Self>();
 
@@ -95,7 +96,13 @@ impl ComplexTypeDefinition {
         {
             Self::map_with_explicit_complex_content(complex_type, complex_content, schema)
         } else {
-            Self::map_with_implicit_complex_content(context, complex_type_ref, complex_type, schema)
+            Self::map_with_implicit_complex_content(
+                context,
+                complex_type_ref,
+                complex_type,
+                schema,
+                ancestor_element,
+            )
         }
 
         assert!(
@@ -122,6 +129,7 @@ impl ComplexTypeDefinition {
         complex_type_ref: Ref<Self>,
         complex_type: Node,
         schema: Node,
+        ancestor_element: Option<Ref<ElementDeclaration>>,
     ) {
         // {base type definition} ·xs:anyType·
         // TODO is this the right way? default?
@@ -143,7 +151,7 @@ impl ComplexTypeDefinition {
             derivation_method.unwrap(),
         );
 
-        let common = Self::map_common(context, complex_type, schema);
+        let common = Self::map_common(context, complex_type, schema, ancestor_element);
 
         let attribute_uses =
             Self::map_attribute_uses_property(context, complex_type_ref, complex_type, schema);
@@ -162,7 +170,12 @@ impl ComplexTypeDefinition {
         );
     }
 
-    fn map_common(mapping_context: &mut MappingContext, complex_type: Node, schema: Node) -> Self {
+    fn map_common(
+        mapping_context: &mut MappingContext,
+        complex_type: Node,
+        schema: Node,
+        ancestor_element: Option<Ref<ElementDeclaration>>,
+    ) -> Self {
         // {name}
         //   The ·actual value· of the name [attribute] if present, otherwise ·absent·.
         let name = complex_type
@@ -197,7 +210,10 @@ impl ComplexTypeDefinition {
         let context = if !complex_type.has_attribute("name") {
             None
         } else {
-            Some(todo!())
+            let ancestor_element = ancestor_element.expect(
+                "Expected an unnamed complex type definition to have an ancestor <element>",
+            );
+            Some(Context::Element(ancestor_element))
         };
 
         // {assertions}

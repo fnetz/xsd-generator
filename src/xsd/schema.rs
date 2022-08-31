@@ -54,7 +54,7 @@ impl Schema {
             .filter(|e| e.tag_name().name() == "complexType")
         {
             let complex_type_def =
-                ComplexTypeDefinition::map_from_xml(context, complex_type, schema);
+                ComplexTypeDefinition::map_from_xml(context, complex_type, schema, None);
             type_definitions.push(
                 context
                     .components
