@@ -1,7 +1,9 @@
 use super::complex_type_def::{self, ComplexTypeDefinition};
 use super::components::{IntermediateComponentContainer, Ref};
+use super::constraining_facet::{ConstrainingFacet, WhiteSpace, WhiteSpaceValue};
+use super::fundamental_facet::{CardinalityValue, FundamentalFacet, OrderedValue};
 use super::simple_type_def::{self, SimpleTypeDefinition};
-use super::{ConstrainingFacet, FundamentalFacet, Sequence, Set, TypeDefinition};
+use super::{Sequence, Set, TypeDefinition};
 
 pub const XS_NAMESPACE: &str = "http://www.w3.org/2001/XMLSchema";
 
@@ -10,6 +12,49 @@ fn gen_primitive_type_def(
     base_type: Ref<TypeDefinition>,
     name: &str,
 ) -> Ref<TypeDefinition> {
+    // Fundamental facets (from table F.1)
+    use CardinalityValue::*;
+    use OrderedValue::*;
+    let (ordered, bounded, cardinality, numeric) = match name {
+        "string" => (False, false, CountablyInfinite, false),
+        "boolean" => (False, false, Finite, false),
+        "float" => (Partial, true, Finite, true),
+        "double" => (Partial, true, Finite, true),
+        "decimal" => (Total, false, CountablyInfinite, true),
+        "duration" => (Partial, false, CountablyInfinite, false),
+        "dateTime" => (Partial, false, CountablyInfinite, false),
+        "time" => (Partial, false, CountablyInfinite, false),
+        "date" => (Partial, false, CountablyInfinite, false),
+        "gYearMonth" => (Partial, false, CountablyInfinite, false),
+        "gYear" => (Partial, false, CountablyInfinite, false),
+        "gMonthDay" => (Partial, false, CountablyInfinite, false),
+        "gDay" => (Partial, false, CountablyInfinite, false),
+        "gMonth" => (Partial, false, CountablyInfinite, false),
+        "hexBinary" => (False, false, CountablyInfinite, false),
+        "base64Binary" => (False, false, CountablyInfinite, false),
+        "anyURI" => (False, false, CountablyInfinite, false),
+        "QName" => (False, false, CountablyInfinite, false),
+        "NOTATION" => (False, false, CountablyInfinite, false),
+        _ => unreachable!("Tried to generate primitive type def for non-primitive {name}"),
+    };
+    let fundamental_facets = [
+        FundamentalFacet::Ordered(ordered),
+        FundamentalFacet::Bounded(bounded),
+        FundamentalFacet::Cardinality(cardinality),
+        FundamentalFacet::Numeric(numeric),
+    ]
+    .into_iter()
+    .collect();
+
+    // Constraining facets (whiteSpace)
+    let (ws_value, ws_fixed) = match name {
+        "string" => (WhiteSpaceValue::Preserve, false),
+        _ => (WhiteSpaceValue::Collapse, true),
+    };
+    let ws_facet = components.create(ConstrainingFacet::WhiteSpace(WhiteSpace::new(
+        ws_value, ws_fixed,
+    )));
+
     let simple_type_def = components.reserve();
     components.populate(
         simple_type_def,
@@ -20,8 +65,8 @@ fn gen_primitive_type_def(
             final_: Set::new(),
             variety: Some(simple_type_def::Variety::Atomic),
             primitive_type_definition: Some(simple_type_def),
-            facets: vec![ConstrainingFacet::WhiteSpace], // TODO
-            fundamental_facets: Set::new(),              // TODO
+            facets: vec![ws_facet],
+            fundamental_facets,
             context: None,
             item_type_definition: None,
             member_type_definitions: None,
@@ -37,7 +82,7 @@ fn gen_ordinary_type_def(
     base_type: Ref<TypeDefinition>,
     name: &str,
     variety: simple_type_def::Variety,
-    facets: Set<ConstrainingFacet>,
+    facets: Set<Ref<ConstrainingFacet>>,
     fundamental_facets: Set<FundamentalFacet>,
     item_type_def: Option<Ref<SimpleTypeDefinition>>,
 ) -> Ref<TypeDefinition> {

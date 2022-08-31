@@ -45,8 +45,8 @@ pub struct IntermediateComponentContainer {
     annotations: Vec<Intermediate<Annotation>>,
     simple_type_definitions: Vec<Intermediate<SimpleTypeDefinition>>,
 
-    type_definitions: Vec<Intermediate<TypeDefinition>>, // TODO remove the refcell, TypeDefinition
-    // can be copied
+    type_definitions: Vec<Intermediate<TypeDefinition>>,
+    constraining_facets: Vec<Intermediate<ConstrainingFacet>>,
 
     // TODO merge?
     unresolved_type_definitions: Vec<QName>,
@@ -76,6 +76,7 @@ pub struct SchemaComponentContainer {
     simple_type_definitions: Vec<SimpleTypeDefinition>,
 
     type_definitions: Vec<TypeDefinition>, // TODO
+    constraining_facets: Vec<ConstrainingFacet>,
 }
 
 /// In case of built-in resolutions, `Immediate` can be used to indicate that the
@@ -348,6 +349,11 @@ impl IntermediateComponentContainer {
             component.visit_refs(&mut rv);
         }
 
+        let mut constraining_facets = Self::finalize_list(self.constraining_facets);
+        for component in constraining_facets.iter_mut() {
+            component.visit_refs(&mut rv);
+        }
+
         SchemaComponentContainer {
             attribute_declarations,
             element_declarations,
@@ -365,6 +371,7 @@ impl IntermediateComponentContainer {
             annotations,
             simple_type_definitions,
             type_definitions,
+            constraining_facets,
         }
     }
 
@@ -420,6 +427,7 @@ pub trait ConcreteRefVisitor {
     fn annotations(&mut self, _ref_: &mut Ref<Annotation>) {}
     fn simple_type_definitions(&mut self, _ref_: &mut Ref<SimpleTypeDefinition>) {}
     fn type_definitions(&mut self, _ref_: &mut Ref<TypeDefinition>) {}
+    fn constraining_facets(&mut self, _ref_: &mut Ref<ConstrainingFacet>) {}
 }
 
 compcontainer! {
@@ -440,6 +448,7 @@ compcontainer! {
     simple_type_definitions: SimpleTypeDefinition,
 
     type_definitions: TypeDefinition, // TODO
+    constraining_facets: ConstrainingFacet,
 }
 
 pub trait Refable: Sized {

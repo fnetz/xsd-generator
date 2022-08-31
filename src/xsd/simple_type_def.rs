@@ -22,7 +22,7 @@ pub struct SimpleTypeDefinition {
     pub context: Option<Context>,
     // TODO Option for root?
     pub base_type_definition: Option<Ref<TypeDefinition>>,
-    pub facets: Set<ConstrainingFacet>,
+    pub facets: Set<Ref<ConstrainingFacet>>,
     pub fundamental_facets: Set<FundamentalFacet>,
     pub variety: Option<Variety>,
     pub primitive_type_definition: Option<Ref<SimpleTypeDefinition>>,
