@@ -24,6 +24,7 @@ pub mod type_alternative;
 pub mod wildcard;
 pub mod xstypes;
 
+mod builtins;
 mod components;
 mod values;
 

@@ -1,0 +1,229 @@
+use super::complex_type_def::{self, ComplexTypeDefinition};
+use super::components::{IntermediateComponentContainer, Ref};
+use super::simple_type_def::{self, SimpleTypeDefinition};
+use super::{ConstrainingFacet, FundamentalFacet, Sequence, Set, TypeDefinition};
+
+pub const XS_NAMESPACE: &str = "http://www.w3.org/2001/XMLSchema";
+
+fn gen_primitive_type_def(
+    components: &mut IntermediateComponentContainer,
+    base_type: Ref<TypeDefinition>,
+    name: &str,
+) -> Ref<TypeDefinition> {
+    let simple_type_def = components.reserve();
+    components.populate(
+        simple_type_def,
+        SimpleTypeDefinition {
+            name: Some(name.into()),
+            target_namespace: Some(XS_NAMESPACE.into()),
+            base_type_definition: Some(base_type),
+            final_: Set::new(),
+            variety: Some(simple_type_def::Variety::Atomic),
+            primitive_type_definition: Some(simple_type_def),
+            facets: vec![ConstrainingFacet::WhiteSpace], // TODO
+            fundamental_facets: Set::new(),              // TODO
+            context: None,
+            item_type_definition: None,
+            member_type_definitions: None,
+            annotations: Sequence::new(),
+        },
+    );
+
+    components.create(TypeDefinition::Simple(simple_type_def))
+}
+
+fn gen_ordinary_type_def(
+    components: &mut IntermediateComponentContainer,
+    base_type: Ref<TypeDefinition>,
+    name: &str,
+    variety: simple_type_def::Variety,
+    facets: Set<ConstrainingFacet>,
+    fundamental_facets: Set<FundamentalFacet>,
+    item_type_def: Option<Ref<SimpleTypeDefinition>>,
+) -> Ref<TypeDefinition> {
+    let simple_type_def = components.create(SimpleTypeDefinition {
+        name: Some(name.into()),
+        target_namespace: Some(XS_NAMESPACE.into()),
+        base_type_definition: Some(base_type),
+        final_: Set::new(),
+        variety: Some(variety),
+        primitive_type_definition: match variety {
+            simple_type_def::Variety::Atomic => {
+                match base_type.get_intermediate(components).unwrap() {
+                    TypeDefinition::Simple(ref_) => {
+                        ref_.get_intermediate(components)
+                            .unwrap()
+                            .primitive_type_definition
+                    }
+                    TypeDefinition::Complex(_) => unimplemented!(),
+                }
+            }
+            _ => None,
+        },
+        facets,
+        fundamental_facets,
+        context: None,
+        item_type_definition: match variety {
+            simple_type_def::Variety::Atomic => None,
+            _ => Some(item_type_def.unwrap()),
+        },
+        member_type_definitions: None,
+        annotations: Sequence::new(), // TODO
+    });
+
+    components.create(TypeDefinition::Simple(simple_type_def))
+}
+
+pub fn register_builtins(components: &mut IntermediateComponentContainer) {
+    let xs_any_type = components.create(ComplexTypeDefinition {
+        annotations: Sequence::new(),
+        name: Some("anyType".into()),
+        target_namespace: Some(XS_NAMESPACE.into()),
+        base_type_definition: None,
+        final_: Set::new(),
+        context: None, // TODO
+        derivation_method: None,
+        abstract_: false,
+        attribute_uses: Set::new(),
+        attribute_wildcard: None,
+        content_type: complex_type_def::ContentType {
+            variety: complex_type_def::ContentTypeVariety::Empty,
+            particle: None,
+            open_content: None,
+            simple_type_definition: None,
+        },
+        prohibited_substitutions: Set::new(),
+        assertions: Sequence::new(),
+    });
+    let xs_any_type_def = components.create(TypeDefinition::Complex(xs_any_type));
+    components.register_type(xs_any_type_def);
+
+    // == Part 2 §4.1.6 Built-in Simple Type Definitions ==
+
+    // anySimpleType
+    let xs_any_simple_type = components.create(SimpleTypeDefinition {
+        name: Some("anySimpleType".into()),
+        target_namespace: Some(XS_NAMESPACE.into()),
+        final_: Set::new(),
+        context: None,
+        base_type_definition: Some(xs_any_type_def),
+        facets: Set::new(),
+        fundamental_facets: Set::new(),
+        variety: None,
+        primitive_type_definition: None,
+        item_type_definition: None,
+        member_type_definitions: None,
+        annotations: Sequence::new(),
+    });
+    let xs_any_simple_type_def = components.create(TypeDefinition::Simple(xs_any_simple_type));
+    components.register_type(xs_any_simple_type_def);
+
+    // anyAtomicType
+    let xs_any_atomic_type = components.create(SimpleTypeDefinition {
+        name: Some("anyAtomicType".into()),
+        target_namespace: Some(XS_NAMESPACE.into()),
+        final_: Set::new(),
+        context: None,
+        base_type_definition: Some(xs_any_simple_type_def),
+        facets: Set::new(),
+        fundamental_facets: Set::new(),
+        variety: Some(simple_type_def::Variety::Atomic),
+        primitive_type_definition: None,
+        item_type_definition: None,
+        member_type_definitions: None,
+        annotations: Sequence::new(),
+    });
+    let xs_any_atomic_type_def = components.create(TypeDefinition::Simple(xs_any_atomic_type));
+    components.register_type(xs_any_atomic_type_def);
+
+    // primitive data types
+
+    let xs_string = gen_primitive_type_def(components, xs_any_atomic_type_def, "string");
+    components.register_type(xs_string);
+
+    let xs_boolean = gen_primitive_type_def(components, xs_any_atomic_type_def, "boolean");
+    components.register_type(xs_boolean);
+
+    let xs_float = gen_primitive_type_def(components, xs_any_atomic_type_def, "float");
+    components.register_type(xs_float);
+
+    let xs_double = gen_primitive_type_def(components, xs_any_atomic_type_def, "double");
+    components.register_type(xs_double);
+
+    let xs_decimal = gen_primitive_type_def(components, xs_any_atomic_type_def, "decimal");
+    components.register_type(xs_decimal);
+
+    let xs_date_time = gen_primitive_type_def(components, xs_any_atomic_type_def, "dateTime");
+    components.register_type(xs_date_time);
+
+    let xs_duration = gen_primitive_type_def(components, xs_any_atomic_type_def, "duration");
+    components.register_type(xs_duration);
+
+    let xs_time = gen_primitive_type_def(components, xs_any_atomic_type_def, "time");
+    components.register_type(xs_time);
+
+    let xs_date = gen_primitive_type_def(components, xs_any_atomic_type_def, "date");
+    components.register_type(xs_date);
+
+    let xs_g_month = gen_primitive_type_def(components, xs_any_atomic_type_def, "gMonth");
+    components.register_type(xs_g_month);
+
+    let xs_g_month_day = gen_primitive_type_def(components, xs_any_atomic_type_def, "gMonthDay");
+    components.register_type(xs_g_month_day);
+
+    let xs_g_day = gen_primitive_type_def(components, xs_any_atomic_type_def, "gDay");
+    components.register_type(xs_g_day);
+
+    let xs_g_year = gen_primitive_type_def(components, xs_any_atomic_type_def, "gYear");
+    components.register_type(xs_g_year);
+
+    let xs_g_year_month = gen_primitive_type_def(components, xs_any_atomic_type_def, "gYearMonth");
+    components.register_type(xs_g_year_month);
+
+    let xs_hex_binary = gen_primitive_type_def(components, xs_any_atomic_type_def, "hexBinary");
+    components.register_type(xs_hex_binary);
+
+    let xs_base64_binary =
+        gen_primitive_type_def(components, xs_any_atomic_type_def, "base64Binary");
+    components.register_type(xs_base64_binary);
+
+    let xs_any_uri = gen_primitive_type_def(components, xs_any_atomic_type_def, "anyURI");
+    components.register_type(xs_any_uri);
+
+    // TODO QName, NOTATION
+
+    // ordinary data types
+
+    let xs_integer = gen_ordinary_type_def(
+        components,
+        xs_decimal,
+        "integer",
+        simple_type_def::Variety::Atomic,
+        Set::new(), // TODO P2 §3.4.13.3
+        Set::new(), // TODO
+        None,
+    );
+    components.register_type(xs_integer);
+
+    let xs_non_negative_integer = gen_ordinary_type_def(
+        components,
+        xs_integer,
+        "nonNegativeInteger",
+        simple_type_def::Variety::Atomic,
+        Set::new(), // TODO P2 §3.4.20.3
+        Set::new(), // TODO
+        None,
+    );
+    components.register_type(xs_non_negative_integer);
+
+    let xs_positive_integer = gen_ordinary_type_def(
+        components,
+        xs_non_negative_integer,
+        "positiveInteger",
+        simple_type_def::Variety::Atomic,
+        Set::new(), // TODO P2 §3.4.25.3
+        Set::new(), // TODO
+        None,
+    );
+    components.register_type(xs_positive_integer);
+}

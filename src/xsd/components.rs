@@ -168,6 +168,40 @@ impl IntermediateComponentContainer {
         todo!()
     }
 
+    pub(super) fn register_type(&mut self, type_def: Ref<TypeDefinition>) {
+        let type_def = type_def
+            .as_resolved()
+            .expect("Tried to register unresolved type");
+        let res_type_def = type_def.get_intermediate(self).unwrap();
+        // TODO move to TypeDefinition
+        let (namespace_name, name) = match res_type_def {
+            TypeDefinition::Simple(ref_) => {
+                let simple_type_def = ref_.get_intermediate(self).unwrap();
+                (
+                    simple_type_def.target_namespace.clone(),
+                    simple_type_def
+                        .name
+                        .clone()
+                        .expect("Can't register unnamed type"),
+                )
+            }
+            TypeDefinition::Complex(ref_) => {
+                let complex_type_def = ref_.get_intermediate(self).unwrap();
+                (
+                    complex_type_def.target_namespace.clone(),
+                    complex_type_def
+                        .name
+                        .clone()
+                        .expect("Can't register unnamed type"),
+                )
+            }
+        };
+
+        let qname = QName(namespace_name.unwrap_or_else(String::new), name);
+
+        self.type_definition_lookup.insert(qname, type_def);
+    }
+
     pub fn perform_ref_resolution_pass(mut self) -> SchemaComponentContainer {
         // The Ref resolution pass generally can be divided into two parts:
         // 1. Resolve all unresolved components
@@ -521,282 +555,7 @@ pub struct MappingContext {
 impl MappingContext {
     pub fn new() -> Self {
         let mut components = IntermediateComponentContainer::default();
-
-        const XS_NAMESPACE: &str = "http://www.w3.org/2001/XMLSchema";
-
-        fn register_type(
-            components: &mut IntermediateComponentContainer,
-            type_def: RRef<TypeDefinition>,
-        ) {
-            let res_type_def = type_def.get_intermediate(&components).unwrap();
-            // TODO move to TypeDefinition
-            let (namespace_name, name) = match res_type_def {
-                TypeDefinition::Simple(ref_) => {
-                    let simple_type_def = ref_.get_intermediate(&components).unwrap();
-                    (
-                        simple_type_def.target_namespace.clone(),
-                        simple_type_def
-                            .name
-                            .clone()
-                            .expect("Can't register unnamed type"),
-                    )
-                }
-                TypeDefinition::Complex(ref_) => {
-                    let complex_type_def = ref_.get_intermediate(&components).unwrap();
-                    (
-                        complex_type_def.target_namespace.clone(),
-                        complex_type_def
-                            .name
-                            .clone()
-                            .expect("Can't register unnamed type"),
-                    )
-                }
-            };
-
-            let qname = QName(namespace_name.unwrap_or_else(String::new), name);
-
-            components.type_definition_lookup.insert(qname, type_def);
-        }
-
-        let xs_any_type = components.create(ComplexTypeDefinition {
-            annotations: Sequence::new(),
-            name: Some("anyType".into()),
-            target_namespace: Some(XS_NAMESPACE.into()),
-            base_type_definition: None,
-            final_: Set::new(),
-            context: None, // TODO
-            derivation_method: None,
-            abstract_: false,
-            attribute_uses: Set::new(),
-            attribute_wildcard: None,
-            content_type: complex_type_def::ContentType {
-                variety: complex_type_def::ContentTypeVariety::Empty,
-                particle: None,
-                open_content: None,
-                simple_type_definition: None,
-            },
-            prohibited_substitutions: Set::new(),
-            assertions: Sequence::new(),
-        });
-        let xs_any_type_def = components.create(TypeDefinition::Complex(xs_any_type));
-        register_type(&mut components, xs_any_type_def.as_resolved().unwrap());
-
-        // == Part 2 §4.1.6 Built-in Simple Type Definitions ==
-
-        // anySimpleType
-        let xs_any_simple_type = components.create(SimpleTypeDefinition {
-            name: Some("anySimpleType".into()),
-            target_namespace: Some(XS_NAMESPACE.into()),
-            final_: Set::new(),
-            context: None,
-            base_type_definition: Some(xs_any_type_def),
-            facets: Set::new(),
-            fundamental_facets: Set::new(),
-            variety: None,
-            primitive_type_definition: None,
-            item_type_definition: None,
-            member_type_definitions: None,
-            annotations: Sequence::new(),
-        });
-        let xs_any_simple_type_def = components.create(TypeDefinition::Simple(xs_any_simple_type));
-        register_type(
-            &mut components,
-            xs_any_simple_type_def.as_resolved().unwrap(),
-        );
-
-        // anyAtomicType
-        let xs_any_atomic_type = components.create(SimpleTypeDefinition {
-            name: Some("anyAtomicType".into()),
-            target_namespace: Some(XS_NAMESPACE.into()),
-            final_: Set::new(),
-            context: None,
-            base_type_definition: Some(xs_any_simple_type_def),
-            facets: Set::new(),
-            fundamental_facets: Set::new(),
-            variety: Some(simple_type_def::Variety::Atomic),
-            primitive_type_definition: None,
-            item_type_definition: None,
-            member_type_definitions: None,
-            annotations: Sequence::new(),
-        });
-        let xs_any_atomic_type_def = components.create(TypeDefinition::Simple(xs_any_atomic_type));
-        register_type(
-            &mut components,
-            xs_any_atomic_type_def.as_resolved().unwrap(),
-        );
-
-        // primitive data types
-
-        fn gen_primitive_type_def(
-            components: &mut IntermediateComponentContainer,
-            base_type: Ref<TypeDefinition>,
-            name: &str,
-        ) -> Ref<TypeDefinition> {
-            let simple_type_def = components.reserve();
-            components.populate(
-                simple_type_def,
-                SimpleTypeDefinition {
-                    name: Some(name.into()),
-                    target_namespace: Some(XS_NAMESPACE.into()),
-                    base_type_definition: Some(base_type),
-                    final_: Set::new(),
-                    variety: Some(simple_type_def::Variety::Atomic),
-                    primitive_type_definition: Some(simple_type_def),
-                    facets: vec![ConstrainingFacet::WhiteSpace], // TODO
-                    fundamental_facets: Set::new(),              // TODO
-                    context: None,
-                    item_type_definition: None,
-                    member_type_definitions: None,
-                    annotations: Sequence::new(),
-                },
-            );
-            let type_def = components.create(TypeDefinition::Simple(simple_type_def));
-
-            type_def
-        }
-
-        let xs_string = gen_primitive_type_def(&mut components, xs_any_atomic_type_def, "string");
-        register_type(&mut components, xs_string.as_resolved().unwrap());
-
-        let xs_boolean = gen_primitive_type_def(&mut components, xs_any_atomic_type_def, "boolean");
-        register_type(&mut components, xs_boolean.as_resolved().unwrap());
-
-        let xs_float = gen_primitive_type_def(&mut components, xs_any_atomic_type_def, "float");
-        register_type(&mut components, xs_float.as_resolved().unwrap());
-
-        let xs_double = gen_primitive_type_def(&mut components, xs_any_atomic_type_def, "double");
-        register_type(&mut components, xs_double.as_resolved().unwrap());
-
-        let xs_decimal = gen_primitive_type_def(&mut components, xs_any_atomic_type_def, "decimal");
-        register_type(&mut components, xs_decimal.as_resolved().unwrap());
-
-        let xs_date_time =
-            gen_primitive_type_def(&mut components, xs_any_atomic_type_def, "dateTime");
-        register_type(&mut components, xs_date_time.as_resolved().unwrap());
-
-        let xs_duration =
-            gen_primitive_type_def(&mut components, xs_any_atomic_type_def, "duration");
-        register_type(&mut components, xs_duration.as_resolved().unwrap());
-
-        let xs_time = gen_primitive_type_def(&mut components, xs_any_atomic_type_def, "time");
-        register_type(&mut components, xs_time.as_resolved().unwrap());
-
-        let xs_date = gen_primitive_type_def(&mut components, xs_any_atomic_type_def, "date");
-        register_type(&mut components, xs_date.as_resolved().unwrap());
-
-        let xs_g_month = gen_primitive_type_def(&mut components, xs_any_atomic_type_def, "gMonth");
-        register_type(&mut components, xs_g_month.as_resolved().unwrap());
-
-        let xs_g_month_day =
-            gen_primitive_type_def(&mut components, xs_any_atomic_type_def, "gMonthDay");
-        register_type(&mut components, xs_g_month_day.as_resolved().unwrap());
-
-        let xs_g_day = gen_primitive_type_def(&mut components, xs_any_atomic_type_def, "gDay");
-        register_type(&mut components, xs_g_day.as_resolved().unwrap());
-
-        let xs_g_year = gen_primitive_type_def(&mut components, xs_any_atomic_type_def, "gYear");
-        register_type(&mut components, xs_g_year.as_resolved().unwrap());
-
-        let xs_g_year_month =
-            gen_primitive_type_def(&mut components, xs_any_atomic_type_def, "gYearMonth");
-        register_type(&mut components, xs_g_year_month.as_resolved().unwrap());
-
-        let xs_hex_binary =
-            gen_primitive_type_def(&mut components, xs_any_atomic_type_def, "hexBinary");
-        register_type(&mut components, xs_hex_binary.as_resolved().unwrap());
-
-        let xs_base64_binary =
-            gen_primitive_type_def(&mut components, xs_any_atomic_type_def, "base64Binary");
-        register_type(&mut components, xs_base64_binary.as_resolved().unwrap());
-
-        let xs_any_uri = gen_primitive_type_def(&mut components, xs_any_atomic_type_def, "anyURI");
-        register_type(&mut components, xs_any_uri.as_resolved().unwrap());
-
-        // ordinary data types
-
-        fn gen_ordinary_type_def(
-            components: &mut IntermediateComponentContainer,
-            base_type: Ref<TypeDefinition>,
-            name: &str,
-            variety: simple_type_def::Variety,
-            facets: Set<ConstrainingFacet>,
-            fundamental_facets: Set<FundamentalFacet>,
-            item_type_def: Option<Ref<SimpleTypeDefinition>>,
-        ) -> Ref<TypeDefinition> {
-            let simple_type_def = components.reserve();
-            components.populate(
-                simple_type_def,
-                SimpleTypeDefinition {
-                    name: Some(name.into()),
-                    target_namespace: Some(XS_NAMESPACE.into()),
-                    base_type_definition: Some(base_type),
-                    final_: Set::new(),
-                    variety: Some(variety),
-                    primitive_type_definition: match variety {
-                        simple_type_def::Variety::Atomic => {
-                            match base_type.get_intermediate(components).unwrap() {
-                                TypeDefinition::Simple(ref_) => {
-                                    ref_.get_intermediate(components)
-                                        .unwrap()
-                                        .primitive_type_definition
-                                }
-                                TypeDefinition::Complex(_) => unimplemented!(),
-                            }
-                        }
-                        _ => None,
-                    },
-                    facets,
-                    fundamental_facets,
-                    context: None,
-                    item_type_definition: match variety {
-                        simple_type_def::Variety::Atomic => None,
-                        _ => Some(item_type_def.unwrap()),
-                    },
-                    member_type_definitions: None,
-                    annotations: Sequence::new(), // TODO
-                },
-            );
-            let type_def = components.create(TypeDefinition::Simple(simple_type_def));
-
-            type_def
-        }
-
-        let xs_integer = gen_ordinary_type_def(
-            &mut components,
-            xs_decimal,
-            "integer",
-            simple_type_def::Variety::Atomic,
-            Set::new(), // TODO P2 §3.4.13.3
-            Set::new(), // TODO
-            None,
-        );
-        register_type(&mut components, xs_integer.as_resolved().unwrap());
-
-        let xs_non_negative_integer = gen_ordinary_type_def(
-            &mut components,
-            xs_integer,
-            "nonNegativeInteger",
-            simple_type_def::Variety::Atomic,
-            Set::new(), // TODO P2 §3.4.20.3
-            Set::new(), // TODO
-            None,
-        );
-        register_type(
-            &mut components,
-            xs_non_negative_integer.as_resolved().unwrap(),
-        );
-
-        let xs_positive_integer = gen_ordinary_type_def(
-            &mut components,
-            xs_non_negative_integer,
-            "positiveInteger",
-            simple_type_def::Variety::Atomic,
-            Set::new(), // TODO P2 §3.4.25.3
-            Set::new(), // TODO
-            None,
-        );
-        register_type(&mut components, xs_positive_integer.as_resolved().unwrap());
-
+        super::builtins::register_builtins(&mut components);
         MappingContext { components }
     }
 }
