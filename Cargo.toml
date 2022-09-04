@@ -2,8 +2,10 @@
 name = "xsd-generator"
 version = "0.1.0"
 edition = "2021"
+description = "Generates XML binding code from XSD schema files"
 
 [dependencies]
+clap = { version = "3.2", features = ["derive"] }
 lazy_static = "1.4"
 reqwest = { version = "0.11", features = ["blocking"] }
 roxmltree = "0.15"
