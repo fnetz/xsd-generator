@@ -27,8 +27,8 @@ pub(super) struct TopLevelElements<'a, 'input> {
 }
 
 impl<'a, 'input: 'a> TopLevelElements<'a, 'input> {
-    fn get_node_by_dyn_ref(&self, dynref: DynamicRef) -> Node<'a, 'input> {
-        *self.ref_to_node.get(&dynref).unwrap()
+    fn get_node_by_dyn_ref(&self, dynref: DynamicRef) -> Option<Node<'a, 'input>> {
+        self.ref_to_node.get(&dynref).copied()
     }
 }
 
@@ -39,7 +39,7 @@ where
 {
     fn insert(&mut self, id: Node<'a, 'input>, ref_: Ref<C>);
     fn get_ref_by_node_id(&self, id: NodeId) -> Ref<C>;
-    fn get_node_by_ref(&self, ref_: Ref<C>) -> Node<'a, 'input>;
+    fn get_node_by_ref(&self, ref_: Ref<C>) -> Option<Node<'a, 'input>>;
 }
 
 macro_rules! impl_top_level {
@@ -54,7 +54,7 @@ macro_rules! impl_top_level {
                 *self.$field_name.get(&id).unwrap()
             }
 
-            fn get_node_by_ref(&self, ref_: Ref<$value_type>) -> Node<'a, 'input> {
+            fn get_node_by_ref(&self, ref_: Ref<$value_type>) -> Option<Node<'a, 'input>> {
                 self.get_node_by_dyn_ref(ref_.into())
             }
         }
@@ -146,7 +146,9 @@ impl<'a, 'input: 'a> MappingContext<'a, 'input> {
         TopLevelElements<'a, 'input>: TopLevel<'a, 'input, C>,
     {
         let node = self.top_level_refs.get_node_by_ref(ref_);
-        self.ensure_top_level_is_present(ref_, node);
+        if let Some(node) = node {
+            self.ensure_top_level_is_present(ref_, node);
+        }
         ref_.get(&self.components)
     }
 
