@@ -20,13 +20,7 @@ impl ActualValue<'_> for String {
 
 impl ActualValue<'_> for QName {
     fn convert(src: &'_ str, parent: Node) -> Self {
-        // TODO prefix resolution
-        if let Some((prefix, local)) = src.rsplit_once(':') {
-            let prefix = parent.lookup_namespace_uri(Some(prefix)).unwrap();
-            QName(prefix.into(), local.into())
-        } else {
-            QName("".into(), src.into())
-        }
+        QName::parse(src, parent).unwrap()
     }
 }
 

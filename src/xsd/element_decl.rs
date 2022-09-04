@@ -1,13 +1,16 @@
 use super::{
     annotation::Annotation,
+    builtins::XS_ANY_TYPE_NAME,
     complex_type_def::{self, ComplexTypeDefinition},
+    components::{Component, Named, NamedXml},
     identity_constraint_def::IdentityConstraintDefinition,
+    mapping_context::TopLevelMappable,
     model_group_def::ModelGroupDefinition,
     shared::{self, TypeDefinition},
     type_alternative::TypeAlternative,
     values::actual_value,
     xstypes::{AnyURI, NCName, QName, Sequence, Set},
-    MappingContext, Ref, RefVisitor, RefsVisitable, Resolution, SimpleTypeDefinition,
+    MappingContext, Ref, SimpleTypeDefinition,
 };
 use roxmltree::Node;
 
@@ -17,7 +20,7 @@ pub struct ElementDeclaration {
     pub annotations: Sequence<Ref<Annotation>>,
     pub name: NCName,
     pub target_namespace: Option<AnyURI>,
-    pub type_definition: Ref<TypeDefinition>,
+    pub type_definition: TypeDefinition,
     pub type_table: Option<TypeTable>,
     pub scope: Scope,
     pub value_constraint: Option<ValueConstraint>,
@@ -59,13 +62,38 @@ pub enum ScopeParent {
 /// Property Record: Value Constraint (§3.3)
 pub type ValueConstraint = shared::ValueConstraint;
 
+impl NamedXml for ElementDeclaration {
+    fn get_name_from_xml(element: Node, schema: Node) -> QName {
+        // {name}
+        //   The ·actual value· of the name [attribute].
+        let name = element
+            .attribute("name")
+            .map(|v| actual_value::<String>(v, element))
+            .unwrap();
+
+        // {target namespace}
+        //   The ·actual value· of the targetNamespace [attribute] of the parent
+        //   <schema> element information item, or ·absent· if there is none.
+        let target_namespace = schema
+            .attribute("targetNamespace")
+            .map(|v| actual_value::<String>(v, element));
+
+        QName::with_optional_namespace(target_namespace, name)
+    }
+}
+
 impl ElementDeclaration {
+    pub const TAG_NAME: &'static str = "element";
+
     fn map_from_xml_common(
         context: &mut MappingContext,
         self_ref: Ref<Self>,
         element: Node,
         schema: Node,
     ) -> Self {
+        // NOTE: For now, get_name_from_xml() can't be used as the common case doesn't handle the
+        //       target namespace
+
         // {name}
         //   The ·actual value· of the name [attribute].
         let name = element
@@ -89,10 +117,8 @@ impl ElementDeclaration {
             .find(|c| c.tag_name().name() == "simpleType")
             .map(|simple_type| {
                 let simple_type_def =
-                    SimpleTypeDefinition::map_from_xml(context, simple_type, schema);
-                context
-                    .components
-                    .create(TypeDefinition::Simple(simple_type_def))
+                    SimpleTypeDefinition::map_from_xml(context, simple_type, schema, None);
+                TypeDefinition::Simple(simple_type_def)
             })
             .or_else(|| {
                 element
@@ -104,18 +130,16 @@ impl ElementDeclaration {
                             complex_type,
                             schema,
                             Some(self_ref),
+                            None,
                         );
-                        context
-                            .components
-                            .create(TypeDefinition::Complex(complex_type_def))
+                        TypeDefinition::Complex(complex_type_def)
                     })
             })
             .or_else(|| {
                 element.attribute("type").map(|type_| {
-                    context.components.resolve_type_def(
-                        &actual_value::<QName>(type_, element),
-                        Resolution::Deferred,
-                    )
+                    context
+                        .resolver
+                        .resolve(&actual_value::<QName>(type_, element))
                 })
             })
             .or_else(|| {
@@ -123,14 +147,10 @@ impl ElementDeclaration {
                     .attribute("substitutionGroup")
                     .map(|v| actual_value::<Vec<QName>>(v, element))
                     .and_then(|v| v.first().cloned())
-                    .map(|name| {
-                        context
-                            .components
-                            .resolve_element_declaration(&name, Resolution::Deferred)
-                    })
-                    .map(|_element_decl| todo!("element_decl.type_definition"))
+                    .map(|name| context.resolver.resolve::<Ref<ElementDeclaration>>(&name))
+                    .map(|element_decl| context.request(element_decl).type_definition)
             })
-            .unwrap_or_else(|| todo!("xs:anyType"));
+            .unwrap_or_else(|| context.resolver.resolve(&XS_ANY_TYPE_NAME));
 
         // {type table}
         //   A Type Table corresponding to the <alternative> element information
@@ -209,7 +229,7 @@ impl ElementDeclaration {
         // TODO
         let value_constraint = None;
 
-        // {identity- constraint definitions}
+        // {identity-constraint definitions}
         //   A set consisting of the identity-constraint-definitions
         //   corresponding to all the <key>, <unique> and <keyref> element
         //   information items in the [children], if any, otherwise the empty
@@ -270,40 +290,7 @@ impl ElementDeclaration {
         }
     }
 
-    pub fn map_from_xml_top_level(
-        context: &mut MappingContext,
-        element: Node,
-        schema: Node,
-    ) -> Ref<Self> {
-        let self_ref = context.components.reserve();
-
-        // {target namespace}
-        //   The ·actual value· of the targetNamespace [attribute] of the parent
-        //   <schema> element information item, or ·absent· if there is none.
-        let target_namespace = schema
-            .attribute("targetNamespace")
-            .map(|v| actual_value::<String>(v, element));
-
-        // {scope}
-        //   A Scope as follows:
-        //     {variety} global
-        //     {parent}  ·absent·
-        let scope = Scope::new_global();
-
-        let common = Self::map_from_xml_common(context, self_ref, element, schema);
-
-        context.components.populate(
-            self_ref,
-            Self {
-                target_namespace,
-                scope,
-                ..common
-            },
-        );
-        self_ref
-    }
-
-    pub fn map_from_xml_local(
+    pub(super) fn map_from_xml_local(
         context: &mut MappingContext,
         element: Node,
         schema: Node,
@@ -346,7 +333,7 @@ impl ElementDeclaration {
 
         let common = Self::map_from_xml_common(context, self_ref, element, schema);
 
-        context.components.populate(
+        context.components.insert(
             self_ref,
             Self {
                 target_namespace,
@@ -358,37 +345,47 @@ impl ElementDeclaration {
     }
 }
 
-impl RefsVisitable for ElementDeclaration {
-    fn visit_refs(&mut self, visitor: &mut impl RefVisitor) {
-        self.annotations
-            .iter_mut()
-            .for_each(|annot| visitor.visit_ref(annot));
-        visitor.visit_ref(&mut self.type_definition);
-        if let Some(ref mut type_table) = self.type_table {
-            type_table
-                .alternatives
-                .iter_mut()
-                .for_each(|alternative| visitor.visit_ref(alternative));
-            visitor.visit_ref(&mut type_table.default_type_definition);
-        }
-        if let Some(scope_parent) = self.scope.parent_mut() {
-            match scope_parent {
-                ScopeParent::ComplexType(ref mut complex_type) => {
-                    visitor.visit_ref(complex_type);
-                }
-                ScopeParent::Group(ref mut group) => {
-                    visitor.visit_ref(group);
-                }
-            }
-        }
-        self.identity_constraint_definitions.iter_mut().for_each(
-            |identity_constraint_definition| {
-                visitor.visit_ref(identity_constraint_definition);
-            },
-        );
-        self.substitution_group_affiliations.iter_mut().for_each(
-            |substitution_group_affiliation| {
-                visitor.visit_ref(substitution_group_affiliation);
+impl Component for ElementDeclaration {
+    const DISPLAY_NAME: &'static str = "ElementDeclaration";
+}
+
+impl Named for ElementDeclaration {
+    fn name(&self) -> Option<QName> {
+        Some(QName::with_optional_namespace(
+            self.target_namespace.as_ref(),
+            &self.name,
+        ))
+    }
+}
+
+impl TopLevelMappable for ElementDeclaration {
+    fn map_from_top_level_xml(
+        context: &mut MappingContext,
+        self_ref: Ref<Self>,
+        element: Node,
+        schema: Node,
+    ) {
+        // {target namespace}
+        //   The ·actual value· of the targetNamespace [attribute] of the parent
+        //   <schema> element information item, or ·absent· if there is none.
+        let target_namespace = schema
+            .attribute("targetNamespace")
+            .map(|v| actual_value::<String>(v, element));
+
+        // {scope}
+        //   A Scope as follows:
+        //     {variety} global
+        //     {parent}  ·absent·
+        let scope = Scope::new_global();
+
+        let common = Self::map_from_xml_common(context, self_ref, element, schema);
+
+        context.components.insert(
+            self_ref,
+            Self {
+                target_namespace,
+                scope,
+                ..common
             },
         );
     }

@@ -1,8 +1,7 @@
-use crate::xsd::{model_group::Compositor, ElementDeclaration, ModelGroup};
-
 use super::{
-    annotation::Annotation, element_decl, shared::Term, values::actual_value, xstypes::Sequence,
-    ComplexTypeDefinition, MappingContext, Ref, RefVisitor, RefsVisitable,
+    annotation::Annotation, components::Component, element_decl, model_group::Compositor,
+    shared::Term, values::actual_value, xstypes::Sequence, ComplexTypeDefinition,
+    ElementDeclaration, MappingContext, ModelGroup, Ref,
 };
 use roxmltree::Node;
 
@@ -22,7 +21,7 @@ pub enum MaxOccurs {
 }
 
 impl Particle {
-    pub fn map_from_xml_local_element(
+    pub(super) fn map_from_xml_local_element(
         context: &mut MappingContext,
         particle: Node,
         schema: Node,
@@ -64,11 +63,9 @@ impl Particle {
         // {annotations}
         //   The same annotations as the {annotations} of the {term}.
         let annotations = match term {
-            Term::ElementDeclaration(element) => element
-                .get_intermediate(&context.components)
-                .unwrap()
-                .annotations
-                .clone(),
+            Term::ElementDeclaration(element) => {
+                element.get(&context.components).annotations.clone()
+            }
             _ => unreachable!(),
         };
 
@@ -82,7 +79,7 @@ impl Particle {
 
     /// Mapper for Model groups <all>, <sequence>, and <choice>, see XML Representation of Model
     /// Group Schema Components (§3.8.2)
-    pub fn map_from_xml_model_group(
+    pub(super) fn map_from_xml_model_group(
         context: &mut MappingContext,
         particle: Node,
         schema: Node,
@@ -175,7 +172,7 @@ impl Particle {
 
     /// Mapper for Group references <group>, see XML Representation of Model Group Definition
     /// Schema Components (§3.7.2)
-    pub fn map_from_xml_group_reference(
+    pub(super) fn map_from_xml_group_reference(
         _context: &mut MappingContext,
         group: Node,
     ) -> Ref<Particle> {
@@ -184,21 +181,15 @@ impl Particle {
     }
 
     /// Mapper for Wildcard <any>, see XML Representation of Wildcard Schema Components (§3.10.2)
-    pub fn map_from_xml_wildcard_any(_context: &mut MappingContext, particle: Node) -> Ref<Self> {
+    pub(super) fn map_from_xml_wildcard_any(
+        _context: &mut MappingContext,
+        particle: Node,
+    ) -> Ref<Self> {
         assert_eq!(particle.tag_name().name(), "any");
         todo!()
     }
 }
 
-impl RefsVisitable for Particle {
-    fn visit_refs(&mut self, visitor: &mut impl RefVisitor) {
-        match self.term {
-            Term::ElementDeclaration(ref mut element) => visitor.visit_ref(element),
-            Term::ModelGroup(ref mut group) => visitor.visit_ref(group),
-            Term::Wildcard(ref mut wildcard) => visitor.visit_ref(wildcard),
-        }
-        self.annotations
-            .iter_mut()
-            .for_each(|annot| visitor.visit_ref(annot));
-    }
+impl Component for Particle {
+    const DISPLAY_NAME: &'static str = "Particle";
 }

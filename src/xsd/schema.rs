@@ -2,8 +2,10 @@ use super::{
     annotation::Annotation,
     attribute_decl::AttributeDeclaration,
     attribute_group_def::AttributeGroupDefinition,
+    components::{Component, ComponentTraits, HasArenaContainer, Lookup, LookupTables, NamedXml},
     element_decl::ElementDeclaration,
     identity_constraint_def::IdentityConstraintDefinition,
+    mapping_context::{TopLevel, TopLevelElements},
     model_group_def::ModelGroupDefinition,
     notation_decl::NotationDeclaration,
     shared::TypeDefinition,
@@ -16,7 +18,7 @@ use roxmltree::Node;
 #[derive(Clone, Debug)]
 pub struct Schema {
     pub annotations: Sequence<Ref<Annotation>>,
-    pub type_definitions: Set<Ref<TypeDefinition>>,
+    pub type_definitions: Set<TypeDefinition>,
     pub attribute_declarations: Set<Ref<AttributeDeclaration>>,
     pub element_declarations: Set<Ref<ElementDeclaration>>,
     pub attribute_group_definitions: Set<Ref<AttributeGroupDefinition>>,
@@ -26,8 +28,85 @@ pub struct Schema {
 }
 
 impl Schema {
-    pub fn map_from_xml(context: &mut MappingContext, schema: Node) -> Self {
+    pub(super) fn map_from_xml<'a, 'input: 'a>(
+        context: &mut MappingContext<'a, 'input>,
+        schema: Node<'a, 'input>,
+    ) -> Self {
         assert_eq!(schema.tag_name().name(), "schema");
+
+        fn reserve_top_level<'a, 'input: 'a, C>(
+            context: &mut MappingContext<'a, 'input>,
+            node: Node<'a, 'input>,
+            schema: Node,
+        ) where
+            C: Component + NamedXml,
+            ComponentTraits: HasArenaContainer<C>,
+            LookupTables: Lookup<Ref<C>>,
+            TopLevelElements<'a, 'input>: TopLevel<'a, 'input, C>,
+        {
+            let name = C::get_name_from_xml(node, schema);
+            let ref_ = context.components.reserve::<C>();
+            context.resolver.register_with_name(name, ref_);
+            context.top_level_refs.insert(node, ref_);
+        }
+
+        for top_level_element in schema.children().filter(|e| e.is_element()) {
+            match top_level_element.tag_name().name() {
+                SimpleTypeDefinition::TAG_NAME => {
+                    // TODO unnamed top level allowed?
+                    let name =
+                        SimpleTypeDefinition::name_from_xml(top_level_element, schema).unwrap();
+                    let std_ref = context.components.reserve();
+                    context
+                        .resolver
+                        .register_with_name(name, TypeDefinition::Simple(std_ref));
+                    context.top_level_refs.insert(top_level_element, std_ref);
+                }
+                ComplexTypeDefinition::TAG_NAME => {
+                    let name =
+                        ComplexTypeDefinition::name_from_xml(top_level_element, schema).unwrap();
+                    let ctd_ref = context.components.reserve();
+                    context
+                        .resolver
+                        .register_with_name(name, TypeDefinition::Complex(ctd_ref));
+                    context.top_level_refs.insert(top_level_element, ctd_ref);
+                }
+                AttributeDeclaration::TAG_NAME => {
+                    reserve_top_level::<AttributeDeclaration>(context, top_level_element, schema);
+                }
+                ElementDeclaration::TAG_NAME => {
+                    reserve_top_level::<ElementDeclaration>(context, top_level_element, schema);
+                }
+                AttributeGroupDefinition::TAG_NAME => {
+                    reserve_top_level::<AttributeGroupDefinition>(
+                        context,
+                        top_level_element,
+                        schema,
+                    );
+                }
+                ModelGroupDefinition::TAG_NAME => {
+                    reserve_top_level::<ModelGroupDefinition>(context, top_level_element, schema);
+                }
+                NotationDeclaration::TAG_NAME => {
+                    reserve_top_level::<NotationDeclaration>(context, top_level_element, schema);
+                }
+                IdentityConstraintDefinition::KEY_TAG_NAME
+                | IdentityConstraintDefinition::KEYREF_TAG_NAME
+                | IdentityConstraintDefinition::UNIQUE_TAG_NAME => {
+                    reserve_top_level::<IdentityConstraintDefinition>(
+                        context,
+                        top_level_element,
+                        schema,
+                    );
+                }
+
+                Annotation::TAG_NAME => {}
+                _ => panic!(
+                    "Unknown top level element {}",
+                    top_level_element.tag_name().name()
+                ),
+            }
+        }
 
         // {type definitions}
         //   The simple and complex type definitions corresponding to all the <simpleType> and
@@ -42,24 +121,15 @@ impl Schema {
             .children()
             .filter(|e| e.tag_name().name() == "simpleType")
         {
-            let simple_type_def = SimpleTypeDefinition::map_from_xml(context, simple_type, schema);
-            type_definitions.push(
-                context
-                    .components
-                    .create(TypeDefinition::Simple(simple_type_def)),
-            );
+            let simple_type_def = context.request_ref_by_node(simple_type);
+            type_definitions.push(TypeDefinition::Simple(simple_type_def));
         }
         for complex_type in schema
             .children()
             .filter(|e| e.tag_name().name() == "complexType")
         {
-            let complex_type_def =
-                ComplexTypeDefinition::map_from_xml(context, complex_type, schema, None);
-            type_definitions.push(
-                context
-                    .components
-                    .create(TypeDefinition::Complex(complex_type_def)),
-            );
+            let complex_type_def = context.request_ref_by_node(complex_type);
+            type_definitions.push(TypeDefinition::Complex(complex_type_def));
         }
 
         // {attribute declarations}
@@ -69,7 +139,7 @@ impl Schema {
         let attribute_declarations = schema
             .children()
             .filter(|e| e.tag_name().name() == "attribute")
-            .map(|attribute| AttributeDeclaration::map_from_xml_global(context, attribute, schema))
+            .map(|attribute| context.request_ref_by_node(attribute))
             .collect::<Sequence<_>>();
 
         // {element declarations}
@@ -79,7 +149,7 @@ impl Schema {
         let element_declarations = schema
             .children()
             .filter(|e| e.tag_name().name() == "element")
-            .map(|element| ElementDeclaration::map_from_xml_top_level(context, element, schema))
+            .map(|element| context.request_ref_by_node(element))
             .collect::<Sequence<_>>();
 
         // {attribute group definitions}
@@ -89,9 +159,7 @@ impl Schema {
         let attribute_group_definitions = schema
             .children()
             .filter(|e| e.tag_name().name() == "attributeGroup")
-            .map(|attribute_group| {
-                AttributeGroupDefinition::map_from_xml(context, attribute_group, schema)
-            })
+            .map(|attribute_group| context.request_ref_by_node(attribute_group))
             .collect::<Sequence<_>>();
 
         // {model group definitions}
@@ -101,7 +169,7 @@ impl Schema {
         let model_group_definitions = schema
             .children()
             .filter(|e| e.tag_name().name() == "group")
-            .map(|group| ModelGroupDefinition::map_from_xml(context, group, schema))
+            .map(|group| context.request_ref_by_node(group))
             .collect::<Sequence<_>>();
 
         // {notation declarations}
@@ -111,15 +179,18 @@ impl Schema {
         let notation_declarations = schema
             .children()
             .filter(|e| e.tag_name().name() == "notation")
-            .map(|notation| NotationDeclaration::map_from_xml(context, notation, schema))
+            .map(|notation| context.request_ref_by_node(notation))
             .collect::<Sequence<_>>();
 
         // {identity-constraint definitions}
         //   The identity-constraint definitions corresponding to all the <key>, <keyref>, and
         //   <unique> element information items anywhere within the [children], if any, plus any
         //   definitions brought in via <include>, <override>, <redefine>, and <import>.
-        // TODO
-        let identity_constraint_definitions = Sequence::new();
+        let identity_constraint_definitions = schema
+            .children()
+            .filter(|e| ["key", "keyref", "unique"].contains(&e.tag_name().name()))
+            .map(|icd| context.request_ref_by_node(icd))
+            .collect::<Sequence<_>>();
 
         // {annotations}
         //   The ·annotation mapping· of the set of elements containing the <schema> and all the

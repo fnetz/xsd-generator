@@ -11,6 +11,7 @@ pub mod attribute_use;
 pub mod complex_type_def;
 pub mod constraining_facet;
 pub mod element_decl;
+pub mod error;
 pub mod fundamental_facet;
 pub mod identity_constraint_def;
 pub mod model_group;
@@ -26,6 +27,7 @@ pub mod xstypes;
 
 mod builtins;
 mod components;
+mod mapping_context;
 mod values;
 
 pub use annotation::Annotation;
@@ -48,18 +50,16 @@ pub use simple_type_def::SimpleTypeDefinition;
 pub use type_alternative::TypeAlternative;
 pub use wildcard::Wildcard;
 
-use std::collections::HashMap;
-use std::marker::PhantomData;
-
 pub use components::Ref;
-use components::{MappingContext, RefVisitor, RefsVisitable, Resolution};
-use xstypes::{QName, Sequence, Set};
+use mapping_context::MappingContext;
+use xstypes::{Sequence, Set};
 
-use self::components::SchemaComponentContainer;
+pub use self::components::SchemaComponentTable;
 
-pub fn read_schema(schema: roxmltree::Document) -> (Schema, SchemaComponentContainer) {
-    let mut ctx = MappingContext::new();
-    let schema = Schema::map_from_xml(&mut ctx, schema.root_element());
-    let components = ctx.components.perform_ref_resolution_pass();
+pub fn read_schema(schema: roxmltree::Document) -> (Schema, SchemaComponentTable) {
+    let schema = schema.root_element();
+    let mut ctx = MappingContext::new(schema);
+    let schema = Schema::map_from_xml(&mut ctx, schema);
+    let components = ctx.components.convert_to_schema_table().unwrap();
     (schema, components)
 }

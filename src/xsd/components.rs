@@ -1,611 +1,493 @@
-use super::*;
+use std::any::TypeId;
+use std::collections::HashMap;
+use std::fmt;
+use std::marker::PhantomData;
+use std::num::{NonZeroU32, NonZeroUsize};
 
-macro_rules! compcontainer {
-    ($($name:ident: $typ:ty,)+) => {
-        $(
-            impl Refable for $typ {
-                fn intermediate_container(container: &IntermediateComponentContainer) -> &[Intermediate<Self>] {
-                    &container.$name
-                }
-                fn intermediate_container_mut(container: &mut IntermediateComponentContainer) -> &mut Vec<Intermediate<Self>> {
-                    &mut container.$name
-                }
+use roxmltree::Node;
 
-                fn container(container: &SchemaComponentContainer) -> &[Self] {
-                    &container.$name
-                }
+use super::xstypes::QName;
+use super::{
+    Annotation, Assertion, AttributeDeclaration, AttributeGroupDefinition, AttributeUse,
+    ComplexTypeDefinition, ConstrainingFacet, ElementDeclaration, IdentityConstraintDefinition,
+    ModelGroup, ModelGroupDefinition, NotationDeclaration, Particle, SimpleTypeDefinition,
+    TypeAlternative, TypeDefinition, Wildcard,
+};
 
-                fn visit_ref<V: ConcreteRefVisitor + ?Sized>(ref_: &mut Ref<Self>, visitor: &mut V) {
-                    // TODO better name
-                    visitor.$name(ref_)
-                }
-            }
-        )+
-    };
+/// Trait implemented by all concrete schema components.
+pub trait Component {
+    const DISPLAY_NAME: &'static str;
 }
 
-type Intermediate<T> = Option<T>;
+/// Type on which internal component traits are implemented.
+///
+/// This type is used to prevent leaking internal functions into the [`Component`]
+pub struct ComponentTraits;
 
-// TODO rename to Tables... something
-#[derive(Default)]
-pub struct IntermediateComponentContainer {
-    attribute_declarations: Vec<Intermediate<AttributeDeclaration>>,
-    element_declarations: Vec<Intermediate<ElementDeclaration>>,
-    complex_type_definitions: Vec<Intermediate<ComplexTypeDefinition>>,
-    attribute_uses: Vec<Intermediate<AttributeUse>>,
-    attribute_group_definitions: Vec<Intermediate<AttributeGroupDefinition>>,
-    model_group_definitions: Vec<Intermediate<ModelGroupDefinition>>,
-    model_groups: Vec<Intermediate<ModelGroup>>,
-    particles: Vec<Intermediate<Particle>>,
-    wildcards: Vec<Intermediate<Wildcard>>,
-    identity_constraint_definitions: Vec<Intermediate<IdentityConstraintDefinition>>,
-    type_alternatives: Vec<Intermediate<TypeAlternative>>,
-    assertions: Vec<Intermediate<Assertion>>,
-    notation_declarations: Vec<Intermediate<NotationDeclaration>>,
-    annotations: Vec<Intermediate<Annotation>>,
-    simple_type_definitions: Vec<Intermediate<SimpleTypeDefinition>>,
-
-    type_definitions: Vec<Intermediate<TypeDefinition>>,
-    constraining_facets: Vec<Intermediate<ConstrainingFacet>>,
-
-    unresolved_type_definitions: Vec<QName>,
-    unresolved_simple_type_definitions: Vec<QName>,
-    unresolved_complex_type_definitions: Vec<QName>,
-    unresolved_attribute_declarations: Vec<QName>,
-
-    // Simple and complex type definitions share a symbol space
-    type_definition_lookup: HashMap<QName, RRef<TypeDefinition>>,
-    attribute_declaration_lookup: HashMap<QName, RRef<AttributeDeclaration>>,
+/// A component referencable via [`Ref`]. Intended for internal use.
+pub trait HasArenaContainer<R: Component>: Sized {
+    fn get_container_from_construction_component_table(
+        table: &ConstructionComponentTable,
+    ) -> &[Option<R>];
+    fn get_container_from_construction_component_table_mut(
+        table: &mut ConstructionComponentTable,
+    ) -> &mut Vec<Option<R>>;
+    fn get_container_from_schema_component_table(table: &SchemaComponentTable) -> &[R];
 }
 
-#[derive(Debug)]
-pub struct SchemaComponentContainer {
-    attribute_declarations: Vec<AttributeDeclaration>,
-    element_declarations: Vec<ElementDeclaration>,
-    complex_type_definitions: Vec<ComplexTypeDefinition>,
-    attribute_uses: Vec<AttributeUse>,
-    attribute_group_definitions: Vec<AttributeGroupDefinition>,
-    model_group_definitions: Vec<ModelGroupDefinition>,
-    model_groups: Vec<ModelGroup>,
-    particles: Vec<Particle>,
-    wildcards: Vec<Wildcard>,
-    identity_constraint_definitions: Vec<IdentityConstraintDefinition>,
-    type_alternatives: Vec<TypeAlternative>,
-    assertions: Vec<Assertion>,
-    notation_declarations: Vec<NotationDeclaration>,
-    annotations: Vec<Annotation>,
-    simple_type_definitions: Vec<SimpleTypeDefinition>,
+/// A reference to a [`Component`] stored in a [`ComponentTable`]
+pub struct Ref<R>(NonZeroU32, PhantomData<R>)
+where
+    R: Component,
+    ComponentTraits: HasArenaContainer<R>;
 
-    type_definitions: Vec<TypeDefinition>, // TODO
-    constraining_facets: Vec<ConstrainingFacet>,
-}
-
-/// In case of built-in resolutions, `Immediate` can be used to indicate that the
-/// resolution can be done directly (e.g. for built-in components). Otherwise, the resolution is
-/// deferred until the Ref resolution pass.
-#[derive(Copy, Clone)]
-pub enum Resolution {
-    Immediate,
-    Deferred,
-}
-
-impl IntermediateComponentContainer {
-    pub fn reserve<T: Refable>(&mut self) -> Ref<T> {
-        let index = T::intermediate_container(self).len();
-        T::intermediate_container_mut(self).push(None);
-        Ref::new(index as u32)
+impl<R> Ref<R>
+where
+    R: Component,
+    ComponentTraits: HasArenaContainer<R>,
+{
+    const fn from_inner(inner: NonZeroU32) -> Self {
+        Self(inner, PhantomData)
     }
 
-    pub fn populate<T: Refable>(&mut self, ref_: Ref<T>, value: T) {
-        T::intermediate_container_mut(self)[ref_.index()] = Some(value);
+    const fn inner(self) -> NonZeroU32 {
+        self.0
     }
 
-    pub fn create<T: Refable>(&mut self, value: T) -> Ref<T> {
-        let ref_ = self.reserve::<T>();
-        self.populate(ref_, value);
-        ref_
+    fn index(self) -> usize {
+        let size: NonZeroUsize = self
+            .0
+            .try_into()
+            .expect("Could not convert component reference to usize index");
+        usize::from(size) - 1
     }
 
-    pub fn is_populated<T: Refable>(&self, ref_: Ref<T>) -> bool {
-        T::intermediate_container(self)[ref_.index()].is_some()
-    }
-
-    pub fn resolve_simple_type_def(
-        &mut self,
-        name: &QName,
-        when: Resolution,
-    ) -> Ref<SimpleTypeDefinition> {
-        // FIXME namespace compare
-        // FIXME option?
-        match when {
-            Resolution::Immediate => todo!("immediate simple type resolution"),
-            Resolution::Deferred => {
-                let id = self.unresolved_simple_type_definitions.len() as u32;
-                self.unresolved_simple_type_definitions.push(name.clone());
-                Ref::new_unresolved(id)
-            }
-        }
-    }
-
-    // TODO create typedef along with simple/complex typedef
-
-    pub fn resolve_type_def(&mut self, name: &QName, when: Resolution) -> Ref<TypeDefinition> {
-        println!(
-            "Resolving {:?} {}",
-            name,
-            match when {
-                Resolution::Immediate => "immediately",
-                Resolution::Deferred => "deferred",
-            }
-        );
-        match when {
-            Resolution::Immediate => {
-                println!("Types currently in LUT:");
-                for (key, ref_) in self.type_definition_lookup.iter() {
-                    println!("{:?} -> {:?}", key, **ref_);
-                }
-                *self.type_definition_lookup.get(name).copied().unwrap()
-            }
-            Resolution::Deferred => {
-                let id = self.unresolved_type_definitions.len() as u32;
-                self.unresolved_type_definitions.push(name.clone());
-                Ref::new_unresolved(id)
-            }
-        }
-    }
-
-    pub fn resolve_attribute_declaration(
-        &mut self,
-        name: &QName,
-        when: Resolution,
-    ) -> Ref<AttributeDeclaration> {
-        match when {
-            Resolution::Immediate => *self
-                .attribute_declaration_lookup
-                .get(name)
-                .copied()
-                .unwrap(),
-            Resolution::Deferred => {
-                let id = self.unresolved_attribute_declarations.len() as u32;
-                self.unresolved_attribute_declarations.push(name.clone());
-                Ref::new_unresolved(id)
-            }
-        }
-    }
-
-    pub fn resolve_element_declaration(
-        &mut self,
-        _name: &QName,
-        _when: Resolution,
-    ) -> Ref<ElementDeclaration> {
-        todo!()
-    }
-
-    pub(super) fn register_type(&mut self, type_def: Ref<TypeDefinition>) {
-        let type_def = type_def
-            .as_resolved()
-            .expect("Tried to register unresolved type");
-        let res_type_def = type_def.get_intermediate(self).unwrap();
-        // TODO move to TypeDefinition
-        let (namespace_name, name) = match res_type_def {
-            TypeDefinition::Simple(ref_) => {
-                let simple_type_def = ref_.get_intermediate(self).unwrap();
-                (
-                    simple_type_def.target_namespace.clone(),
-                    simple_type_def
-                        .name
-                        .clone()
-                        .expect("Can't register unnamed type"),
-                )
-            }
-            TypeDefinition::Complex(ref_) => {
-                let complex_type_def = ref_.get_intermediate(self).unwrap();
-                (
-                    complex_type_def.target_namespace.clone(),
-                    complex_type_def
-                        .name
-                        .clone()
-                        .expect("Can't register unnamed type"),
-                )
-            }
-        };
-
-        let qname = QName(namespace_name.unwrap_or_default(), name);
-
-        self.type_definition_lookup.insert(qname, type_def);
-    }
-
-    pub(super) fn register_attribute_decl(&mut self, attribute_decl: Ref<AttributeDeclaration>) {
-        let attribute_decl = attribute_decl
-            .as_resolved()
-            .expect("Tried to register unresolved attribute declaration");
-        let attribute_decl_res = attribute_decl.get_intermediate(self).unwrap();
-
-        let namespace_name = attribute_decl_res
-            .target_namespace
-            .clone()
-            .unwrap_or_default();
-        let qname = QName(namespace_name, attribute_decl_res.name.clone());
-
-        self.attribute_declaration_lookup
-            .insert(qname, attribute_decl);
-    }
-
-    pub fn perform_ref_resolution_pass(self) -> SchemaComponentContainer {
-        // The Ref resolution pass generally can be divided into two parts:
-        // 1. Resolve all unresolved components
-        // 2. Visit all Refs and set them to the resolved value's Ref.
-        //    As a byproduct, it is ensured that all components have been constructed.
-
-        let mut resolved_type_definitions =
-            Vec::<RRef<TypeDefinition>>::with_capacity(self.unresolved_type_definitions.len());
-        let mut resolved_simple_type_definitions = Vec::<RRef<SimpleTypeDefinition>>::with_capacity(
-            self.unresolved_simple_type_definitions.len(),
-        );
-        let mut resolved_complex_type_definitions =
-            Vec::<RRef<ComplexTypeDefinition>>::with_capacity(
-                self.unresolved_complex_type_definitions.len(),
-            );
-
-        // TODO resolution failure
-
-        for name in self.unresolved_type_definitions.iter() {
-            println!("Deferred resolve {:?}", name);
-            println!("Types currently in LUT:");
-            for (key, ref_) in self.type_definition_lookup.iter() {
-                println!("{:?} -> {:?}", key, **ref_);
-            }
-            let resolved = *self.type_definition_lookup.get(name).unwrap();
-            resolved_type_definitions.push(resolved);
-        }
-
-        // TODO unresolved inner possible?
-
-        // TODO find solution without clone
-        for i in 0..self.unresolved_simple_type_definitions.len() {
-            let name = self.unresolved_simple_type_definitions[i].clone();
-            println!("Deferred resolve {:?}", name);
-            println!("Types currently in LUT:");
-            for (key, ref_) in self.type_definition_lookup.iter() {
-                println!("{:?} -> {:?}", key, **ref_);
-            }
-            let type_def = *self.type_definition_lookup.get(&name).unwrap();
-            let type_def = type_def.get_intermediate(&self).unwrap().to_owned();
-            let simple_type_def = type_def.simple().unwrap();
-            let simple_type_def = simple_type_def
-                .as_resolved()
-                .unwrap_or_else(|| todo!("unresolved simple type def"));
-            resolved_simple_type_definitions.push(simple_type_def);
-        }
-
-        for i in 0..self.unresolved_complex_type_definitions.len() {
-            let name = self.unresolved_complex_type_definitions[i].clone();
-            let type_def = *self.type_definition_lookup.get(&name).unwrap();
-            let type_def = type_def.get_intermediate(&self).unwrap().to_owned();
-            let complex_type_def = type_def.complex().unwrap();
-            let complex_type_def = complex_type_def
-                .as_resolved()
-                .unwrap_or_else(|| todo!("unresolved complex type def"));
-            resolved_complex_type_definitions.push(complex_type_def);
-        }
-
-        let mut resolved_attribute_declarations =
-            Vec::with_capacity(self.unresolved_attribute_declarations.len());
-        for name in self.unresolved_attribute_declarations.iter() {
-            let resolved = *self.attribute_declaration_lookup.get(name).unwrap();
-            resolved_attribute_declarations.push(resolved);
-        }
-
-        let mut rv = ARefVisitor {
-            resolved_type_definitions,
-            resolved_simple_type_definitions,
-            resolved_complex_type_definitions,
-            resolved_attribute_declarations,
-        };
-
-        // Step 2
-        let mut attribute_declarations = Self::finalize_list(self.attribute_declarations);
-        for component in attribute_declarations.iter_mut() {
-            component.visit_refs(&mut rv);
-        }
-
-        let mut element_declarations = Self::finalize_list(self.element_declarations);
-        for component in element_declarations.iter_mut() {
-            component.visit_refs(&mut rv);
-        }
-
-        let mut complex_type_definitions = Self::finalize_list(self.complex_type_definitions);
-        for component in complex_type_definitions.iter_mut() {
-            component.visit_refs(&mut rv)
-        }
-
-        let mut attribute_uses = Self::finalize_list(self.attribute_uses);
-        for component in attribute_uses.iter_mut() {
-            component.visit_refs(&mut rv);
-        }
-
-        let mut attribute_group_definitions = Self::finalize_list(self.attribute_group_definitions);
-        for component in attribute_group_definitions.iter_mut() {
-            component.visit_refs(&mut rv);
-        }
-
-        let mut model_group_definitions = Self::finalize_list(self.model_group_definitions);
-        for component in model_group_definitions.iter_mut() {
-            component.visit_refs(&mut rv);
-        }
-
-        let mut model_groups = Self::finalize_list(self.model_groups);
-        for component in model_groups.iter_mut() {
-            component.visit_refs(&mut rv);
-        }
-
-        let mut particles = Self::finalize_list(self.particles);
-        for component in particles.iter_mut() {
-            component.visit_refs(&mut rv);
-        }
-
-        let mut wildcards = Self::finalize_list(self.wildcards);
-        for component in wildcards.iter_mut() {
-            component.visit_refs(&mut rv);
-        }
-
-        let mut identity_constraint_definitions =
-            Self::finalize_list(self.identity_constraint_definitions);
-        for component in identity_constraint_definitions.iter_mut() {
-            component.visit_refs(&mut rv);
-        }
-
-        let mut type_alternatives = Self::finalize_list(self.type_alternatives);
-        for component in type_alternatives.iter_mut() {
-            component.visit_refs(&mut rv);
-        }
-
-        let mut assertions = Self::finalize_list(self.assertions);
-        for component in assertions.iter_mut() {
-            component.visit_refs(&mut rv);
-        }
-
-        let mut notation_declarations = Self::finalize_list(self.notation_declarations);
-        for component in notation_declarations.iter_mut() {
-            component.visit_refs(&mut rv);
-        }
-
-        let mut annotations = Self::finalize_list(self.annotations);
-        for component in annotations.iter_mut() {
-            component.visit_refs(&mut rv);
-        }
-
-        let mut simple_type_definitions = Self::finalize_list(self.simple_type_definitions);
-        for component in simple_type_definitions.iter_mut() {
-            component.visit_refs(&mut rv);
-        }
-
-        let mut type_definitions = Self::finalize_list(self.type_definitions);
-        for component in type_definitions.iter_mut() {
-            component.visit_refs(&mut rv);
-        }
-
-        let mut constraining_facets = Self::finalize_list(self.constraining_facets);
-        for component in constraining_facets.iter_mut() {
-            component.visit_refs(&mut rv);
-        }
-
-        SchemaComponentContainer {
-            attribute_declarations,
-            element_declarations,
-            complex_type_definitions,
-            attribute_uses,
-            attribute_group_definitions,
-            model_group_definitions,
-            model_groups,
-            particles,
-            wildcards,
-            identity_constraint_definitions,
-            type_alternatives,
-            assertions,
-            notation_declarations,
-            annotations,
-            simple_type_definitions,
-            type_definitions,
-            constraining_facets,
-        }
-    }
-
-    fn finalize_list<T>(list: Vec<Intermediate<T>>) -> Vec<T> {
-        list.into_iter()
-            .map(|component| component.unwrap())
-            .collect()
+    pub fn get(self, table: &impl ComponentTable) -> &R {
+        table.get(self)
     }
 }
-
-struct ARefVisitor {
-    resolved_type_definitions: Vec<RRef<TypeDefinition>>,
-    resolved_simple_type_definitions: Vec<RRef<SimpleTypeDefinition>>,
-    resolved_complex_type_definitions: Vec<RRef<ComplexTypeDefinition>>,
-    resolved_attribute_declarations: Vec<RRef<AttributeDeclaration>>,
-}
-
-impl ConcreteRefVisitor for ARefVisitor {
-    fn type_definitions(&mut self, ref_: &mut Ref<TypeDefinition>) {
-        *ref_ = *self.resolved_type_definitions[ref_.index()];
-    }
-
-    fn simple_type_definitions(&mut self, ref_: &mut Ref<SimpleTypeDefinition>) {
-        *ref_ = *self.resolved_simple_type_definitions[ref_.index()];
-    }
-
-    fn complex_type_definitions(&mut self, ref_: &mut Ref<ComplexTypeDefinition>) {
-        *ref_ = *self.resolved_complex_type_definitions[ref_.index()];
-    }
-
-    fn attribute_declarations(&mut self, ref_: &mut Ref<AttributeDeclaration>) {
-        *ref_ = *self.resolved_attribute_declarations[ref_.index()];
-    }
-}
-
-impl RefVisitor for ARefVisitor {
-    fn visit_ref<T: Refable>(&mut self, ref_: &mut Ref<T>) {
-        if !ref_.is_resolved() {
-            T::visit_ref(ref_, self)
-        }
-    }
-}
-
-pub trait ConcreteRefVisitor {
-    fn attribute_declarations(&mut self, _ref_: &mut Ref<AttributeDeclaration>) {}
-    fn element_declarations(&mut self, _ref_: &mut Ref<ElementDeclaration>) {}
-    fn complex_type_definitions(&mut self, _ref_: &mut Ref<ComplexTypeDefinition>) {}
-    fn attribute_uses(&mut self, _ref_: &mut Ref<AttributeUse>) {}
-    fn attribute_group_definitions(&mut self, _ref_: &mut Ref<AttributeGroupDefinition>) {}
-    fn model_group_definitions(&mut self, _ref_: &mut Ref<ModelGroupDefinition>) {}
-    fn model_groups(&mut self, _ref_: &mut Ref<ModelGroup>) {}
-    fn particles(&mut self, _ref_: &mut Ref<Particle>) {}
-    fn wildcards(&mut self, _ref_: &mut Ref<Wildcard>) {}
-    fn identity_constraint_definitions(&mut self, _ref_: &mut Ref<IdentityConstraintDefinition>) {}
-    fn type_alternatives(&mut self, _ref_: &mut Ref<TypeAlternative>) {}
-    fn assertions(&mut self, _ref_: &mut Ref<Assertion>) {}
-    fn notation_declarations(&mut self, _ref_: &mut Ref<NotationDeclaration>) {}
-    fn annotations(&mut self, _ref_: &mut Ref<Annotation>) {}
-    fn simple_type_definitions(&mut self, _ref_: &mut Ref<SimpleTypeDefinition>) {}
-    fn type_definitions(&mut self, _ref_: &mut Ref<TypeDefinition>) {}
-    fn constraining_facets(&mut self, _ref_: &mut Ref<ConstrainingFacet>) {}
-}
-
-compcontainer! {
-    attribute_declarations: AttributeDeclaration,
-    element_declarations: ElementDeclaration,
-    complex_type_definitions: ComplexTypeDefinition,
-    attribute_uses: AttributeUse,
-    attribute_group_definitions: AttributeGroupDefinition,
-    model_group_definitions: ModelGroupDefinition,
-    model_groups: ModelGroup,
-    particles: Particle,
-    wildcards: Wildcard,
-    identity_constraint_definitions: IdentityConstraintDefinition,
-    type_alternatives: TypeAlternative,
-    assertions: Assertion,
-    notation_declarations: NotationDeclaration,
-    annotations: Annotation,
-    simple_type_definitions: SimpleTypeDefinition,
-
-    type_definitions: TypeDefinition, // TODO
-    constraining_facets: ConstrainingFacet,
-}
-
-pub trait Refable: Sized {
-    fn intermediate_container(container: &IntermediateComponentContainer) -> &[Intermediate<Self>];
-    fn intermediate_container_mut(
-        container: &mut IntermediateComponentContainer,
-    ) -> &mut Vec<Intermediate<Self>>;
-
-    fn container(container: &SchemaComponentContainer) -> &[Self];
-
-    fn visit_ref<V: ConcreteRefVisitor + ?Sized>(ref_: &mut Ref<Self>, visitor: &mut V);
-}
-
-pub struct Ref<T: Refable>(i32, PhantomData<T>);
 
 // derive(...) does not work if T itself does not derive the trait, even though it is only "used"
-// in the PhantomData; hence we have to manually implement Copy/Clone/Debug for the Ref type.
+// in the PhantomData; hence we have to manually implement required traits for the Ref type.
 
-impl<T: Refable> Copy for Ref<T> {}
+impl<R> Copy for Ref<R>
+where
+    R: Component,
+    ComponentTraits: HasArenaContainer<R>,
+{
+}
 
-impl<T: Refable> Clone for Ref<T> {
+impl<R> Clone for Ref<R>
+where
+    R: Component,
+    ComponentTraits: HasArenaContainer<R>,
+{
     fn clone(&self) -> Self {
         Self(self.0, PhantomData)
     }
 }
 
-use std::fmt;
-impl<T: Refable> fmt::Debug for Ref<T> {
+impl<R> fmt::Debug for Ref<R>
+where
+    R: Component,
+    ComponentTraits: HasArenaContainer<R>,
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let (_, type_name) = std::any::type_name::<T>().rsplit_once(':').unwrap();
-        write!(f, "Ref<{}>({})", type_name, self.0)
+        write!(f, "<{} #{}>", R::DISPLAY_NAME, self.0)
     }
 }
 
-impl<T: Refable> Ref<T> {
-    fn new(id: u32) -> Self {
-        let id: i32 = id.try_into().unwrap();
-        Self(id, PhantomData)
+/// A reference to a component whose type is not known at compile time.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub(super) struct DynamicRef(TypeId, NonZeroU32);
+
+impl<R> From<Ref<R>> for DynamicRef
+where
+    R: Component + 'static,
+    ComponentTraits: HasArenaContainer<R>,
+{
+    fn from(ref_: Ref<R>) -> Self {
+        Self(TypeId::of::<R>(), ref_.inner())
+    }
+}
+
+/// An arena-like container for various [`Components`]
+pub trait ComponentTable {
+    /// Retrieves a component's value by reference from this component table.
+    /// This function panics if the component value is not present in the table.
+    fn get<R>(&self, ref_: Ref<R>) -> &R
+    where
+        R: Component,
+        ComponentTraits: HasArenaContainer<R>;
+}
+
+/// The [component table](ComponentTable) implementation that is used during schema parsing and
+/// construction.
+///
+/// The individual container `Vec`s contain the components wrapped in `Option`s, since components
+/// often need to reference themselves, and thus are constructed after the `Ref` itself.
+#[derive(Default)]
+// TODO restrict to pub(super)
+pub struct ConstructionComponentTable {
+    annotations: Vec<Option<Annotation>>,
+    assertions: Vec<Option<Assertion>>,
+    attribute_declarations: Vec<Option<AttributeDeclaration>>,
+    attribute_group_definitions: Vec<Option<AttributeGroupDefinition>>,
+    attribute_uses: Vec<Option<AttributeUse>>,
+    complex_type_definitions: Vec<Option<ComplexTypeDefinition>>,
+    constraining_facets: Vec<Option<ConstrainingFacet>>,
+    element_declarations: Vec<Option<ElementDeclaration>>,
+    identity_constraint_definitions: Vec<Option<IdentityConstraintDefinition>>,
+    model_group_definitions: Vec<Option<ModelGroupDefinition>>,
+    model_groups: Vec<Option<ModelGroup>>,
+    notation_declarations: Vec<Option<NotationDeclaration>>,
+    particles: Vec<Option<Particle>>,
+    simple_type_definitions: Vec<Option<SimpleTypeDefinition>>,
+    type_alternatives: Vec<Option<TypeAlternative>>,
+    wildcards: Vec<Option<Wildcard>>,
+}
+
+impl ComponentTable for ConstructionComponentTable {
+    fn get<R>(&self, ref_: Ref<R>) -> &R
+    where
+        R: Component,
+        ComponentTraits: HasArenaContainer<R>,
+    {
+        let container = ComponentTraits::get_container_from_construction_component_table(self);
+        container
+            .get(ref_.index())
+            .expect("Invalid component reference (out-of-bounds)")
+            .as_ref()
+            .expect("Component is not present")
+    }
+}
+
+impl ConstructionComponentTable {
+    pub(super) fn new() -> Self {
+        Self::default()
     }
 
-    fn new_unresolved(id: u32) -> Self {
-        let id: i32 = id.try_into().unwrap();
-        Self(-id, PhantomData)
+    /// Creates a [`Ref`] which points to an absent, reserved slot in the table.
+    pub(super) fn reserve<R>(&mut self) -> Ref<R>
+    where
+        R: Component,
+        ComponentTraits: HasArenaContainer<R>,
+    {
+        let container = ComponentTraits::get_container_from_construction_component_table_mut(self);
+
+        // Reserve a slot by inserting None
+        container.push(None);
+
+        // We use the size for the ref's ID, which is non-zero after the push
+        let size = NonZeroUsize::new(container.len()).unwrap();
+        let id: NonZeroU32 = size.try_into().expect("ID did not fit into 32-bit integer");
+
+        Ref::from_inner(id)
     }
 
-    pub fn id(&self) -> i32 {
-        self.0
+    /// Inserts the `value` into the slot pointed to by `ref_`. Returns `ref_` for convenience.
+    pub(super) fn insert<R>(&mut self, ref_: Ref<R>, value: R) -> Ref<R>
+    where
+        R: Component,
+        ComponentTraits: HasArenaContainer<R>,
+    {
+        let container = ComponentTraits::get_container_from_construction_component_table_mut(self);
+
+        let slot = container
+            .get_mut(ref_.index())
+            .expect("Invalid component reference (out-of-bounds)");
+
+        *slot = Some(value);
+
+        ref_
     }
 
-    fn index(&self) -> usize {
-        self.id()
-            .unsigned_abs()
-            .try_into()
-            .expect("ID did not fit into usize")
+    /// Shorthand for `insert(reserve(), value)`
+    pub(super) fn create<R>(&mut self, value: R) -> Ref<R>
+    where
+        R: Component,
+        ComponentTraits: HasArenaContainer<R>,
+    {
+        let ref_ = self.reserve();
+        self.insert(ref_, value)
     }
 
-    pub fn get(self, container: &SchemaComponentContainer) -> &T {
-        assert!(self.is_resolved());
-        &T::container(container)[self.index()]
+    pub(super) fn is_present<R>(&self, ref_: Ref<R>) -> bool
+    where
+        R: Component,
+        ComponentTraits: HasArenaContainer<R>,
+    {
+        let container = ComponentTraits::get_container_from_construction_component_table(self);
+
+        let slot = container
+            .get(ref_.index())
+            .expect("Invalid component reference (out-of-bounds)");
+
+        slot.is_some()
     }
 
-    pub fn get_intermediate(self, container: &IntermediateComponentContainer) -> Option<&T> {
-        assert!(self.is_resolved());
-        T::intermediate_container(container)[self.index()].as_ref()
+    /// Tries to convert this construction table to a [schema table](`SchemaComponentTable`).
+    /// If a component value is absent, `None` is returned instead.
+    pub(super) fn convert_to_schema_table(self) -> Option<SchemaComponentTable> {
+        Some(SchemaComponentTable {
+            annotations: Self::convert_container(self.annotations)?,
+            assertions: Self::convert_container(self.assertions)?,
+            attribute_declarations: Self::convert_container(self.attribute_declarations)?,
+            attribute_group_definitions: Self::convert_container(self.attribute_group_definitions)?,
+            attribute_uses: Self::convert_container(self.attribute_uses)?,
+            complex_type_definitions: Self::convert_container(self.complex_type_definitions)?,
+            constraining_facets: Self::convert_container(self.constraining_facets)?,
+            element_declarations: Self::convert_container(self.element_declarations)?,
+            identity_constraint_definitions: Self::convert_container(
+                self.identity_constraint_definitions,
+            )?,
+            model_group_definitions: Self::convert_container(self.model_group_definitions)?,
+            model_groups: Self::convert_container(self.model_groups)?,
+            notation_declarations: Self::convert_container(self.notation_declarations)?,
+            particles: Self::convert_container(self.particles)?,
+            simple_type_definitions: Self::convert_container(self.simple_type_definitions)?,
+            type_alternatives: Self::convert_container(self.type_alternatives)?,
+            wildcards: Self::convert_container(self.wildcards)?,
+        })
     }
 
-    pub fn is_resolved(&self) -> bool {
-        self.id() >= 0
-    }
-
-    fn as_resolved(self) -> Option<RRef<T>> {
-        if self.is_resolved() {
-            Some(RRef(self))
-        } else {
-            None
+    /// Helper for [`Self::convert_to_schema_table()`]
+    fn convert_container<R>(container: Vec<Option<R>>) -> Option<Box<[R]>> {
+        let mut result = Vec::<R>::with_capacity(container.len());
+        for component in container {
+            result.push(component?);
         }
+        Some(result.into_boxed_slice())
     }
 }
 
-/// (TODO) Newtype which ensures that a Ref is always resolved
-#[derive(Debug)]
-struct RRef<T: Refable>(Ref<T>);
+/// The [component table](ComponentTable) implementation that is used alongside the final schema.
+///
+/// Components for which a [`Ref`] exists will always be present in this table.
+///
+/// Since this table is meant to be read-only, the components are stored in boxed slices, which
+/// halves the struct's size compared to the `Vec`-storage used in the
+/// [`ConstructionComponentTable`].
+pub struct SchemaComponentTable {
+    annotations: Box<[Annotation]>,
+    assertions: Box<[Assertion]>,
+    attribute_declarations: Box<[AttributeDeclaration]>,
+    attribute_group_definitions: Box<[AttributeGroupDefinition]>,
+    attribute_uses: Box<[AttributeUse]>,
+    complex_type_definitions: Box<[ComplexTypeDefinition]>,
+    constraining_facets: Box<[ConstrainingFacet]>,
+    element_declarations: Box<[ElementDeclaration]>,
+    identity_constraint_definitions: Box<[IdentityConstraintDefinition]>,
+    model_group_definitions: Box<[ModelGroupDefinition]>,
+    model_groups: Box<[ModelGroup]>,
+    notation_declarations: Box<[NotationDeclaration]>,
+    particles: Box<[Particle]>,
+    simple_type_definitions: Box<[SimpleTypeDefinition]>,
+    type_alternatives: Box<[TypeAlternative]>,
+    wildcards: Box<[Wildcard]>,
+}
 
-impl<T: Refable> Copy for RRef<T> {}
-
-impl<T: Refable> Clone for RRef<T> {
-    fn clone(&self) -> Self {
-        Self(self.0)
+impl ComponentTable for SchemaComponentTable {
+    fn get<R>(&self, ref_: Ref<R>) -> &R
+    where
+        R: Component,
+        ComponentTraits: HasArenaContainer<R>,
+    {
+        let container = ComponentTraits::get_container_from_schema_component_table(self);
+        container
+            .get(ref_.index())
+            .expect("Invalid component reference (out-of-bounds)")
     }
 }
 
-use std::ops::Deref;
+macro_rules! has_arena_container_impl {
+    ($type_name:ty, $field_name:ident) => {
+        impl HasArenaContainer<$type_name> for ComponentTraits {
+            fn get_container_from_construction_component_table(
+                table: &ConstructionComponentTable,
+            ) -> &[Option<$type_name>] {
+                &table.$field_name
+            }
 
-impl<T: Refable> Deref for RRef<T> {
-    type Target = Ref<T>;
-    fn deref(&self) -> &Self::Target {
-        &self.0
+            fn get_container_from_construction_component_table_mut(
+                table: &mut ConstructionComponentTable,
+            ) -> &mut Vec<Option<$type_name>> {
+                &mut table.$field_name
+            }
+
+            fn get_container_from_schema_component_table(
+                table: &SchemaComponentTable,
+            ) -> &[$type_name] {
+                &table.$field_name
+            }
+        }
+    };
+}
+
+has_arena_container_impl!(Annotation, annotations);
+has_arena_container_impl!(Assertion, assertions);
+has_arena_container_impl!(AttributeDeclaration, attribute_declarations);
+has_arena_container_impl!(AttributeGroupDefinition, attribute_group_definitions);
+has_arena_container_impl!(AttributeUse, attribute_uses);
+has_arena_container_impl!(ComplexTypeDefinition, complex_type_definitions);
+has_arena_container_impl!(ConstrainingFacet, constraining_facets);
+has_arena_container_impl!(ElementDeclaration, element_declarations);
+has_arena_container_impl!(
+    IdentityConstraintDefinition,
+    identity_constraint_definitions
+);
+has_arena_container_impl!(ModelGroupDefinition, model_group_definitions);
+has_arena_container_impl!(ModelGroup, model_groups);
+has_arena_container_impl!(NotationDeclaration, notation_declarations);
+has_arena_container_impl!(Particle, particles);
+has_arena_container_impl!(SimpleTypeDefinition, simple_type_definitions);
+has_arena_container_impl!(TypeAlternative, type_alternatives);
+has_arena_container_impl!(Wildcard, wildcards);
+
+/// A component that may have a [qualified name](QName)
+pub trait Named: Component {
+    /// The optional name.
+    /// Some components (like [`ElementDeclaration`]) always have a name, and always return `Some`.
+    fn name(&self) -> Option<QName>;
+}
+
+/// Any type that indirectly implements [`Named`], i.e. where first a [`Ref`] has to be dereferenced
+/// to get to the name.
+/// This is trivially the case for all `Ref<Named>`, and additionally for [`TypeDefinition`].
+pub trait RefNamed {
+    fn name(&self, table: &impl ComponentTable) -> Option<QName>;
+}
+
+impl<R> RefNamed for Ref<R>
+where
+    R: Named,
+    ComponentTraits: HasArenaContainer<R>,
+{
+    fn name(&self, table: &impl ComponentTable) -> Option<QName> {
+        self.get(table).name()
     }
 }
 
-pub trait RefVisitor {
-    fn visit_ref<T: Refable>(&mut self, ref_: &mut Ref<T>);
+/// Trait that allows components to be looked up by their [qualified name](QName).
+/// `V` is the value type (usually Ref<Component> or a wrapper like [`TypeDefinition`]).
+pub(super) trait Lookup<V: Copy> {
+    /// Registers a value for lookup in its respective symbol space.
+    /// Returns `true` if the name given by the `key` parameter was already associated with a value.
+    fn register_value_for_lookup(&mut self, key: QName, value: V) -> bool;
+
+    /// Looks up the value associated with the `key`; returns `None` if there is no such value.
+    fn lookup_value(&self, key: &QName) -> Option<V>;
 }
 
-pub trait RefsVisitable {
-    fn visit_refs(&mut self, visitor: &mut impl RefVisitor);
+type LookupTable<T> = HashMap<QName, T>;
+
+#[derive(Default)]
+pub(super) struct LookupTables {
+    /// Shared symbol space for simple and complex type definitions
+    type_definitions: LookupTable<TypeDefinition>,
+    attribute_declarations: LookupTable<Ref<AttributeDeclaration>>,
+    element_declarations: LookupTable<Ref<ElementDeclaration>>,
+    attribute_group_definitions: LookupTable<Ref<AttributeGroupDefinition>>,
+    model_group_definitions: LookupTable<Ref<ModelGroupDefinition>>,
+    notation_declarations: LookupTable<Ref<NotationDeclaration>>,
+    identity_constraint_definitions: LookupTable<Ref<IdentityConstraintDefinition>>,
 }
 
-pub struct MappingContext {
-    pub components: IntermediateComponentContainer,
+macro_rules! impl_lookup {
+    ($field_name:ident: $value_type:ty) => {
+        impl Lookup<$value_type> for LookupTables {
+            fn register_value_for_lookup(&mut self, key: QName, value: $value_type) -> bool {
+                self.$field_name.insert(key, value).is_some()
+            }
+
+            fn lookup_value(&self, key: &QName) -> Option<$value_type> {
+                self.$field_name.get(key).copied()
+            }
+        }
+    };
 }
 
-impl MappingContext {
-    pub fn new() -> Self {
-        let mut components = IntermediateComponentContainer::default();
-        super::builtins::register_builtins(&mut components);
-        MappingContext { components }
+impl_lookup!(type_definitions: TypeDefinition);
+impl_lookup!(attribute_declarations: Ref<AttributeDeclaration>);
+impl_lookup!(element_declarations: Ref<ElementDeclaration>);
+impl_lookup!(attribute_group_definitions: Ref<AttributeGroupDefinition>);
+impl_lookup!(model_group_definitions: Ref<ModelGroupDefinition>);
+impl_lookup!(notation_declarations: Ref<NotationDeclaration>);
+impl_lookup!(identity_constraint_definitions: Ref<IdentityConstraintDefinition>);
+
+impl Lookup<Ref<SimpleTypeDefinition>> for LookupTables {
+    fn register_value_for_lookup(&mut self, key: QName, value: Ref<SimpleTypeDefinition>) -> bool {
+        self.type_definitions
+            .insert(key, TypeDefinition::Simple(value))
+            .is_some()
     }
+
+    fn lookup_value(&self, key: &QName) -> Option<Ref<SimpleTypeDefinition>> {
+        self.type_definitions
+            .get(key)
+            .and_then(|type_def| type_def.simple())
+    }
+}
+
+impl Lookup<Ref<ComplexTypeDefinition>> for LookupTables {
+    fn register_value_for_lookup(&mut self, key: QName, value: Ref<ComplexTypeDefinition>) -> bool {
+        self.type_definitions
+            .insert(key, TypeDefinition::Complex(value))
+            .is_some()
+    }
+
+    fn lookup_value(&self, key: &QName) -> Option<Ref<ComplexTypeDefinition>> {
+        self.type_definitions
+            .get(key)
+            .and_then(|type_def| type_def.complex())
+    }
+}
+
+/// QName resolution according to §3.17.6.2
+#[derive(Default)]
+pub(super) struct ComponentResolver {
+    lookup_tables: LookupTables,
+}
+
+impl ComponentResolver {
+    pub(super) fn new() -> Self {
+        Self::default()
+    }
+
+    pub(super) fn resolve<R>(&self, key: &QName) -> R
+    where
+        R: Copy,
+        LookupTables: Lookup<R>,
+    {
+        // TODO error handling
+        self.lookup_tables.lookup_value(key).unwrap()
+    }
+
+    pub(super) fn register_with_name<R>(&mut self, name: QName, value: R)
+    where
+        R: Copy,
+        LookupTables: Lookup<R>,
+    {
+        // TODO don't clone name
+        let prev = self
+            .lookup_tables
+            .register_value_for_lookup(name.clone(), value);
+        assert!(!prev, "Duplicate component: {name}"); // TODO propagate
+    }
+
+    pub(super) fn register<R>(&mut self, value: R, table: &impl ComponentTable)
+    where
+        R: RefNamed + Copy,
+        LookupTables: Lookup<R>,
+    {
+        let name = value
+            .name(table)
+            .expect("Tried to register unnamed component");
+        self.register_with_name(name, value)
+    }
+}
+
+/// (Top-level) Components whose name is always available from XML
+pub(super) trait NamedXml: Component {
+    fn get_name_from_xml(this_node: Node, schema_node: Node) -> QName;
 }

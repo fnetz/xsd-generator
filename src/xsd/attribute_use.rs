@@ -1,6 +1,6 @@
 use super::{
-    annotation::Annotation, attribute_decl::AttributeDeclaration, shared, xstypes::Sequence, Ref,
-    RefsVisitable,
+    annotation::Annotation, attribute_decl::AttributeDeclaration, components::Component, shared,
+    xstypes::Sequence, Ref,
 };
 
 /// Schema Component: Attribute Use, a kind of Annotated Component (§3.5)
@@ -16,11 +16,6 @@ pub struct AttributeUse {
 /// Property Record: Value Constraint (§3.5)
 pub use shared::ValueConstraint;
 
-impl RefsVisitable for AttributeUse {
-    fn visit_refs(&mut self, visitor: &mut impl super::RefVisitor) {
-        visitor.visit_ref(&mut self.attribute_declaration);
-        for annotation in self.annotations.iter_mut() {
-            visitor.visit_ref(annotation);
-        }
-    }
+impl Component for AttributeUse {
+    const DISPLAY_NAME: &'static str = "AttributeUse";
 }

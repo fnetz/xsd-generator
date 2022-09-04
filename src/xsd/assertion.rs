@@ -1,8 +1,9 @@
 use super::{
     annotation::Annotation,
+    components::Component,
     values::actual_value,
     xstypes::{AnyURI, NCName, Sequence, Set},
-    MappingContext, Ref, RefsVisitable,
+    MappingContext, Ref,
 };
 use roxmltree::Node;
 
@@ -30,7 +31,7 @@ pub struct NamespaceBinding {
 }
 
 impl Assertion {
-    pub fn map_from_xml(context: &mut MappingContext, assert: Node, schema: Node) -> Self {
+    pub(super) fn map_from_xml(context: &mut MappingContext, assert: Node, schema: Node) -> Self {
         assert_eq!(assert.tag_name().name(), "assert");
 
         // {test}
@@ -48,16 +49,12 @@ impl Assertion {
     }
 }
 
-impl RefsVisitable for Assertion {
-    fn visit_refs(&mut self, visitor: &mut impl super::RefVisitor) {
-        self.annotations
-            .iter_mut()
-            .for_each(|annotation| visitor.visit_ref(annotation));
-    }
-}
-
 impl XPathExpression {
-    pub fn map_from_xml(designated_attribute: &str, host_element: Node, schema: Node) -> Self {
+    pub(super) fn map_from_xml(
+        designated_attribute: &str,
+        host_element: Node,
+        schema: Node,
+    ) -> Self {
         // {namespace bindings}
         //    A set of Namespace Binding property records. Each member corresponds to an entry in
         //    the [in-scope namespaces] of the host element, with {prefix} being the [prefix] and
@@ -116,4 +113,8 @@ impl XPathExpression {
             expression,
         }
     }
+}
+
+impl Component for Assertion {
+    const DISPLAY_NAME: &'static str = "Assertion";
 }

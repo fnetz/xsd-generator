@@ -1,7 +1,8 @@
 use super::{
     annotation::Annotation,
+    components::Component,
     xstypes::{AnyURI, QName, Sequence, Set},
-    Ref, RefVisitor, RefsVisitable,
+    Ref,
 };
 
 /// Schema Component: Wildcard, a kind of [Term](super::shared::Term) (§3.10)
@@ -41,10 +42,6 @@ pub enum DisallowedName {
     Sibling,
 }
 
-impl RefsVisitable for Wildcard {
-    fn visit_refs(&mut self, visitor: &mut impl RefVisitor) {
-        self.annotations
-            .iter_mut()
-            .for_each(|annot| visitor.visit_ref(annot));
-    }
+impl Component for Wildcard {
+    const DISPLAY_NAME: &'static str = "Wildcard";
 }

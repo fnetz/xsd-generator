@@ -1,9 +1,11 @@
 use super::{
+    components::{Component, Named, NamedXml},
+    mapping_context::TopLevelMappable,
     shared,
     values::{actual_value, normalized_value},
     xstypes::{AnyURI, NCName, QName, Sequence},
     Annotation, AttributeGroupDefinition, AttributeUse, ComplexTypeDefinition, MappingContext, Ref,
-    RefVisitor, RefsVisitable, Resolution, SimpleTypeDefinition,
+    SimpleTypeDefinition,
 };
 
 use roxmltree::Node;
@@ -35,16 +37,9 @@ pub enum ScopeParent {
 pub use shared::ValueConstraint;
 pub use shared::ValueConstraintVariety;
 
-impl AttributeDeclaration {
-    // TODO validate §3.2.3
-    // TODO built-in attribute declarations
-
-    pub fn map_from_xml_global(
-        context: &mut MappingContext,
-        attribute: Node,
-        schema: Node,
-    ) -> Ref<Self> {
-        assert_eq!(attribute.tag_name().name(), "attribute");
+impl NamedXml for AttributeDeclaration {
+    fn get_name_from_xml(attribute: Node, schema: Node) -> QName {
+        assert_eq!(attribute.tag_name().name(), Self::TAG_NAME);
 
         // {name}
         //   The ·actual value· of the name [attribute]
@@ -60,14 +55,37 @@ impl AttributeDeclaration {
             .attribute("targetNamespace")
             .map(|v| actual_value::<String>(v, attribute));
 
+        QName::with_optional_namespace(target_namespace, name)
+    }
+}
+
+impl AttributeDeclaration {
+    // TODO validate §3.2.3
+    pub const TAG_NAME: &'static str = "attribute";
+
+    pub(super) fn map_from_xml_global(
+        context: &mut MappingContext,
+        attribute: Node,
+        schema: Node,
+        tlref: Ref<Self>,
+    ) -> Ref<Self> {
+        assert_eq!(attribute.tag_name().name(), Self::TAG_NAME);
+
+        let QName {
+            local_name: name,
+            namespace_name: target_namespace,
+        } = Self::get_name_from_xml(attribute, schema);
+
         // {type definition}
         //   The simple type definition corresponding to the <simpleType> element information item in
         //   the [children], if present, otherwise the simple type definition ·resolved· to by the
         //   ·actual value· of the type [attribute], if present, otherwise ·xs:anySimpleType·.
         let simple_type_def = attribute
             .children()
-            .find(|c| c.tag_name().name() == "simpleType")
-            .map(|simple_type| SimpleTypeDefinition::map_from_xml(context, simple_type, schema));
+            .find(|c| c.tag_name().name() == SimpleTypeDefinition::TAG_NAME)
+            .map(|simple_type| {
+                SimpleTypeDefinition::map_from_xml(context, simple_type, schema, None)
+            });
 
         let type_definition = if let Some(simple_type_def) = simple_type_def {
             simple_type_def
@@ -75,9 +93,7 @@ impl AttributeDeclaration {
             .attribute("type")
             .map(|v| actual_value::<QName>(v, attribute))
         {
-            context
-                .components
-                .resolve_simple_type_def(&type_, Resolution::Deferred)
+            context.resolver.resolve(&type_)
         } else {
             todo!("xs:anySimpleType")
         };
@@ -125,27 +141,29 @@ impl AttributeDeclaration {
         //   Annotation Schema Components (§3.15.2).
         let annotations = Annotation::xml_element_annotation_mapping(context, attribute);
 
-        context.components.create(AttributeDeclaration {
-            annotations,
-            name,
-            target_namespace,
-            type_definition,
-            scope,
-            value_constraint,
-            inheritable,
-        })
+        context.components.insert(
+            tlref,
+            AttributeDeclaration {
+                annotations,
+                name,
+                target_namespace,
+                type_definition,
+                scope,
+                value_constraint,
+                inheritable,
+            },
+        )
     }
 
     // TODO Extract common attribute procedures
-    // FIXME remove clones
-    pub fn map_from_xml_local(
+    pub(super) fn map_from_xml_local(
         context: &mut MappingContext,
         attribute: Node,
         schema: Node,
         parent: ScopeParent,
         // TODO is the first needed?
     ) -> (Option<Ref<Self>>, Ref<AttributeUse>) {
-        assert_eq!(attribute.tag_name().name(), "attribute");
+        assert_eq!(attribute.tag_name().name(), Self::TAG_NAME);
 
         // TODO handle use = 'prohibited'
 
@@ -170,9 +188,7 @@ impl AttributeDeclaration {
             //   The (top-level) attribute declaration ·resolved· to by the ·actual value· of the ref
             //   [attribute]
             let ref_ = actual_value::<QName>(ref_, attribute);
-            let attribute_declaration = context
-                .components
-                .resolve_attribute_declaration(&ref_, Resolution::Deferred);
+            let attribute_declaration: Ref<AttributeDeclaration> = context.resolver.resolve(&ref_);
 
             // {value constraint}
             //   If there is a default or a fixed [attribute], then a Value Constraint as follows,
@@ -208,7 +224,7 @@ impl AttributeDeclaration {
             let inheritable = attribute
                 .attribute("inheritable")
                 .map(|v| actual_value::<bool>(v, attribute))
-                .unwrap_or_else(|| todo!("attribute_declaration.inheritable"));
+                .unwrap_or_else(|| context.request(attribute_declaration).inheritable);
 
             let attribute_use = context.components.create(AttributeUse {
                 annotations,
@@ -263,7 +279,7 @@ impl AttributeDeclaration {
                 .children()
                 .find(|c| c.tag_name().name() == "simpleType")
                 .map(|simple_type| {
-                    SimpleTypeDefinition::map_from_xml(context, simple_type, schema)
+                    SimpleTypeDefinition::map_from_xml(context, simple_type, schema, None)
                 });
 
             let type_definition = if let Some(simple_type_def) = simple_type_def {
@@ -272,9 +288,7 @@ impl AttributeDeclaration {
                 .attribute("type")
                 .map(|v| actual_value::<QName>(v, attribute))
             {
-                context
-                    .components
-                    .resolve_simple_type_def(&type_, Resolution::Deferred)
+                context.resolver.resolve(&type_)
             } else {
                 todo!("xs:anySimpleType")
             };
@@ -358,17 +372,27 @@ impl AttributeDeclaration {
     }
 }
 
-impl RefsVisitable for AttributeDeclaration {
-    fn visit_refs(&mut self, visitor: &mut impl RefVisitor) {
-        self.annotations
-            .iter_mut()
-            .for_each(|annotation| visitor.visit_ref(annotation));
-        visitor.visit_ref(&mut self.type_definition);
-        if let Some(scope_parent) = self.scope.parent_mut() {
-            match scope_parent {
-                ScopeParent::ComplexType(complex_type) => visitor.visit_ref(complex_type),
-                ScopeParent::AttributeGroup(attribute_group) => visitor.visit_ref(attribute_group),
-            }
-        }
+impl Component for AttributeDeclaration {
+    const DISPLAY_NAME: &'static str = "AttributeDeclaration";
+}
+
+impl Named for AttributeDeclaration {
+    fn name(&self) -> Option<QName> {
+        Some(QName::with_optional_namespace(
+            self.target_namespace.as_ref(),
+            &self.name,
+        ))
+    }
+}
+
+impl TopLevelMappable for AttributeDeclaration {
+    fn map_from_top_level_xml(
+        context: &mut MappingContext,
+        self_ref: Ref<Self>,
+        attribute: Node,
+        schema: Node,
+    ) {
+        // TODO inline?
+        Self::map_from_xml_global(context, attribute, schema, self_ref);
     }
 }

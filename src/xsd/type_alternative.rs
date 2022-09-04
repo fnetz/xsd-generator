@@ -1,6 +1,6 @@
 use super::{
-    annotation::Annotation, assertion::XPathExpression, shared::TypeDefinition, xstypes::Sequence,
-    Ref, RefVisitor, RefsVisitable,
+    annotation::Annotation, assertion::XPathExpression, components::Component,
+    shared::TypeDefinition, xstypes::Sequence, Ref,
 };
 use roxmltree::Node;
 
@@ -9,7 +9,7 @@ use roxmltree::Node;
 pub struct TypeAlternative {
     pub annotations: Sequence<Ref<Annotation>>,
     pub test: Option<XPathExpression>,
-    pub type_definition: Ref<TypeDefinition>,
+    pub type_definition: TypeDefinition,
 }
 
 impl TypeAlternative {
@@ -18,11 +18,6 @@ impl TypeAlternative {
     }
 }
 
-impl RefsVisitable for TypeAlternative {
-    fn visit_refs(&mut self, visitor: &mut impl RefVisitor) {
-        self.annotations
-            .iter_mut()
-            .for_each(|annot| visitor.visit_ref(annot));
-        visitor.visit_ref(&mut self.type_definition);
-    }
+impl Component for TypeAlternative {
+    const DISPLAY_NAME: &'static str = "TypeAlternative";
 }

@@ -3,8 +3,10 @@ use super::{
     assertion::Assertion,
     attribute_decl,
     attribute_use::AttributeUse,
-    builtins::XS_NAMESPACE,
+    builtins::XS_ANY_TYPE_NAME,
+    components::{Component, Named},
     element_decl::ElementDeclaration,
+    mapping_context::TopLevelMappable,
     model_group::Compositor,
     particle::{MaxOccurs, Particle},
     shared::TypeDefinition,
@@ -12,8 +14,7 @@ use super::{
     values::actual_value,
     wildcard::{self, Wildcard},
     xstypes::{AnyURI, NCName, QName, Sequence, Set},
-    AttributeDeclaration, MappingContext, ModelGroup, Ref, RefVisitor, RefsVisitable, Resolution,
-    Term,
+    AttributeDeclaration, MappingContext, ModelGroup, Ref, Term,
 };
 use roxmltree::Node;
 
@@ -23,7 +24,7 @@ pub struct ComplexTypeDefinition {
     pub annotations: Sequence<Ref<Annotation>>,
     pub name: Option<NCName>,
     pub target_namespace: Option<AnyURI>,
-    pub base_type_definition: Option<Ref<TypeDefinition>>,
+    pub base_type_definition: TypeDefinition,
     pub final_: Set<DerivationMethod>,
     pub context: Option<Context>,
     pub derivation_method: Option<DerivationMethod>,
@@ -78,13 +79,33 @@ pub enum OpenContentMode {
 }
 
 impl ComplexTypeDefinition {
-    pub fn map_from_xml(
+    pub const TAG_NAME: &'static str = "complexType";
+
+    pub(super) fn name_from_xml(complex_type: Node, schema: Node) -> Option<QName> {
+        // {name}
+        //   The ·actual value· of the name [attribute] if present, otherwise ·absent·.
+        let name = complex_type
+            .attribute("name")
+            .map(|v| actual_value::<String>(v, complex_type));
+
+        // {target namespace}
+        //   The ·actual value· of the targetNamespace [attribute] of the <schema> ancestor element
+        //   information item if present, otherwise ·absent·.
+        let target_namespace = schema
+            .attribute("targetNamespace")
+            .map(|v| actual_value::<String>(v, complex_type));
+
+        name.map(|name| QName::with_optional_namespace(target_namespace, name))
+    }
+
+    pub(super) fn map_from_xml(
         context: &mut MappingContext,
         complex_type: Node,
         schema: Node,
         ancestor_element: Option<Ref<ElementDeclaration>>,
+        tlref: Option<Ref<Self>>,
     ) -> Ref<Self> {
-        let complex_type_ref = context.components.reserve::<Self>();
+        let complex_type_ref = tlref.unwrap_or_else(|| context.components.reserve::<Self>());
 
         if let Some(simple_content) = complex_type
             .children()
@@ -95,7 +116,14 @@ impl ComplexTypeDefinition {
             .children()
             .find(|c| c.tag_name().name() == "complexContent")
         {
-            Self::map_with_explicit_complex_content(complex_type, complex_content, schema)
+            Self::map_with_explicit_complex_content(
+                context,
+                complex_type_ref,
+                complex_type,
+                complex_content,
+                schema,
+                ancestor_element,
+            )
         } else {
             Self::map_with_implicit_complex_content(
                 context,
@@ -107,7 +135,7 @@ impl ComplexTypeDefinition {
         }
 
         assert!(
-            context.components.is_populated(complex_type_ref),
+            context.components.is_present(complex_type_ref),
             "ComplexTypeDefinition mapper failed to populate ref"
         );
         complex_type_ref
@@ -118,11 +146,61 @@ impl ComplexTypeDefinition {
     }
 
     fn map_with_explicit_complex_content(
-        _complex_type: Node,
-        _complex_content: Node,
-        _schema: Node,
+        context: &mut MappingContext,
+        complex_type_ref: Ref<Self>,
+        complex_type: Node,
+        complex_content: Node,
+        schema: Node,
+        ancestor_element: Option<Ref<ElementDeclaration>>,
     ) {
-        todo!("Complex type def with complex content")
+        let content = complex_content
+            .children()
+            .find(|c| ["restriction", "extension"].contains(&c.tag_name().name()))
+            .unwrap();
+
+        // {base type definition}
+        //   The type definition ·resolved· to by the ·actual value· of the base [attribute]
+        let base_type_definition = content
+            .attribute("base")
+            .map(|base| actual_value::<QName>(base, content))
+            .map(|n| context.resolver.resolve(&n))
+            .unwrap();
+
+        // {derivation method}
+        //   If the <restriction> alternative is chosen, then restriction, otherwise (the
+        //   <extension> alternative is chosen) extension.
+        let derivation_method = match content.tag_name().name() {
+            "restriction" => DerivationMethod::Restriction,
+            "extension" => DerivationMethod::Extension,
+            _ => unreachable!(),
+        };
+
+        let content_type = ContentType::map_complex(
+            context,
+            complex_type_ref,
+            complex_type,
+            None,
+            schema,
+            derivation_method,
+        );
+
+        let common = Self::map_common(context, complex_type, schema, ancestor_element);
+
+        let attribute_uses =
+            Self::map_attribute_uses_property(context, complex_type_ref, complex_type, schema);
+
+        // TODO attribute wildcard
+
+        context.components.insert(
+            complex_type_ref,
+            Self {
+                base_type_definition,
+                derivation_method: Some(derivation_method),
+                content_type,
+                attribute_uses,
+                ..common
+            },
+        );
     }
 
     fn map_with_implicit_complex_content(
@@ -133,10 +211,7 @@ impl ComplexTypeDefinition {
         ancestor_element: Option<Ref<ElementDeclaration>>,
     ) {
         // {base type definition} ·xs:anyType·
-        let base_type_definition = Some(context.components.resolve_type_def(
-            &QName(XS_NAMESPACE.into(), "anyType".into()),
-            Resolution::Immediate,
-        ));
+        let base_type_definition = context.resolver.resolve(&XS_ANY_TYPE_NAME);
 
         // {derivation method}    restriction
         let derivation_method = Some(DerivationMethod::Restriction);
@@ -157,7 +232,7 @@ impl ComplexTypeDefinition {
 
         // TODO attribute wildcard
 
-        context.components.populate(
+        context.components.insert(
             complex_type_ref,
             Self {
                 base_type_definition,
@@ -206,7 +281,7 @@ impl ComplexTypeDefinition {
         //   element information items there will be a nearest <element>), the Element Declaration
         //   corresponding to the nearest <element> information item among the the ancestor element
         //   information items.
-        let context = if !complex_type.has_attribute("name") {
+        let context = if complex_type.has_attribute("name") {
             None
         } else {
             let ancestor_element = ancestor_element.expect(
@@ -259,7 +334,8 @@ impl ComplexTypeDefinition {
             assertions,
 
             // Populated in the specific mapping implementations
-            base_type_definition: None,
+            // TODO restructure
+            base_type_definition: mapping_context.resolver.resolve(&XS_ANY_TYPE_NAME), // TODO !!
             derivation_method: None,
             content_type: ContentType {
                 variety: ContentTypeVariety::Empty,
@@ -338,41 +414,6 @@ impl ComplexTypeDefinition {
     }
 }
 
-impl RefsVisitable for ComplexTypeDefinition {
-    fn visit_refs(&mut self, visitor: &mut impl RefVisitor) {
-        self.annotations.iter_mut().for_each(|annotation| {
-            visitor.visit_ref(annotation);
-        });
-        if let Some(base_type_definition) = self.base_type_definition.as_mut() {
-            visitor.visit_ref(base_type_definition);
-        }
-        if let Some(context) = self.context.as_mut() {
-            match context {
-                Context::Element(element) => visitor.visit_ref(element),
-                Context::ComplexType(complex_type) => visitor.visit_ref(complex_type),
-            }
-        }
-        self.attribute_uses.iter_mut().for_each(|attribute_use| {
-            visitor.visit_ref(attribute_use);
-        });
-        if let Some(attribute_wildcard) = self.attribute_wildcard.as_mut() {
-            visitor.visit_ref(attribute_wildcard);
-        }
-        if let Some(particle) = self.content_type.particle.as_mut() {
-            visitor.visit_ref(particle);
-        }
-        if let Some(open_content) = self.content_type.open_content.as_mut() {
-            visitor.visit_ref(&mut open_content.wildcard);
-        }
-        if let Some(simple_type_def) = self.content_type.simple_type_definition.as_mut() {
-            visitor.visit_ref(simple_type_def);
-        }
-        self.assertions.iter_mut().for_each(|assertion| {
-            visitor.visit_ref(assertion);
-        });
-    }
-}
-
 impl ContentType {
     fn map_complex(
         context: &mut MappingContext,
@@ -418,11 +459,11 @@ impl ContentType {
         // 2.1.1 There is no <group>, <all>, <choice> or <sequence> among the [children];
         !children_elem.children().any(|c| ["group", "all", "choice", "sequence"].contains(&c.tag_name().name())) ||
                 // 2.1.2 There is an <all> or <sequence> among the [children] with no [children] of its own excluding <annotation>;
-                children_elem.children().any(|c| ["all", "sequence"].contains(&c.tag_name().name()) && !c.children().any(|c| c.tag_name().name() != "annotation")) ||
+                children_elem.children().any(|c| ["all", "sequence"].contains(&c.tag_name().name()) && !c.children().any(|c| c.tag_name().name() != Annotation::TAG_NAME)) ||
                 // 2.1.3 There is among the [children] a <choice> element whose minOccurs [attribute] has the ·actual value· 0 and which has no [children] of its own except for <annotation>;
-                children_elem.children().any(|c| c.tag_name().name() == "choice" && c.attribute("minOccurs").map(|v| actual_value::<u64>(v, complex_type)) == Some(0) && !c.children().any(|c| c.tag_name().name() != "annotation")) ||
+                children_elem.children().any(|c| c.tag_name().name() == "choice" && c.attribute("minOccurs").map(|v| actual_value::<u64>(v, complex_type)) == Some(0) && !c.children().any(|c| c.tag_name().name() != Annotation::TAG_NAME)) ||
                 // 2.1.4 The <group>, <all>, <choice> or <sequence> element among the [children] has a maxOccurs [attribute] with an ·actual value· of 0;
-                children_elem.children().find(|c| ["group", "all", "choice", "sequence"].contains(&c.tag_name().name())).map(|c| c.attribute("maxOccurs").map(|v| actual_value::<u64>(v, complex_type)) == Some(0)) == Some(true)
+                children_elem.children().find(|c| ["group", "all", "choice", "sequence"].contains(&c.tag_name().name())).map(|c| c.attribute("maxOccurs").filter(|m| *m != "unbounded").map(|v| actual_value::<u64>(v, complex_type)) == Some(0)) == Some(true)
         {
             // then empty
             None
@@ -654,5 +695,28 @@ impl ContentType {
 
     fn map_simple() -> Self {
         todo!()
+    }
+}
+
+impl Component for ComplexTypeDefinition {
+    const DISPLAY_NAME: &'static str = "ComplexTypeDefinition";
+}
+
+impl Named for ComplexTypeDefinition {
+    fn name(&self) -> Option<QName> {
+        self.name.as_ref().map(|local_name| {
+            QName::with_optional_namespace(self.target_namespace.as_ref(), local_name)
+        })
+    }
+}
+
+impl TopLevelMappable for ComplexTypeDefinition {
+    fn map_from_top_level_xml(
+        context: &mut MappingContext,
+        self_ref: Ref<Self>,
+        complex_type: Node,
+        schema: Node,
+    ) {
+        Self::map_from_xml(context, complex_type, schema, None, Some(self_ref));
     }
 }

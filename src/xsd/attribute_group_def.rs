@@ -2,10 +2,12 @@ use super::{
     annotation::Annotation,
     attribute_decl::{self, AttributeDeclaration},
     attribute_use::AttributeUse,
+    components::{Component, Named, NamedXml},
+    mapping_context::TopLevelMappable,
     values::actual_value,
     wildcard::Wildcard,
-    xstypes::{AnyURI, NCName, Sequence, Set},
-    MappingContext, Ref, RefVisitor, RefsVisitable,
+    xstypes::{AnyURI, NCName, QName, Sequence, Set},
+    MappingContext, Ref,
 };
 use roxmltree::Node;
 
@@ -19,19 +21,13 @@ pub struct AttributeGroupDefinition {
     pub attribute_wildcard: Option<Ref<Wildcard>>,
 }
 
-impl AttributeGroupDefinition {
-    pub fn map_from_xml(
-        context: &mut MappingContext,
-        attribute_group: Node,
-        schema: Node,
-    ) -> Ref<Self> {
-        let attrib_group_ref = context.components.reserve();
-
+impl NamedXml for AttributeGroupDefinition {
+    fn get_name_from_xml(attribute_group: Node, schema: Node) -> QName {
         // {name}
         //   The ·actual value· of the name [attribute]
         let name = attribute_group
             .attribute("name")
-            .map(|v| actual_value(v, attribute_group))
+            .map(|v| actual_value::<NCName>(v, attribute_group))
             .unwrap();
 
         // {target namespace}
@@ -39,7 +35,27 @@ impl AttributeGroupDefinition {
         //   information item if present, otherwise ·absent·.
         let target_namespace = schema
             .attribute("targetNamespace")
-            .map(|v| actual_value(v, attribute_group));
+            .map(|v| actual_value::<AnyURI>(v, attribute_group));
+
+        QName::with_optional_namespace(target_namespace, name)
+    }
+}
+
+impl AttributeGroupDefinition {
+    pub const TAG_NAME: &'static str = "attributeGroup";
+
+    pub(super) fn map_from_xml(
+        context: &mut MappingContext,
+        attribute_group: Node,
+        schema: Node,
+        attrib_group_ref: Option<Ref<Self>>,
+    ) -> Ref<Self> {
+        let attrib_group_ref = attrib_group_ref.unwrap_or_else(|| context.components.reserve());
+
+        let QName {
+            local_name: name,
+            namespace_name: target_namespace,
+        } = Self::get_name_from_xml(attribute_group, schema);
 
         // {attribute uses}
         //     The union of the set of attribute uses corresponding to the <attribute> [children],
@@ -78,7 +94,7 @@ impl AttributeGroupDefinition {
             .for_each(|c| annot_elements.push(c));
         let annotations = Annotation::xml_element_set_annotation_mapping(context, &annot_elements);
 
-        context.components.populate(
+        context.components.insert(
             attrib_group_ref,
             Self {
                 annotations,
@@ -92,16 +108,26 @@ impl AttributeGroupDefinition {
     }
 }
 
-impl RefsVisitable for AttributeGroupDefinition {
-    fn visit_refs(&mut self, visitor: &mut impl RefVisitor) {
-        self.annotations
-            .iter_mut()
-            .for_each(|annotation| visitor.visit_ref(annotation));
-        self.attribute_uses
-            .iter_mut()
-            .for_each(|attrib_use| visitor.visit_ref(attrib_use));
-        if let Some(ref mut wildcard) = self.attribute_wildcard {
-            visitor.visit_ref(wildcard);
-        }
+impl Named for AttributeGroupDefinition {
+    fn name(&self) -> Option<QName> {
+        Some(QName::with_optional_namespace(
+            self.target_namespace.as_ref(),
+            &self.name,
+        ))
+    }
+}
+
+impl Component for AttributeGroupDefinition {
+    const DISPLAY_NAME: &'static str = "AttributeGroupDefinition";
+}
+
+impl TopLevelMappable for AttributeGroupDefinition {
+    fn map_from_top_level_xml(
+        context: &mut MappingContext,
+        self_ref: Ref<Self>,
+        attribute_group: Node,
+        schema: Node,
+    ) {
+        Self::map_from_xml(context, attribute_group, schema, Some(self_ref));
     }
 }

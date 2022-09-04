@@ -1,9 +1,9 @@
 use roxmltree::Node;
 
 use super::{
-    components::{MappingContext, RefVisitor, RefsVisitable},
+    components::Component,
     xstypes::{Sequence, Set},
-    Annotation, Assertion, Ref,
+    Annotation, Assertion, MappingContext, Ref,
 };
 
 /// Constraining facet (pt. 2, §4.3)
@@ -123,7 +123,8 @@ pub enum ExplicitTimezoneValue {
 }
 
 impl ConstrainingFacet {
-    pub fn map_from_xml(_context: &mut MappingContext, _facet: Node) -> Ref<Self> {
+    /// Returns `None` in case the constraining facet is not supported by the processor
+    pub(super) fn map_from_xml(_context: &mut MappingContext, _facet: Node) -> Option<Ref<Self>> {
         todo!()
     }
 
@@ -145,39 +146,6 @@ impl ConstrainingFacet {
             ConstrainingFacet::ExplicitTimezone(c) => &c.annotations,
         }
     }
-
-    fn annotations_mut(&mut self) -> &mut Vec<Ref<Annotation>> {
-        match self {
-            ConstrainingFacet::Length(c) => &mut c.annotations,
-            ConstrainingFacet::MinLength(c) => &mut c.annotations,
-            ConstrainingFacet::MaxLength(c) => &mut c.annotations,
-            ConstrainingFacet::Pattern(c) => &mut c.annotations,
-            ConstrainingFacet::Enumeration(c) => &mut c.annotations,
-            ConstrainingFacet::WhiteSpace(c) => &mut c.annotations,
-            ConstrainingFacet::MaxInclusive(c) => &mut c.annotations,
-            ConstrainingFacet::MaxExclusive(c) => &mut c.annotations,
-            ConstrainingFacet::MinExclusive(c) => &mut c.annotations,
-            ConstrainingFacet::MinInclusive(c) => &mut c.annotations,
-            ConstrainingFacet::TotalDigits(c) => &mut c.annotations,
-            ConstrainingFacet::FractionDigits(c) => &mut c.annotations,
-            ConstrainingFacet::Assertions(c) => &mut c.annotations,
-            ConstrainingFacet::ExplicitTimezone(c) => &mut c.annotations,
-        }
-    }
-}
-
-impl RefsVisitable for ConstrainingFacet {
-    fn visit_refs(&mut self, visitor: &mut impl RefVisitor) {
-        self.annotations_mut()
-            .iter_mut()
-            .for_each(|annot| visitor.visit_ref(annot));
-        if let Self::Assertions(assertions) = self {
-            assertions
-                .assertions
-                .iter_mut()
-                .for_each(|assertion| visitor.visit_ref(assertion));
-        }
-    }
 }
 
 impl WhiteSpace {
@@ -188,4 +156,8 @@ impl WhiteSpace {
             fixed,
         }
     }
+}
+
+impl Component for ConstrainingFacet {
+    const DISPLAY_NAME: &'static str = "ConstrainingFacet";
 }

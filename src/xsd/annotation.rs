@@ -1,11 +1,12 @@
+use super::components::Component;
 use super::xstypes::Sequence;
-use super::{MappingContext, Ref, RefVisitor, RefsVisitable};
+use super::{MappingContext, Ref};
 use roxmltree::Node;
 
 /// Schema Component: Annotation, a kind of Component (§3.15)
 ///
-/// Note: Instead of storing the actual Element information items (i.e. nodes), we store the
-/// original source string of the element.
+/// Note: Instead of storing the actual Element information items (i.e. nodes), this type stores the
+/// original source string of the respective elements.
 #[derive(Clone, Debug)]
 pub struct Annotation {
     pub application_information: Sequence<String>,
@@ -14,12 +15,14 @@ pub struct Annotation {
 }
 
 impl Annotation {
+    pub const TAG_NAME: &'static str = "annotation";
+
     fn source_string(node: Node) -> String {
         node.document().input_text()[node.range()].to_string()
     }
 
-    pub fn map_from_xml(context: &mut MappingContext, annotation: Node) -> Ref<Self> {
-        assert_eq!(annotation.tag_name().name(), "annotation");
+    pub(super) fn map_from_xml(context: &mut MappingContext, annotation: Node) -> Ref<Self> {
+        assert_eq!(annotation.tag_name().name(), Self::TAG_NAME);
 
         // {application information}
         //   A sequence of the <appinfo> element information items from among the [children], in
@@ -55,14 +58,16 @@ impl Annotation {
 
     /// Corresponds to the [annotation mapping](https://www.w3.org/TR/xmlschema11-1/#key-am-set) of
     /// a set of element information items (represented here as slice for simplicity)
-    pub fn xml_element_set_annotation_mapping(
+    pub(super) fn xml_element_set_annotation_mapping(
         context: &mut MappingContext,
         es: &[Node],
     ) -> Sequence<Ref<Self>> {
         // FIXME Actually implement the annotation mapping procedure in the spec
         let mut as_ = Sequence::new();
         for e in es {
-            let child_annotations = e.children().filter(|c| c.tag_name().name() == "annotation");
+            let child_annotations = e
+                .children()
+                .filter(|c| c.tag_name().name() == Self::TAG_NAME);
             for child in child_annotations {
                 as_.push(Self::map_from_xml(context, child));
             }
@@ -74,7 +79,7 @@ impl Annotation {
     /// of a single element information item (same as calling
     /// [xml_element_set_annotation_mapping()](Self::xml_element_set_annotation_mapping()) with a
     /// single-element slice containing `e`)
-    pub fn xml_element_annotation_mapping(
+    pub(super) fn xml_element_annotation_mapping(
         context: &mut MappingContext,
         e: Node,
     ) -> Sequence<Ref<Self>> {
@@ -82,6 +87,6 @@ impl Annotation {
     }
 }
 
-impl RefsVisitable for Annotation {
-    fn visit_refs(&mut self, _visitor: &mut impl RefVisitor) {}
+impl Component for Annotation {
+    const DISPLAY_NAME: &'static str = "Annotation";
 }

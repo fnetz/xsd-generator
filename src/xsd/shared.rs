@@ -1,7 +1,12 @@
 use super::{
-    complex_type_def::ComplexTypeDefinition, element_decl::ElementDeclaration,
-    model_group::ModelGroup, simple_type_def::SimpleTypeDefinition, wildcard::Wildcard, Ref,
-    RefVisitor, RefsVisitable,
+    complex_type_def::ComplexTypeDefinition,
+    components::{ComponentTable, Named, RefNamed},
+    element_decl::ElementDeclaration,
+    model_group::ModelGroup,
+    simple_type_def::SimpleTypeDefinition,
+    wildcard::Wildcard,
+    xstypes::QName,
+    Ref,
 };
 
 /// Common type for [attribute_decl::ScopeVariety](super::attribute_decl::ScopeVariety) and
@@ -86,6 +91,21 @@ pub enum TypeDefinition {
     Complex(Ref<ComplexTypeDefinition>),
 }
 
+/// Helper: Resolved [`TypeDefinition`]
+enum RTD<'a> {
+    Simple(&'a SimpleTypeDefinition),
+    Complex(&'a ComplexTypeDefinition),
+}
+
+impl RefNamed for TypeDefinition {
+    fn name(&self, ct: &impl ComponentTable) -> Option<QName> {
+        match self.get(ct) {
+            RTD::Simple(s) => s.name(),
+            RTD::Complex(c) => c.name(),
+        }
+    }
+}
+
 impl TypeDefinition {
     pub fn simple(self) -> Option<Ref<SimpleTypeDefinition>> {
         match self {
@@ -100,13 +120,29 @@ impl TypeDefinition {
             Self::Simple(_) => None,
         }
     }
-}
 
-impl RefsVisitable for TypeDefinition {
-    fn visit_refs(&mut self, visitor: &mut impl RefVisitor) {
+    fn get<'a>(&self, components: &'a impl ComponentTable) -> RTD<'a> {
         match self {
-            Self::Simple(simple) => visitor.visit_ref(simple),
-            Self::Complex(complex) => visitor.visit_ref(complex),
+            Self::Simple(s) => RTD::Simple(s.get(components)),
+            Self::Complex(c) => RTD::Complex(c.get(components)),
+        }
+    }
+
+    pub fn base_type_definition(&self, components: &impl ComponentTable) -> TypeDefinition {
+        match self.get(components) {
+            RTD::Simple(s) => s.base_type_definition,
+            RTD::Complex(c) => c.base_type_definition,
+        }
+    }
+
+    pub fn ancestors<'a, T: ComponentTable>(&self, components: &'a T) -> Ancestors<'a, T> {
+        Ancestors::new(self.base_type_definition(components), components)
+    }
+
+    pub fn is_primitive(&self, components: &impl ComponentTable) -> bool {
+        match self {
+            Self::Simple(s) => s.get(components).is_primitive(),
+            Self::Complex(_) => false,
         }
     }
 }
@@ -119,12 +155,39 @@ pub enum Term {
     Wildcard(Ref<Wildcard>),
 }
 
-impl RefsVisitable for Term {
-    fn visit_refs(&mut self, visitor: &mut impl RefVisitor) {
-        match self {
-            Self::ElementDeclaration(element) => visitor.visit_ref(element),
-            Self::ModelGroup(model_group) => visitor.visit_ref(model_group),
-            Self::Wildcard(wildcard) => visitor.visit_ref(wildcard),
+impl Term {
+    pub fn is_basic(&self) -> bool {
+        matches!(self, Self::ElementDeclaration(_) | Self::Wildcard(_))
+    }
+}
+
+/// Iterator over the ancestors of a Type Definition.
+/// > The ancestors of a ·type definition· are its {base type definition} and the ·ancestors· of its
+/// > {base type definition}. (pt. 1, §3.16.2.2)
+///
+/// Note that, since the "root" type `xs:anyType`'s base type is itself, this iterator is infinite.
+/// In other words, once the anyType is reached, `next()` will forever return `Some(<xs:anyType>)`.
+pub struct Ancestors<'a, T: ComponentTable> {
+    current: TypeDefinition,
+    components: &'a T,
+}
+
+impl<'a, T: ComponentTable> Ancestors<'a, T> {
+    pub(super) fn new(start: TypeDefinition, components: &'a T) -> Self {
+        Self {
+            current: start,
+            components,
         }
+    }
+}
+
+impl<'a, T: ComponentTable> Iterator for Ancestors<'a, T> {
+    type Item = TypeDefinition;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let base_type = self.current.base_type_definition(self.components);
+        let current = self.current;
+        self.current = base_type;
+        Some(current)
     }
 }

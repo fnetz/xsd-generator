@@ -1,8 +1,10 @@
 use super::{
     annotation::Annotation,
+    components::{Component, Named, NamedXml},
+    mapping_context::TopLevelMappable,
     values::actual_value,
-    xstypes::{AnyURI, NCName, Sequence},
-    MappingContext, Ref, RefVisitor, RefsVisitable,
+    xstypes::{AnyURI, NCName, QName, Sequence},
+    MappingContext, Ref,
 };
 use roxmltree::Node;
 
@@ -16,11 +18,8 @@ pub struct NotationDeclaration {
     pub public_identifier: Option<String>, // TODO publicID
 }
 
-impl NotationDeclaration {
-    // TODO §3.14.6
-    pub fn map_from_xml(context: &mut MappingContext, notation: Node, schema: Node) -> Ref<Self> {
-        assert_eq!(notation.tag_name().name(), "notation");
-
+impl NamedXml for NotationDeclaration {
+    fn get_name_from_xml(notation: Node, schema: Node) -> QName {
         // {name}
         //   The ·actual value· of the name [attribute]
         let name = notation
@@ -34,6 +33,29 @@ impl NotationDeclaration {
         let target_namespace = schema
             .attribute("targetNamespace")
             .map(|v| actual_value::<AnyURI>(v, notation));
+
+        QName::with_optional_namespace(target_namespace, name)
+    }
+}
+
+impl NotationDeclaration {
+    pub const TAG_NAME: &'static str = "notation";
+
+    // TODO §3.14.6
+    pub(super) fn map_from_xml(
+        context: &mut MappingContext,
+        notation: Node,
+        schema: Node,
+        tlref: Option<Ref<Self>>,
+    ) -> Ref<Self> {
+        assert_eq!(notation.tag_name().name(), Self::TAG_NAME);
+
+        let self_ref = tlref.unwrap_or_else(|| context.components.reserve());
+
+        let QName {
+            local_name: name,
+            namespace_name: target_namespace,
+        } = Self::get_name_from_xml(notation, schema);
 
         // {system identifier}
         //   The ·actual value· of the system [attribute], if present, otherwise ·absent·.
@@ -52,20 +74,39 @@ impl NotationDeclaration {
         //   of Annotation Schema Components (§3.15.2).
         let annotations = Annotation::xml_element_annotation_mapping(context, notation);
 
-        context.components.create(Self {
-            annotations,
-            name,
-            target_namespace,
-            system_identifier,
-            public_identifier,
-        })
+        context.components.insert(
+            self_ref,
+            Self {
+                annotations,
+                name,
+                target_namespace,
+                system_identifier,
+                public_identifier,
+            },
+        )
     }
 }
 
-impl RefsVisitable for NotationDeclaration {
-    fn visit_refs(&mut self, visitor: &mut impl RefVisitor) {
-        self.annotations
-            .iter_mut()
-            .for_each(|annot| visitor.visit_ref(annot));
+impl Component for NotationDeclaration {
+    const DISPLAY_NAME: &'static str = "NotationDeclaration";
+}
+
+impl Named for NotationDeclaration {
+    fn name(&self) -> Option<QName> {
+        Some(QName::with_optional_namespace(
+            self.target_namespace.as_ref(),
+            &self.name,
+        ))
+    }
+}
+
+impl TopLevelMappable for NotationDeclaration {
+    fn map_from_top_level_xml(
+        context: &mut MappingContext,
+        self_ref: Ref<Self>,
+        notation: Node,
+        schema: Node,
+    ) {
+        Self::map_from_xml(context, notation, schema, Some(self_ref));
     }
 }

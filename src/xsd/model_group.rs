@@ -1,5 +1,5 @@
 use super::{
-    annotation::Annotation, particle::Particle, xstypes::Sequence, Ref, RefVisitor, RefsVisitable,
+    annotation::Annotation, components::Component, particle::Particle, xstypes::Sequence, Ref,
 };
 
 /// Schema Component: Model Group, a kind of Term (§3.8)
@@ -17,13 +17,6 @@ pub enum Compositor {
     Sequence,
 }
 
-impl RefsVisitable for ModelGroup {
-    fn visit_refs(&mut self, visitor: &mut impl RefVisitor) {
-        self.annotations
-            .iter_mut()
-            .for_each(|annot| visitor.visit_ref(annot));
-        self.particles
-            .iter_mut()
-            .for_each(|particle| visitor.visit_ref(particle));
-    }
+impl Component for ModelGroup {
+    const DISPLAY_NAME: &'static str = "ModelGroup";
 }
