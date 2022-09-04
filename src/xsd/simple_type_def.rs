@@ -205,6 +205,9 @@ impl SimpleTypeDefinition {
                 // The ·overlaying· algorithm itself is performed in the post-resolution pass
                 let mut facets = Set::new();
                 for facet in child.children() {
+                    if !facet.is_element() {
+                        continue;
+                    }
                     if [Self::TAG_NAME, Annotation::TAG_NAME].contains(&facet.tag_name().name()) {
                         continue;
                     }
