@@ -478,3 +478,61 @@ fn register_builtin_attribute_decls(context: &mut MappingContext) {
     });
     context.register(xsi_no_namespace_schema_location);
 }
+
+pub fn is_builtin_name(name: &QName) -> bool {
+    is_builtin_type_name(name) || is_builtin_attribute_decl_name(name)
+}
+
+pub fn is_builtin_type_name(name: &QName) -> bool {
+    if name.namespace_name.as_deref() != Some(XS_NAMESPACE) {
+        return false;
+    }
+
+    const BUILTIN_TYPE_NAMES: [&str; 33] = [
+        "anyType",
+        "anySimpleType",
+        "anyAtomicType",
+        "error",
+        "string",
+        "boolean",
+        "float",
+        "double",
+        "decimal",
+        "dateTime",
+        "duration",
+        "time",
+        "date",
+        "gMonth",
+        "gMonthDay",
+        "gDay",
+        "gYear",
+        "gYearMonth",
+        "hexBinary",
+        "base64Binary",
+        "anyURI",
+        "QName",
+        "NOTATION",
+        "integer",
+        "nonNegativeInteger",
+        "positiveInteger",
+        "normalizedString",
+        "token",
+        "NMTOKEN",
+        "Name",
+        "NCName",
+        "ID",
+        "language",
+    ];
+    BUILTIN_TYPE_NAMES.contains(&name.local_name.as_str())
+}
+
+pub fn is_builtin_attribute_decl_name(name: &QName) -> bool {
+    if name.namespace_name.as_deref() != Some(XSI_NAMESPACE) {
+        return false;
+    }
+
+    const BUILTIN_ATTRIBUTE_NAMES: [&str; 4] =
+        ["type", "nil", "schemaLocation", "noNamespaceSchemaLocation"];
+
+    BUILTIN_ATTRIBUTE_NAMES.contains(&name.local_name.as_str())
+}

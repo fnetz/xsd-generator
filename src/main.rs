@@ -1,6 +1,7 @@
 mod xsd;
 
 use clap::Parser;
+use xsd::BuiltinOverwriteAction;
 
 #[derive(Parser)]
 #[clap(version, about)]
@@ -10,6 +11,9 @@ struct Cli {
 
     #[clap(long, help = "Allow a XML Document Type Definition (DTD) to occur")]
     allow_dtd: bool,
+
+    #[clap(long, default_value = "deny", value_parser, arg_enum)]
+    builtin_overwrite: BuiltinOverwriteAction,
 }
 
 fn main() {
@@ -20,5 +24,5 @@ fn main() {
         allow_dtd: cli.allow_dtd,
     };
     let xsd = roxmltree::Document::parse_with_options(&xsd, options).unwrap();
-    let (schema, components) = xsd::read_schema(xsd);
+    let (schema, components) = xsd::read_schema(xsd, cli.builtin_overwrite);
 }

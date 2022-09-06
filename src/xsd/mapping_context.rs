@@ -4,8 +4,8 @@ use roxmltree::{Node, NodeId};
 
 use super::{
     components::{
-        Component, ComponentResolver, ComponentTraits, ConstructionComponentTable, DynamicRef,
-        HasArenaContainer, Lookup, LookupTables, RefNamed,
+        BuiltinOverwriteAction, Component, ComponentResolver, ComponentTraits,
+        ConstructionComponentTable, DynamicRef, HasArenaContainer, Lookup, LookupTables, RefNamed,
     },
     xstypes::QName,
     AttributeDeclaration, AttributeGroupDefinition, ComplexTypeDefinition, ElementDeclaration,
@@ -106,11 +106,11 @@ pub(super) struct MappingContext<'a, 'input: 'a, 'p> {
 }
 
 impl<'a, 'input: 'a, 'p> MappingContext<'a, 'input, 'p> {
-    pub(super) fn new(schema: Node<'a, 'input>) -> Self {
+    pub(super) fn new(schema: Node<'a, 'input>, builtin_overwrite: BuiltinOverwriteAction) -> Self {
         let mut context = MappingContext {
             core: ContextCore::Root(Box::new(RootContextCore {
                 components: ConstructionComponentTable::new(),
-                resolver: ComponentResolver::new(),
+                resolver: ComponentResolver::new(builtin_overwrite),
             })),
             top_level_refs: TopLevelElements::default(),
             in_progress_top_level: HashSet::new(),

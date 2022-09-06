@@ -4,11 +4,13 @@ use std::fmt;
 use std::marker::PhantomData;
 use std::num::{NonZeroU32, NonZeroUsize};
 
+use clap::ValueEnum;
+
 use roxmltree::Node;
 
 use super::xstypes::QName;
 use super::{
-    Annotation, Assertion, AttributeDeclaration, AttributeGroupDefinition, AttributeUse,
+    builtins, Annotation, Assertion, AttributeDeclaration, AttributeGroupDefinition, AttributeUse,
     ComplexTypeDefinition, ConstrainingFacet, ElementDeclaration, IdentityConstraintDefinition,
     ModelGroup, ModelGroupDefinition, NotationDeclaration, Particle, SimpleTypeDefinition,
     TypeAlternative, TypeDefinition, Wildcard,
@@ -111,7 +113,7 @@ where
     }
 }
 
-/// An arena-like container for various [`Components`]
+/// An arena-like container for various [`Component`]s
 pub trait ComponentTable {
     /// Retrieves a component's value by reference from this component table.
     /// This function panics if the component value is not present in the table.
@@ -443,15 +445,26 @@ impl Lookup<Ref<ComplexTypeDefinition>> for LookupTables {
     }
 }
 
+// TODO move?
+#[derive(Copy, Clone, Debug, ValueEnum)]
+pub enum BuiltinOverwriteAction {
+    Deny,
+    Warn,
+    Allow,
+}
+
 /// QName resolution according to §3.17.6.2
-#[derive(Default)]
 pub(super) struct ComponentResolver {
     lookup_tables: LookupTables,
+    builtin_overwrite: BuiltinOverwriteAction,
 }
 
 impl ComponentResolver {
-    pub(super) fn new() -> Self {
-        Self::default()
+    pub(super) fn new(builtin_overwrite: BuiltinOverwriteAction) -> Self {
+        Self {
+            lookup_tables: LookupTables::default(),
+            builtin_overwrite,
+        }
     }
 
     pub(super) fn resolve<R>(&self, key: &QName) -> R
@@ -472,7 +485,24 @@ impl ComponentResolver {
         let prev = self
             .lookup_tables
             .register_value_for_lookup(name.clone(), value);
-        assert!(!prev, "Duplicate component: {name}"); // TODO propagate
+        if prev {
+            if builtins::is_builtin_name(&name) {
+                match self.builtin_overwrite {
+                    BuiltinOverwriteAction::Deny => {
+                        panic!("Tried to overwrite built-in component: {name}");
+                    }
+                    BuiltinOverwriteAction::Warn => {
+                        eprintln!("WARN: Overwriting built-in component {name}");
+                    }
+                    BuiltinOverwriteAction::Allow => {}
+                }
+            } else {
+                panic!(
+                    "Duplicate component: {name} ({})",
+                    std::any::type_name::<R>()
+                ); // TODO propagate
+            }
+        }
     }
 
     pub(super) fn register<R>(&mut self, value: R, table: &impl ComponentTable)
