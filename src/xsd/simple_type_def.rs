@@ -133,7 +133,7 @@ impl SimpleTypeDefinition {
             child
                 .attribute("base")
                 .map(|v| actual_value::<QName>(v, child))
-                .map(|name| ctx.resolver.resolve(&name))
+                .map(|name| ctx.resolve(&name))
                 .unwrap_or_else(|| {
                     let st = simple_type
                         .children()
@@ -144,7 +144,7 @@ impl SimpleTypeDefinition {
                 })
         } else {
             // 2 If the <list> or <union> alternative is chosen, then ·xs:anySimpleType·.
-            ctx.resolver.resolve(&XS_ANY_SIMPLE_TYPE_NAME)
+            ctx.resolve(&XS_ANY_SIMPLE_TYPE_NAME)
         };
 
         // {final}
@@ -219,12 +219,10 @@ impl SimpleTypeDefinition {
             // 3 If the <list> alternative is chosen, then a set with one member, a whiteSpace facet
             //   with {value} = collapse and {fixed} = true.
             ChildType::List => {
-                let ws = ctx
-                    .components
-                    .create(ConstrainingFacet::WhiteSpace(WhiteSpace::new(
-                        WhiteSpaceValue::Collapse,
-                        true,
-                    )));
+                let ws = ctx.create(ConstrainingFacet::WhiteSpace(WhiteSpace::new(
+                    WhiteSpaceValue::Collapse,
+                    true,
+                )));
                 [ws].into_iter().collect()
             }
             // 4 otherwise the empty set
@@ -272,11 +270,13 @@ impl SimpleTypeDefinition {
                 // From among the ·ancestors· of this Simple Type Definition, that Simple Type
                 // Definition which corresponds to a primitive datatype.
                 let ancestors = std::iter::once(base_type_definition)
-                    .chain(base_type_definition.ancestors(&ctx.components));
+                    .chain(base_type_definition.ancestors(ctx.components()));
                 primitive_type_definition = Some(
                     ancestors
-                        .take_while(|r| r.name(&ctx.components).as_ref() != Some(&XS_ANY_TYPE_NAME))
-                        .find(|t| t.is_primitive(&ctx.components))
+                        .take_while(|r| {
+                            r.name(ctx.components()).as_ref() != Some(&XS_ANY_TYPE_NAME)
+                        })
+                        .find(|t| t.is_primitive(ctx.components()))
                         .unwrap() // TODO can this fail?
                         .simple()
                         .unwrap(),
@@ -287,7 +287,7 @@ impl SimpleTypeDefinition {
 
                 // {item type definition} The appropriate case among the following:
                 item_type_definition = Some(
-                    if base_type_definition.name(&ctx.components).as_ref()
+                    if base_type_definition.name(ctx.components()).as_ref()
                         == Some(&XS_ANY_SIMPLE_TYPE_NAME)
                     {
                         // 1 If the {base type definition} is ·xs:anySimpleType·, then the
@@ -298,7 +298,7 @@ impl SimpleTypeDefinition {
                         //   whichever is present.
                         list.attribute("itemType")
                             .map(|item_type| actual_value::<QName>(item_type, list))
-                            .map(|item_type| ctx.resolver.resolve(&item_type))
+                            .map(|item_type| ctx.resolve(&item_type))
                             .or_else(|| {
                                 list.children()
                                     .find(|c| c.tag_name().name() == Self::TAG_NAME)
@@ -337,8 +337,7 @@ impl SimpleTypeDefinition {
                                 member_types
                                     .into_iter()
                                     .map(|member_type| {
-                                        ctx.resolver
-                                            .resolve::<Ref<SimpleTypeDefinition>>(&member_type)
+                                        ctx.resolve::<Ref<SimpleTypeDefinition>>(&member_type)
                                     })
                                     .collect::<Vec<_>>()
                             })
@@ -369,9 +368,9 @@ impl SimpleTypeDefinition {
         // TODO
         let fundamental_facets = Set::new();
 
-        let simple_type_def = tlref.unwrap_or_else(|| ctx.components.reserve());
+        let simple_type_def = tlref.unwrap_or_else(|| ctx.reserve());
 
-        ctx.components.insert(
+        ctx.insert(
             simple_type_def,
             Self {
                 name,

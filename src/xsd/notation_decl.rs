@@ -50,7 +50,7 @@ impl NotationDeclaration {
     ) -> Ref<Self> {
         assert_eq!(notation.tag_name().name(), Self::TAG_NAME);
 
-        let self_ref = tlref.unwrap_or_else(|| context.components.reserve());
+        let self_ref = tlref.unwrap_or_else(|| context.reserve());
 
         let QName {
             local_name: name,
@@ -74,7 +74,7 @@ impl NotationDeclaration {
         //   of Annotation Schema Components (§3.15.2).
         let annotations = Annotation::xml_element_annotation_mapping(context, notation);
 
-        context.components.insert(
+        context.insert(
             self_ref,
             Self {
                 annotations,

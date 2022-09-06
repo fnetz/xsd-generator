@@ -53,13 +53,13 @@ impl ModelGroupDefinition {
         } = Self::get_name_from_xml(group, schema);
 
         // TODO
-        let self_ref = tlref.unwrap_or_else(|| context.components.reserve());
-        let model_group = context.components.create(ModelGroup {
+        let self_ref = tlref.unwrap_or_else(|| context.reserve());
+        let model_group = context.create(ModelGroup {
             annotations: Sequence::new(),
             compositor: Compositor::All,
             particles: Sequence::new(),
         });
-        context.components.insert(
+        context.insert(
             self_ref,
             Self {
                 annotations: Sequence::new(),

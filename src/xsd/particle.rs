@@ -64,12 +64,12 @@ impl Particle {
         //   The same annotations as the {annotations} of the {term}.
         let annotations = match term {
             Term::ElementDeclaration(element) => {
-                element.get(&context.components).annotations.clone()
+                element.get(context.components()).annotations.clone()
             }
             _ => unreachable!(),
         };
 
-        context.components.create(Particle {
+        context.create(Particle {
             min_occurs,
             max_occurs,
             term,
@@ -151,7 +151,7 @@ impl Particle {
                 })
                 .collect();
 
-            context.components.create(ModelGroup {
+            context.create(ModelGroup {
                 compositor,
                 particles,
                 annotations: annotations.clone(),
@@ -162,7 +162,7 @@ impl Particle {
         //   The same annotations as the {annotations} of the model group.
         // -- created above --
 
-        context.components.create(Particle {
+        context.create(Particle {
             min_occurs,
             max_occurs,
             term,

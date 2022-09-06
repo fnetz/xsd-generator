@@ -60,6 +60,6 @@ pub fn read_schema(schema: roxmltree::Document) -> (Schema, SchemaComponentTable
     let schema = schema.root_element();
     let mut ctx = MappingContext::new(schema);
     let schema = Schema::map_from_xml(&mut ctx, schema);
-    let components = ctx.components.convert_to_schema_table().unwrap();
+    let components = ctx.take_components().convert_to_schema_table().unwrap();
     (schema, components)
 }

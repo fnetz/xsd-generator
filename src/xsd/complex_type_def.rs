@@ -105,7 +105,7 @@ impl ComplexTypeDefinition {
         ancestor_element: Option<Ref<ElementDeclaration>>,
         tlref: Option<Ref<Self>>,
     ) -> Ref<Self> {
-        let complex_type_ref = tlref.unwrap_or_else(|| context.components.reserve::<Self>());
+        let complex_type_ref = tlref.unwrap_or_else(|| context.reserve::<Self>());
 
         if let Some(simple_content) = complex_type
             .children()
@@ -135,7 +135,7 @@ impl ComplexTypeDefinition {
         }
 
         assert!(
-            context.components.is_present(complex_type_ref),
+            context.components().is_present(complex_type_ref),
             "ComplexTypeDefinition mapper failed to populate ref"
         );
         complex_type_ref
@@ -163,7 +163,7 @@ impl ComplexTypeDefinition {
         let base_type_definition = content
             .attribute("base")
             .map(|base| actual_value::<QName>(base, content))
-            .map(|n| context.resolver.resolve(&n))
+            .map(|n| context.resolve(&n))
             .unwrap();
 
         // {derivation method}
@@ -191,7 +191,7 @@ impl ComplexTypeDefinition {
 
         // TODO attribute wildcard
 
-        context.components.insert(
+        context.insert(
             complex_type_ref,
             Self {
                 base_type_definition,
@@ -211,7 +211,7 @@ impl ComplexTypeDefinition {
         ancestor_element: Option<Ref<ElementDeclaration>>,
     ) {
         // {base type definition} ·xs:anyType·
-        let base_type_definition = context.resolver.resolve(&XS_ANY_TYPE_NAME);
+        let base_type_definition = context.resolve(&XS_ANY_TYPE_NAME);
 
         // {derivation method}    restriction
         let derivation_method = Some(DerivationMethod::Restriction);
@@ -232,7 +232,7 @@ impl ComplexTypeDefinition {
 
         // TODO attribute wildcard
 
-        context.components.insert(
+        context.insert(
             complex_type_ref,
             Self {
                 base_type_definition,
@@ -335,7 +335,7 @@ impl ComplexTypeDefinition {
 
             // Populated in the specific mapping implementations
             // TODO restructure
-            base_type_definition: mapping_context.resolver.resolve(&XS_ANY_TYPE_NAME), // TODO !!
+            base_type_definition: mapping_context.resolve(&XS_ANY_TYPE_NAME), // TODO !!
             derivation_method: None,
             content_type: ContentType {
                 variety: ContentTypeVariety::Empty,
@@ -499,12 +499,12 @@ impl ContentType {
                 // {max occurs} 1
                 // {term}       a model group whose {compositor} is sequence and whose {particles}
                 //              is empty.
-                let term = Term::ModelGroup(context.components.create(ModelGroup {
+                let term = Term::ModelGroup(context.create(ModelGroup {
                     compositor: Compositor::Sequence,
                     particles: Sequence::new(),
                     annotations: Sequence::new(),
                 }));
-                Some(context.components.create(Particle {
+                Some(context.create(Particle {
                     min_occurs: 1,
                     max_occurs: MaxOccurs::Count(1),
                     term,
@@ -630,12 +630,12 @@ impl ContentType {
                 // {max occurs} 1
                 // {term}       a model group whose {compositor} is sequence and whose
                 //              {particles} is empty.
-                let term = Term::ModelGroup(context.components.create(ModelGroup {
+                let term = Term::ModelGroup(context.create(ModelGroup {
                     compositor: Compositor::Sequence,
                     particles: Sequence::new(),
                     annotations: Sequence::new(),
                 }));
-                Some(context.components.create(Particle {
+                Some(context.create(Particle {
                     min_occurs: 1,
                     max_occurs: MaxOccurs::Count(1),
                     term,
@@ -668,7 +668,7 @@ impl ContentType {
                     .children()
                     .find(|c| c.tag_name().name() == "any")
                     .unwrap();
-                let wildcard = context.components.create(Wildcard {
+                let wildcard = context.create(Wildcard {
                     namespace_constraint: wildcard::NamespaceConstraint {
                         variety: wildcard::NamespaceConstraintVariety::Any,
                         namespaces: Set::new(),

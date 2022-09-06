@@ -93,7 +93,7 @@ impl AttributeDeclaration {
             .attribute("type")
             .map(|v| actual_value::<QName>(v, attribute))
         {
-            context.resolver.resolve(&type_)
+            context.resolve(&type_)
         } else {
             todo!("xs:anySimpleType")
         };
@@ -141,7 +141,7 @@ impl AttributeDeclaration {
         //   Annotation Schema Components (§3.15.2).
         let annotations = Annotation::xml_element_annotation_mapping(context, attribute);
 
-        context.components.insert(
+        context.insert(
             tlref,
             AttributeDeclaration {
                 annotations,
@@ -188,7 +188,7 @@ impl AttributeDeclaration {
             //   The (top-level) attribute declaration ·resolved· to by the ·actual value· of the ref
             //   [attribute]
             let ref_ = actual_value::<QName>(ref_, attribute);
-            let attribute_declaration: Ref<AttributeDeclaration> = context.resolver.resolve(&ref_);
+            let attribute_declaration: Ref<AttributeDeclaration> = context.resolve(&ref_);
 
             // {value constraint}
             //   If there is a default or a fixed [attribute], then a Value Constraint as follows,
@@ -226,7 +226,7 @@ impl AttributeDeclaration {
                 .map(|v| actual_value::<bool>(v, attribute))
                 .unwrap_or_else(|| context.request(attribute_declaration).inheritable);
 
-            let attribute_use = context.components.create(AttributeUse {
+            let attribute_use = context.create(AttributeUse {
                 annotations,
                 attribute_declaration,
                 value_constraint,
@@ -288,7 +288,7 @@ impl AttributeDeclaration {
                 .attribute("type")
                 .map(|v| actual_value::<QName>(v, attribute))
             {
-                context.resolver.resolve(&type_)
+                context.resolve(&type_)
             } else {
                 todo!("xs:anySimpleType")
             };
@@ -313,7 +313,7 @@ impl AttributeDeclaration {
                 .map(|v| actual_value::<bool>(v, attribute))
                 .unwrap_or(false);
 
-            let attribute_declaration = context.components.create(AttributeDeclaration {
+            let attribute_declaration = context.create(AttributeDeclaration {
                 annotations: annotations.clone(),
                 name,
                 target_namespace,
@@ -359,7 +359,7 @@ impl AttributeDeclaration {
             // {inheritable}
             //   -- reused from {attribute_declaration}.{inheritable} --
 
-            let attribute_use = context.components.create(AttributeUse {
+            let attribute_use = context.create(AttributeUse {
                 annotations,
                 attribute_declaration,
                 value_constraint,

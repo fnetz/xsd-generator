@@ -69,7 +69,7 @@ impl IdentityConstraintDefinition {
         schema: Node,
         tlref: Option<Ref<Self>>,
     ) -> Ref<Self> {
-        let ref_ = tlref.unwrap_or_else(|| context.components.reserve());
+        let ref_ = tlref.unwrap_or_else(|| context.reserve());
 
         let QName {
             local_name: name,
@@ -116,7 +116,7 @@ impl IdentityConstraintDefinition {
         //   ·actual value· of the refer [attribute], otherwise ·absent·.
         let referenced_key = if icd.tag_name().name() == "keyref" {
             let refer: QName = actual_value(icd.attribute("refer").unwrap(), icd);
-            Some(context.resolver.resolve(&refer))
+            Some(context.resolve(&refer))
         } else {
             None
         };
@@ -129,7 +129,7 @@ impl IdentityConstraintDefinition {
         // TODO selector, field
         let annotations = Annotation::xml_element_set_annotation_mapping(context, &ae);
 
-        context.components.insert(
+        context.insert(
             ref_,
             Self {
                 annotations,

@@ -49,7 +49,7 @@ impl Annotation {
         // TODO
         let attributes = Sequence::new();
 
-        context.components.create(Self {
+        context.create(Self {
             application_information,
             user_information,
             attributes,

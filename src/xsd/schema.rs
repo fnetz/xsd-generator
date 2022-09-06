@@ -28,14 +28,14 @@ pub struct Schema {
 }
 
 impl Schema {
-    pub(super) fn map_from_xml<'a, 'input: 'a>(
-        context: &mut MappingContext<'a, 'input>,
+    pub(super) fn map_from_xml<'a, 'input: 'a, 'p>(
+        context: &mut MappingContext<'a, 'input, 'p>,
         schema: Node<'a, 'input>,
     ) -> Self {
         assert_eq!(schema.tag_name().name(), "schema");
 
-        fn reserve_top_level<'a, 'input: 'a, C>(
-            context: &mut MappingContext<'a, 'input>,
+        fn reserve_top_level<'a, 'input: 'a, 'p, C>(
+            context: &mut MappingContext<'a, 'input, 'p>,
             node: Node<'a, 'input>,
             schema: Node,
         ) where
@@ -45,8 +45,8 @@ impl Schema {
             TopLevelElements<'a, 'input>: TopLevel<'a, 'input, C>,
         {
             let name = C::get_name_from_xml(node, schema);
-            let ref_ = context.components.reserve::<C>();
-            context.resolver.register_with_name(name, ref_);
+            let ref_ = context.reserve::<C>();
+            context.register_with_name(name, ref_);
             context.top_level_refs.insert(node, ref_);
         }
 
@@ -56,19 +56,15 @@ impl Schema {
                     // TODO unnamed top level allowed?
                     let name =
                         SimpleTypeDefinition::name_from_xml(top_level_element, schema).unwrap();
-                    let std_ref = context.components.reserve();
-                    context
-                        .resolver
-                        .register_with_name(name, TypeDefinition::Simple(std_ref));
+                    let std_ref = context.reserve();
+                    context.register_with_name(name, TypeDefinition::Simple(std_ref));
                     context.top_level_refs.insert(top_level_element, std_ref);
                 }
                 ComplexTypeDefinition::TAG_NAME => {
                     let name =
                         ComplexTypeDefinition::name_from_xml(top_level_element, schema).unwrap();
-                    let ctd_ref = context.components.reserve();
-                    context
-                        .resolver
-                        .register_with_name(name, TypeDefinition::Complex(ctd_ref));
+                    let ctd_ref = context.reserve();
+                    context.register_with_name(name, TypeDefinition::Complex(ctd_ref));
                     context.top_level_refs.insert(top_level_element, ctd_ref);
                 }
                 AttributeDeclaration::TAG_NAME => {

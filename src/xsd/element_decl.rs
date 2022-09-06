@@ -136,21 +136,19 @@ impl ElementDeclaration {
                     })
             })
             .or_else(|| {
-                element.attribute("type").map(|type_| {
-                    context
-                        .resolver
-                        .resolve(&actual_value::<QName>(type_, element))
-                })
+                element
+                    .attribute("type")
+                    .map(|type_| context.resolve(&actual_value::<QName>(type_, element)))
             })
             .or_else(|| {
                 element
                     .attribute("substitutionGroup")
                     .map(|v| actual_value::<Vec<QName>>(v, element))
                     .and_then(|v| v.first().cloned())
-                    .map(|name| context.resolver.resolve::<Ref<ElementDeclaration>>(&name))
+                    .map(|name| context.resolve::<Ref<ElementDeclaration>>(&name))
                     .map(|element_decl| context.request(element_decl).type_definition)
             })
-            .unwrap_or_else(|| context.resolver.resolve(&XS_ANY_TYPE_NAME));
+            .unwrap_or_else(|| context.resolve(&XS_ANY_TYPE_NAME));
 
         // {type table}
         //   A Type Table corresponding to the <alternative> element information
@@ -195,7 +193,7 @@ impl ElementDeclaration {
                 //     the {type definition} property of the parent Element Declaration.
                 //   {annotations}
                 //     the empty sequence.
-                context.components.create(TypeAlternative {
+                context.create(TypeAlternative {
                     test: None,
                     type_definition,
                     annotations: Sequence::new(),
@@ -296,7 +294,7 @@ impl ElementDeclaration {
         schema: Node,
         parent: ScopeParent,
     ) -> Ref<Self> {
-        let self_ref = context.components.reserve();
+        let self_ref = context.reserve();
 
         // {target namespace}
         //   The appropriate case among the following:
@@ -333,7 +331,7 @@ impl ElementDeclaration {
 
         let common = Self::map_from_xml_common(context, self_ref, element, schema);
 
-        context.components.insert(
+        context.insert(
             self_ref,
             Self {
                 target_namespace,
@@ -380,7 +378,7 @@ impl TopLevelMappable for ElementDeclaration {
 
         let common = Self::map_from_xml_common(context, self_ref, element, schema);
 
-        context.components.insert(
+        context.insert(
             self_ref,
             Self {
                 target_namespace,

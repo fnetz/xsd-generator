@@ -71,15 +71,13 @@ fn gen_primitive_type_def(
         "string" => (WhiteSpaceValue::Preserve, false),
         _ => (WhiteSpaceValue::Collapse, true),
     };
-    let ws_facet = context
-        .components
-        .create(ConstrainingFacet::WhiteSpace(WhiteSpace::new(
-            ws_value, ws_fixed,
-        )));
+    let ws_facet = context.create(ConstrainingFacet::WhiteSpace(WhiteSpace::new(
+        ws_value, ws_fixed,
+    )));
 
-    let simple_type_def = context.components.reserve();
+    let simple_type_def = context.reserve();
     let type_def = TypeDefinition::Simple(simple_type_def);
-    context.components.insert(
+    context.insert(
         simple_type_def,
         SimpleTypeDefinition {
             name: Some(name.into()),
@@ -109,9 +107,9 @@ fn gen_ordinary_type_def(
     fundamental_facets: Set<FundamentalFacet>,
     item_type_def: Option<Ref<SimpleTypeDefinition>>,
 ) -> TypeDefinition {
-    let simple_type_def = context.components.reserve();
+    let simple_type_def = context.reserve();
     let type_def = TypeDefinition::Simple(simple_type_def);
-    context.components.insert(
+    context.insert(
         simple_type_def,
         SimpleTypeDefinition {
             name: Some(name.into()),
@@ -122,7 +120,7 @@ fn gen_ordinary_type_def(
             primitive_type_definition: match variety {
                 simple_type_def::Variety::Atomic => match base_type {
                     TypeDefinition::Simple(ref_) => {
-                        ref_.get(&context.components).primitive_type_definition
+                        ref_.get(context.components()).primitive_type_definition
                     }
                     TypeDefinition::Complex(_) => unimplemented!(),
                 },
@@ -149,9 +147,9 @@ pub(super) fn register_builtins(context: &mut MappingContext) {
 }
 
 fn register_builtin_types(context: &mut MappingContext) {
-    let xs_any_type = context.components.reserve();
+    let xs_any_type = context.reserve();
     let xs_any_type_def = TypeDefinition::Complex(xs_any_type);
-    context.components.insert(
+    context.insert(
         xs_any_type,
         ComplexTypeDefinition {
             name: Some("anyType".into()),
@@ -179,9 +177,9 @@ fn register_builtin_types(context: &mut MappingContext) {
     // == Part 2 §4.1.6 Built-in Simple Type Definitions ==
 
     // anySimpleType
-    let xs_any_simple_type = context.components.reserve();
+    let xs_any_simple_type = context.reserve();
     let xs_any_simple_type_def = TypeDefinition::Simple(xs_any_simple_type);
-    context.components.insert(
+    context.insert(
         xs_any_simple_type,
         SimpleTypeDefinition {
             name: Some("anySimpleType".into()),
@@ -201,9 +199,9 @@ fn register_builtin_types(context: &mut MappingContext) {
     context.register(xs_any_simple_type_def);
 
     // anyAtomicType
-    let xs_any_atomic_type = context.components.reserve();
+    let xs_any_atomic_type = context.reserve();
     let xs_any_atomic_type_def = TypeDefinition::Simple(xs_any_atomic_type);
-    context.components.insert(
+    context.insert(
         xs_any_atomic_type,
         SimpleTypeDefinition {
             name: Some("anyAtomicType".into()),
@@ -222,9 +220,9 @@ fn register_builtin_types(context: &mut MappingContext) {
     );
     context.register(xs_any_atomic_type_def);
 
-    let xs_error = context.components.reserve();
+    let xs_error = context.reserve();
     let xs_error_def = TypeDefinition::Simple(xs_error);
-    context.components.insert(
+    context.insert(
         xs_error,
         SimpleTypeDefinition {
             name: Some("error".into()),
@@ -412,16 +410,16 @@ fn register_builtin_types(context: &mut MappingContext) {
 }
 
 fn register_builtin_attribute_decls(context: &mut MappingContext) {
-    let qname = context.resolver.resolve(&XS_QNAME_NAME);
-    let boolean = context.resolver.resolve(&XS_BOOLEAN_NAME);
-    let any_uri = context.resolver.resolve(&XS_ANY_URI_NAME);
-    let any_simple_type = context.resolver.resolve(&XS_ANY_SIMPLE_TYPE_NAME);
+    let qname = context.resolve(&XS_QNAME_NAME);
+    let boolean = context.resolve(&XS_BOOLEAN_NAME);
+    let any_uri = context.resolve(&XS_ANY_URI_NAME);
+    let any_simple_type = context.resolve(&XS_ANY_SIMPLE_TYPE_NAME);
 
     // Built-in Attribute Declarations according to pt. 1, §3.2.7
     // The {inheritable} property is not specified by the 1.1 spec;
     // assuming `false` for now.
 
-    let xsi_type = context.components.create(AttributeDeclaration {
+    let xsi_type = context.create(AttributeDeclaration {
         name: "type".into(),
         target_namespace: Some(XSI_NAMESPACE.into()),
         type_definition: qname,
@@ -432,7 +430,7 @@ fn register_builtin_attribute_decls(context: &mut MappingContext) {
     });
     context.register(xsi_type);
 
-    let xsi_nil = context.components.create(AttributeDeclaration {
+    let xsi_nil = context.create(AttributeDeclaration {
         name: "nil".into(),
         target_namespace: Some(XSI_NAMESPACE.into()),
         type_definition: boolean,
@@ -443,7 +441,7 @@ fn register_builtin_attribute_decls(context: &mut MappingContext) {
     });
     context.register(xsi_nil);
 
-    let schema_location_simple_type = context.components.create(SimpleTypeDefinition {
+    let schema_location_simple_type = context.create(SimpleTypeDefinition {
         name: None,
         target_namespace: Some(XSI_NAMESPACE.into()),
         base_type_definition: any_simple_type,
@@ -458,7 +456,7 @@ fn register_builtin_attribute_decls(context: &mut MappingContext) {
         primitive_type_definition: None,
         member_type_definitions: None,
     });
-    let xsi_schema_location = context.components.create(AttributeDeclaration {
+    let xsi_schema_location = context.create(AttributeDeclaration {
         name: "schemaLocation".into(),
         target_namespace: Some(XSI_NAMESPACE.into()),
         type_definition: schema_location_simple_type,
@@ -469,7 +467,7 @@ fn register_builtin_attribute_decls(context: &mut MappingContext) {
     });
     context.register(xsi_schema_location);
 
-    let xsi_no_namespace_schema_location = context.components.create(AttributeDeclaration {
+    let xsi_no_namespace_schema_location = context.create(AttributeDeclaration {
         name: "noNamespaceSchemaLocation".into(),
         target_namespace: Some(XSI_NAMESPACE.into()),
         type_definition: any_uri,

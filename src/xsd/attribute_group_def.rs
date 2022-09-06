@@ -50,7 +50,7 @@ impl AttributeGroupDefinition {
         schema: Node,
         attrib_group_ref: Option<Ref<Self>>,
     ) -> Ref<Self> {
-        let attrib_group_ref = attrib_group_ref.unwrap_or_else(|| context.components.reserve());
+        let attrib_group_ref = attrib_group_ref.unwrap_or_else(|| context.reserve());
 
         let QName {
             local_name: name,
@@ -94,7 +94,7 @@ impl AttributeGroupDefinition {
             .for_each(|c| annot_elements.push(c));
         let annotations = Annotation::xml_element_set_annotation_mapping(context, &annot_elements);
 
-        context.components.insert(
+        context.insert(
             attrib_group_ref,
             Self {
                 annotations,
