@@ -407,6 +407,17 @@ fn register_builtin_types(context: &mut MappingContext) {
         None,
     );
     context.register(xs_id);
+
+    let xs_language = gen_ordinary_type_def(
+        context,
+        xs_token,
+        "language",
+        simple_type_def::Variety::Atomic, // TODO
+        Set::new(),                       // TODO
+        Set::new(),                       // TODO
+        None,
+    );
+    context.register(xs_language);
 }
 
 fn register_builtin_attribute_decls(context: &mut MappingContext) {
