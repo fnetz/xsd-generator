@@ -11,7 +11,7 @@ use super::{
 
 /// Common type for [attribute_decl::ScopeVariety](super::attribute_decl::ScopeVariety) and
 /// [element_decl::ScopeVariety](super::element_decl::ScopeVariety)
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ScopeVariety {
     Global,
     Local,

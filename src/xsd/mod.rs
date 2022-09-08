@@ -50,7 +50,7 @@ pub use simple_type_def::SimpleTypeDefinition;
 pub use type_alternative::TypeAlternative;
 pub use wildcard::Wildcard;
 
-pub use components::Ref;
+pub use components::{Ref, RefNamed};
 use mapping_context::MappingContext;
 use xstypes::{Sequence, Set};
 
