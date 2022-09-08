@@ -202,8 +202,8 @@ impl SimpleTypeDefinition {
             //   element maps to no component at all (but is not in error solely on account of the
             //   presence of the unknown element).
             ChildType::Restriction => {
-                // The ·overlaying· algorithm itself is performed in the post-resolution pass
-                let mut facets = Set::new();
+                // TODO ·overlaying· algorithm
+                let mut facet_nodes = Vec::new();
                 for facet in child.children() {
                     if !facet.is_element() {
                         continue;
@@ -211,10 +211,9 @@ impl SimpleTypeDefinition {
                     if [Self::TAG_NAME, Annotation::TAG_NAME].contains(&facet.tag_name().name()) {
                         continue;
                     }
-                    // FIXME return None if not supported
-                    facets.push(ConstrainingFacet::map_from_xml(ctx, facet).unwrap());
+                    facet_nodes.push(facet);
                 }
-                facets
+                ConstrainingFacet::map_from_xml(ctx, &facet_nodes, schema).unwrap()
             }
             // 3 If the <list> alternative is chosen, then a set with one member, a whiteSpace facet
             //   with {value} = collapse and {fixed} = true.

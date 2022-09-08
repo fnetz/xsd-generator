@@ -2,6 +2,7 @@ use roxmltree::Node;
 
 use super::{
     components::Component,
+    values::{actual_value, ActualValue},
     xstypes::{Sequence, Set},
     Annotation, Assertion, MappingContext, Ref,
 };
@@ -104,7 +105,7 @@ pub struct FractionDigits {
 #[derive(Clone, Debug)]
 pub struct Assertions {
     pub annotations: Sequence<Ref<Annotation>>,
-    pub assertions: Sequence<Ref<Assertion>>,
+    pub value: Sequence<Ref<Assertion>>,
 }
 
 /// Schema Component: explicitTimezone, a kind of Constraining Facet (pt. 2, §4.3.14)
@@ -123,9 +124,250 @@ pub enum ExplicitTimezoneValue {
 }
 
 impl ConstrainingFacet {
-    /// Returns `None` in case the constraining facet is not supported by the processor
-    pub(super) fn map_from_xml(_context: &mut MappingContext, _facet: Node) -> Option<Ref<Self>> {
-        todo!()
+    /// This function maps a list of facet elements to a list of [`ConstrainingFacet`]s.
+    /// As there are elements (`<enumeration>`, `<pattern>`, `<assertion>`) where multiple
+    /// occurrences are mapped to a single facet, the function needs knowledge of all the elements.
+    /// Returns `None` in case one of the constraining facets is not supported by the processor
+    pub(super) fn map_from_xml(
+        context: &mut MappingContext,
+        facets: &[Node],
+        schema: Node,
+    ) -> Option<Vec<Ref<Self>>> {
+        // First, create separate groups for facets with potentially multiple elements
+        let mut patterns = Vec::new();
+        let mut enumerations = Vec::new();
+        let mut assertions = Vec::new();
+        let mut singular = Vec::new();
+
+        for facet in facets.iter().copied() {
+            let bin = match facet.tag_name().name() {
+                "pattern" => &mut patterns,
+                "enumeration" => &mut enumerations,
+                "assertion" => &mut assertions,
+                _ => &mut singular,
+            };
+            bin.push(facet);
+        }
+
+        let mut facets = Vec::new();
+
+        if !patterns.is_empty() {
+            // Let R be a regular expression given by the appropriate case among the following:
+            let r = if patterns.len() == 1 {
+                // If there is only one <pattern> among the [children] of a <restriction>, then the
+                // actual value of its value [attribute]
+                actual_value::<String>(patterns[0].attribute("value").unwrap(), patterns[0])
+            } else {
+                // otherwise the concatenation of the actual values of all the <pattern>
+                // [children]'s value [attributes], in order, separated by '|', so forming a single
+                // regular expression with multiple ·branches·.
+                patterns
+                    .iter()
+                    .map(|&p| actual_value::<&str>(p.attribute("value").unwrap(), p))
+                    .collect::<Vec<_>>()
+                    .join("|")
+            };
+
+            // The value is then given by the appropriate case among the following:
+            // 1 If the {base type definition} of the ·owner· has a pattern facet among its
+            //   {facets}, then the union of that pattern facet's {value} and {·R·}
+            // 2 otherwise just {·R·}
+            // TODO case 1
+            let value = vec![r];
+
+            // The annotation mapping of the set containing all of the <pattern> elements among the
+            // [children] of the <restriction> element information item, as defined in section XML
+            // Representation of Annotation Schema Components of [XSD 1.1 Part 1: Structures].
+            let annotations = Annotation::xml_element_set_annotation_mapping(context, &patterns);
+
+            facets.push(context.create(ConstrainingFacet::Pattern(Pattern { value, annotations })));
+        }
+
+        if !enumerations.is_empty() {
+            // {value} The appropriate case among the following:
+            // 1 If there is only one <enumeration> among the [children] of a <restriction>,
+            //   then a set with one member, the actual value of its value [attribute],
+            //   interpreted as an instance of the {base type definition}.
+            // 2 otherwise a set of the actual values of all the <enumeration> [children]'s value
+            //   [attributes], interpreted as instances of the {base type definition}.
+            let value = enumerations
+                .iter()
+                .map(|&e| e.attribute("value").unwrap().to_string())
+                .collect::<Vec<_>>();
+
+            // A (possibly empty) sequence of Annotation components, one for each <annotation>
+            // among the [children] of the <enumeration>s among the [children] of a <restriction>,
+            // in order.
+            let annotations =
+                Annotation::xml_element_set_annotation_mapping(context, &enumerations);
+
+            facets.push(context.create(ConstrainingFacet::Enumeration(Enumeration {
+                value,
+                annotations,
+            })));
+        }
+
+        if !assertions.is_empty() {
+            // A sequence whose members are Assertions drawn from the following sources, in order:
+            // 1 If the {base type definition} of the ·owner· has an assertions facet among its
+            //   {facets}, then the Assertions which appear in the {value} of that assertions facet.
+            // 2 Assertions corresponding to the <assertion> element information items among the
+            //   [children] of <restriction>, if any, in document order.
+            // TODO base type assertions
+            let value = assertions
+                .into_iter()
+                .map(|assert| Assertion::map_from_xml(context, assert, schema))
+                .collect::<Vec<_>>();
+
+            // {annotations} The empty sequence.
+            let annotations = Sequence::new();
+
+            facets.push(context.create(ConstrainingFacet::Assertions(Assertions {
+                value,
+                annotations,
+            })))
+        }
+
+        for facet in singular {
+            let facet = match facet.tag_name().name() {
+                "length" => {
+                    let (value, fixed, annotations) =
+                        Self::map_value_fixed_annotations(context, facet);
+
+                    context.create(Self::Length(Length {
+                        value,
+                        fixed,
+                        annotations,
+                    }))
+                }
+                "minLength" => {
+                    let (value, fixed, annotations) =
+                        Self::map_value_fixed_annotations(context, facet);
+
+                    context.create(Self::MinLength(Length {
+                        value,
+                        fixed,
+                        annotations,
+                    }))
+                }
+                "maxLength" => {
+                    let (value, fixed, annotations) =
+                        Self::map_value_fixed_annotations(context, facet);
+
+                    context.create(Self::MaxLength(Length {
+                        value,
+                        fixed,
+                        annotations,
+                    }))
+                }
+                "whiteSpace" => {
+                    let (value, fixed, annotations) =
+                        Self::map_value_fixed_annotations(context, facet);
+
+                    context.create(Self::WhiteSpace(WhiteSpace {
+                        value,
+                        fixed,
+                        annotations,
+                    }))
+                }
+                "maxInclusive" => {
+                    let (value, fixed, annotations) =
+                        Self::map_value_fixed_annotations(context, facet);
+
+                    context.create(Self::MaxInclusive(MinMax {
+                        value,
+                        fixed,
+                        annotations,
+                    }))
+                }
+                "maxExclusive" => {
+                    let (value, fixed, annotations) =
+                        Self::map_value_fixed_annotations(context, facet);
+
+                    context.create(Self::MaxExclusive(MinMax {
+                        value,
+                        fixed,
+                        annotations,
+                    }))
+                }
+                "minExclusive" => {
+                    let (value, fixed, annotations) =
+                        Self::map_value_fixed_annotations(context, facet);
+
+                    context.create(Self::MinExclusive(MinMax {
+                        value,
+                        fixed,
+                        annotations,
+                    }))
+                }
+                "minInclusive" => {
+                    let (value, fixed, annotations) =
+                        Self::map_value_fixed_annotations(context, facet);
+
+                    context.create(Self::MinInclusive(MinMax {
+                        value,
+                        fixed,
+                        annotations,
+                    }))
+                }
+                "totalDigits" => {
+                    let (value, fixed, annotations) =
+                        Self::map_value_fixed_annotations(context, facet);
+
+                    context.create(Self::TotalDigits(TotalDigits {
+                        value,
+                        fixed,
+                        annotations,
+                    }))
+                }
+                "fractionDigits" => {
+                    let (value, fixed, annotations) =
+                        Self::map_value_fixed_annotations(context, facet);
+
+                    context.create(Self::FractionDigits(FractionDigits {
+                        value,
+                        fixed,
+                        annotations,
+                    }))
+                }
+                "explicitTimezone" => {
+                    let (value, fixed, annotations) =
+                        Self::map_value_fixed_annotations(context, facet);
+
+                    context.create(Self::ExplicitTimezone(ExplicitTimezone {
+                        value,
+                        fixed,
+                        annotations,
+                    }))
+                }
+                _ => return None,
+            };
+            facets.push(facet);
+        }
+
+        Some(facets)
+    }
+
+    /// Shared code for mapping facets which have the `value` and `fixed` attribute (with default of
+    /// fixed being `false`), as well as annotations.
+    fn map_value_fixed_annotations<'a, V: ActualValue<'a>>(
+        context: &mut MappingContext,
+        facet: Node<'a, '_>,
+    ) -> (V, bool, Vec<Ref<Annotation>>) {
+        // {value} The actual value of the value [attribute]
+        let value = actual_value::<V>(facet.attribute("value").unwrap(), facet);
+
+        // {fixed} The actual value of the fixed [attribute], if present,
+        //         otherwise false
+        let fixed = facet
+            .attribute("fixed")
+            .map(|v| actual_value::<bool>(v, facet))
+            .unwrap_or(false);
+
+        // {annotations} The annotation mapping of the <...> element [...]
+        let annotations = Annotation::xml_element_annotation_mapping(context, facet);
+
+        (value, fixed, annotations)
     }
 
     pub fn annotations(&self) -> &[Ref<Annotation>] {
@@ -154,6 +396,28 @@ impl WhiteSpace {
             annotations: Sequence::new(),
             value,
             fixed,
+        }
+    }
+}
+
+impl ActualValue<'_> for WhiteSpaceValue {
+    fn convert(src: &'_ str, _parent: Node) -> Self {
+        match src {
+            "preserve" => Self::Preserve,
+            "replace" => Self::Replace,
+            "collapse" => Self::Collapse,
+            _ => panic!("Invalid value for whiteSpace value"),
+        }
+    }
+}
+
+impl ActualValue<'_> for ExplicitTimezoneValue {
+    fn convert(src: &'_ str, _parent: Node) -> Self {
+        match src {
+            "required" => Self::Required,
+            "prohibited" => Self::Prohibited,
+            "optional" => Self::Optional,
+            _ => panic!("Invalid value for whiteSpace value"),
         }
     }
 }

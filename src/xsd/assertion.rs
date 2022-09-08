@@ -31,7 +31,11 @@ pub struct NamespaceBinding {
 }
 
 impl Assertion {
-    pub(super) fn map_from_xml(context: &mut MappingContext, assert: Node, schema: Node) -> Self {
+    pub(super) fn map_from_xml(
+        context: &mut MappingContext,
+        assert: Node,
+        schema: Node,
+    ) -> Ref<Self> {
         assert_eq!(assert.tag_name().name(), "assert");
 
         // {test}
@@ -45,7 +49,7 @@ impl Assertion {
         //   Annotation Schema Components (§3.15.2).
         let annotations = Annotation::xml_element_annotation_mapping(context, assert);
 
-        Self { annotations, test }
+        context.create(Self { annotations, test })
     }
 }
 
