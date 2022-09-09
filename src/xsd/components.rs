@@ -1,6 +1,7 @@
 use std::any::TypeId;
 use std::collections::HashMap;
 use std::fmt;
+use std::hash::Hash;
 use std::marker::PhantomData;
 use std::num::{NonZeroU32, NonZeroUsize};
 
@@ -96,6 +97,33 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "<{} #{}>", R::DISPLAY_NAME, self.0)
+    }
+}
+
+impl<R> PartialEq for Ref<R>
+where
+    R: Component,
+    ComponentTraits: HasArenaContainer<R>,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<R> Eq for Ref<R>
+where
+    R: Component,
+    ComponentTraits: HasArenaContainer<R>,
+{
+}
+
+impl<R> Hash for Ref<R>
+where
+    R: Component,
+    ComponentTraits: HasArenaContainer<R>,
+{
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
     }
 }
 
