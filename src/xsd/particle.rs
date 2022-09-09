@@ -1,7 +1,7 @@
 use super::{
     annotation::Annotation, components::Component, element_decl, model_group::Compositor,
     shared::Term, values::actual_value, xstypes::Sequence, ComplexTypeDefinition,
-    ElementDeclaration, MappingContext, ModelGroup, Ref,
+    ElementDeclaration, MappingContext, ModelGroup, Ref, Wildcard,
 };
 use roxmltree::Node;
 
@@ -139,7 +139,7 @@ impl Particle {
                         schema,
                         element_parent,
                     )),
-                    "any" => Some(Particle::map_from_xml_wildcard_any(context, child)),
+                    "any" => Some(Particle::map_from_xml_wildcard_any(context, child, schema)),
                     "group" => Some(Particle::map_from_xml_group_reference(context, child)),
                     "element" => Some(Particle::map_from_xml_local_element(
                         context,
@@ -180,13 +180,50 @@ impl Particle {
         todo!()
     }
 
+    // TODO anyAttribute
+
     /// Mapper for Wildcard <any>, see XML Representation of Wildcard Schema Components (§3.10.2)
     pub(super) fn map_from_xml_wildcard_any(
-        _context: &mut MappingContext,
-        particle: Node,
+        context: &mut MappingContext,
+        any: Node,
+        schema: Node,
     ) -> Ref<Self> {
-        assert_eq!(particle.tag_name().name(), "any");
-        todo!()
+        // TODO handle minOccurs=maxOccurs=0
+        assert_eq!(any.tag_name().name(), "any");
+
+        let wildcard = Wildcard::map_from_xml_any(context, any, schema);
+
+        // The ·actual value· of the minOccurs [attribute], if present, otherwise 1.
+        let min_occurs = any
+            .attribute("minOccurs")
+            .map(|v| actual_value::<u64>(v, any))
+            .unwrap_or(1);
+
+        // unbounded, if maxOccurs = unbounded, otherwise the ·actual value· of the maxOccurs
+        // [attribute], if present, otherwise 1.
+        let max_occurs = any
+            .attribute("maxOccurs")
+            .map(|v| {
+                if v == "unbounded" {
+                    MaxOccurs::Unbounded
+                } else {
+                    MaxOccurs::Count(actual_value::<u64>(v, any))
+                }
+            })
+            .unwrap_or(MaxOccurs::Count(1));
+
+        // A wildcard as above.
+        let term = Term::Wildcard(wildcard);
+
+        // {annotations} The same annotations as the {annotations} of the wildcard.
+        let annotations = wildcard.get(context.components()).annotations.clone();
+
+        context.create(Particle {
+            min_occurs,
+            max_occurs,
+            term,
+            annotations,
+        })
     }
 }
 
