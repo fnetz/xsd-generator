@@ -63,8 +63,17 @@ impl XPathExpression {
         //    A set of Namespace Binding property records. Each member corresponds to an entry in
         //    the [in-scope namespaces] of the host element, with {prefix} being the [prefix] and
         //    {namespace} the [namespace name].
-        // TODO populate
-        let namespace_bindings = Set::<NamespaceBinding>::new();
+        let namespace_bindings = host_element
+            .namespaces() // `namespaces()` is equivalent to the [in-scope namespaces]
+            .iter()
+            .map(|namespace| {
+                NamespaceBinding {
+                    // TODO does None map to the empty namespace?
+                    prefix: namespace.name().unwrap_or_default().to_string(),
+                    namespace: namespace.uri().into(),
+                }
+            })
+            .collect::<Set<_>>();
 
         // {default namespace}
         //   Let D be the ·actual value· of the xpathDefaultNamespace [attribute], if present on
