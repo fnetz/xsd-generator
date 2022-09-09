@@ -70,7 +70,7 @@ pub struct WhiteSpace {
     pub fixed: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum WhiteSpaceValue {
     Preserve,
     Replace,
@@ -116,7 +116,7 @@ pub struct ExplicitTimezone {
     pub fixed: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum ExplicitTimezoneValue {
     Required,
     Prohibited,

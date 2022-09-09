@@ -1,8 +1,10 @@
 use lazy_static::lazy_static;
 
 use super::complex_type_def::{self, ComplexTypeDefinition};
-use super::components::Ref;
-use super::constraining_facet::{ConstrainingFacet, WhiteSpace, WhiteSpaceValue};
+use super::constraining_facet::{
+    ConstrainingFacet, ExplicitTimezone, ExplicitTimezoneValue, FractionDigits, Length, MinMax,
+    Pattern, WhiteSpace, WhiteSpaceValue,
+};
 use super::fundamental_facet::{CardinalityValue, FundamentalFacet, OrderedValue};
 use super::mapping_context::MappingContext;
 use super::model_group::Compositor;
@@ -32,49 +34,6 @@ lazy_static! {
     pub static ref XS_BOOLEAN_NAME: QName = QName::with_namespace(XS_NAMESPACE, "boolean");
     pub static ref XS_DECIMAL_NAME: QName = QName::with_namespace(XS_NAMESPACE, "decimal");
     pub static ref XS_STRING_NAME: QName = QName::with_namespace(XS_NAMESPACE, "string");
-}
-
-fn gen_ordinary_type_def(
-    context: &mut MappingContext,
-    base_type: TypeDefinition,
-    name: &str,
-    variety: simple_type_def::Variety,
-    facets: Set<Ref<ConstrainingFacet>>,
-    fundamental_facets: Set<FundamentalFacet>,
-    item_type_def: Option<Ref<SimpleTypeDefinition>>,
-) -> TypeDefinition {
-    let simple_type_def = context.reserve();
-    let type_def = TypeDefinition::Simple(simple_type_def);
-    context.insert(
-        simple_type_def,
-        SimpleTypeDefinition {
-            name: Some(name.into()),
-            target_namespace: Some(XS_NAMESPACE.into()),
-            base_type_definition: base_type,
-            final_: Set::new(),
-            variety: Some(variety),
-            primitive_type_definition: match variety {
-                simple_type_def::Variety::Atomic => match base_type {
-                    TypeDefinition::Simple(ref_) => {
-                        ref_.get(context.components()).primitive_type_definition
-                    }
-                    TypeDefinition::Complex(_) => unimplemented!(),
-                },
-                _ => None,
-            },
-            facets,
-            fundamental_facets,
-            context: None,
-            item_type_definition: match variety {
-                simple_type_def::Variety::Atomic => None,
-                _ => Some(item_type_def.unwrap()),
-            },
-            member_type_definitions: None,
-            annotations: Sequence::new(),
-        },
-    );
-
-    type_def
 }
 
 pub(super) fn register_builtins(context: &mut MappingContext) {
@@ -342,119 +301,599 @@ fn register_builtin_primitive_types(context: &mut MappingContext) {
     }
 }
 
+enum OrdinaryVariety {
+    Atomic,
+    /// List with given item type definition name
+    List(&'static str),
+}
+
+#[derive(Copy, Clone)]
+enum FixedValue {
+    NotFixed,
+    Fixed,
+}
+
+#[derive(Copy, Clone)]
+enum OrdinaryFacet {
+    ExplicitTimezone(ExplicitTimezoneValue, FixedValue),
+    FractionDigits(u64, FixedValue),
+    /// Maximum value, represented as string
+    MaxInclusive(&'static str),
+    MinInclusive(&'static str),
+    MinLength(u64),
+    Pattern(&'static [&'static str]),
+    WhiteSpace(WhiteSpaceValue, FixedValue),
+}
+
+impl FixedValue {
+    fn as_bool(self) -> bool {
+        match self {
+            FixedValue::NotFixed => false,
+            FixedValue::Fixed => true,
+        }
+    }
+}
+
+impl OrdinaryFacet {
+    fn to_constraining_facet(self) -> ConstrainingFacet {
+        match self {
+            OrdinaryFacet::ExplicitTimezone(value, fixed) => {
+                ConstrainingFacet::ExplicitTimezone(ExplicitTimezone {
+                    value,
+                    fixed: fixed.as_bool(),
+                    annotations: Sequence::new(),
+                })
+            }
+            OrdinaryFacet::FractionDigits(value, fixed) => {
+                ConstrainingFacet::FractionDigits(FractionDigits {
+                    value,
+                    fixed: fixed.as_bool(),
+                    annotations: Sequence::new(),
+                })
+            }
+            OrdinaryFacet::MaxInclusive(value) => ConstrainingFacet::MaxInclusive(MinMax {
+                value: value.into(),
+                fixed: false,
+                annotations: Sequence::new(),
+            }),
+            OrdinaryFacet::MinInclusive(value) => ConstrainingFacet::MinInclusive(MinMax {
+                value: value.into(),
+                fixed: false,
+                annotations: Sequence::new(),
+            }),
+            OrdinaryFacet::MinLength(value) => ConstrainingFacet::MinLength(Length {
+                value,
+                fixed: false,
+                annotations: Sequence::new(),
+            }),
+            OrdinaryFacet::Pattern(value) => ConstrainingFacet::Pattern(Pattern {
+                value: value.iter().map(|&f| f.to_string()).collect(),
+                annotations: Sequence::new(),
+            }),
+            OrdinaryFacet::WhiteSpace(value, fixed) => ConstrainingFacet::WhiteSpace(WhiteSpace {
+                value,
+                fixed: fixed.as_bool(),
+                annotations: Sequence::new(),
+            }),
+        }
+    }
+}
+
+enum OrdinaryBaseType {
+    Named(&'static str),
+    AnonIndirectList(&'static str),
+}
+
+struct OrdinaryInfo {
+    name: &'static str,
+    base_type: OrdinaryBaseType,
+    variety: OrdinaryVariety,
+    ordered: OrderedValue,
+    bounded: bool,
+    cardinality: CardinalityValue,
+    numeric: bool,
+    facets: &'static [OrdinaryFacet],
+    // TODO annotations
+}
+
 fn register_builtin_ordinary_types(context: &mut MappingContext) {
-    let xs_decimal = context.resolve(&XS_DECIMAL_NAME);
-    let xs_string = context.resolve(&XS_STRING_NAME);
+    use CardinalityValue::*;
+    use FixedValue::*;
+    use OrderedValue::*;
+    const ORDINARY_TYPES: [OrdinaryInfo; 28] = [
+        OrdinaryInfo {
+            name: "normalizedString",
+            base_type: OrdinaryBaseType::Named("string"),
+            variety: OrdinaryVariety::Atomic,
+            ordered: False,
+            bounded: false,
+            cardinality: CountablyInfinite,
+            numeric: false,
+            facets: &[OrdinaryFacet::WhiteSpace(
+                WhiteSpaceValue::Replace,
+                NotFixed,
+            )],
+        },
+        OrdinaryInfo {
+            name: "token",
+            base_type: OrdinaryBaseType::Named("normalizedString"),
+            variety: OrdinaryVariety::Atomic,
+            ordered: False,
+            bounded: false,
+            cardinality: CountablyInfinite,
+            numeric: false,
+            facets: &[OrdinaryFacet::WhiteSpace(
+                WhiteSpaceValue::Collapse,
+                NotFixed,
+            )],
+        },
+        OrdinaryInfo {
+            name: "language",
+            base_type: OrdinaryBaseType::Named("token"),
+            variety: OrdinaryVariety::Atomic,
+            ordered: False,
+            bounded: false,
+            cardinality: CountablyInfinite,
+            numeric: false,
+            facets: &[
+                OrdinaryFacet::Pattern(&["[a-zA-Z]{1,8}(-[a-zA-Z0-9]{1,8})*"]),
+                OrdinaryFacet::WhiteSpace(WhiteSpaceValue::Collapse, NotFixed),
+            ],
+        },
+        OrdinaryInfo {
+            name: "NMTOKEN",
+            base_type: OrdinaryBaseType::Named("token"),
+            variety: OrdinaryVariety::Atomic,
+            ordered: False,
+            bounded: false,
+            cardinality: CountablyInfinite,
+            numeric: false,
+            facets: &[
+                OrdinaryFacet::Pattern(&[r"\c+"]),
+                OrdinaryFacet::WhiteSpace(WhiteSpaceValue::Collapse, NotFixed),
+            ],
+        },
+        OrdinaryInfo {
+            name: "NMTOKENS",
+            base_type: OrdinaryBaseType::AnonIndirectList("NMTOKEN"),
+            variety: OrdinaryVariety::List("NMTOKEN"),
+            ordered: False,
+            bounded: false,
+            cardinality: CountablyInfinite,
+            numeric: false,
+            facets: &[
+                OrdinaryFacet::MinLength(1),
+                OrdinaryFacet::WhiteSpace(WhiteSpaceValue::Collapse, NotFixed),
+            ],
+        },
+        OrdinaryInfo {
+            name: "Name",
+            base_type: OrdinaryBaseType::Named("token"),
+            variety: OrdinaryVariety::Atomic,
+            ordered: False,
+            bounded: false,
+            cardinality: CountablyInfinite,
+            numeric: false,
+            facets: &[
+                OrdinaryFacet::Pattern(&[r"\i\c*"]),
+                OrdinaryFacet::WhiteSpace(WhiteSpaceValue::Collapse, NotFixed),
+            ],
+        },
+        OrdinaryInfo {
+            name: "NCName",
+            base_type: OrdinaryBaseType::Named("Name"),
+            variety: OrdinaryVariety::Atomic,
+            ordered: False,
+            bounded: false,
+            cardinality: CountablyInfinite,
+            numeric: false,
+            facets: &[
+                OrdinaryFacet::Pattern(&[r"\i\c*", r"[\i-[:]][\c-[:]]*"]),
+                OrdinaryFacet::WhiteSpace(WhiteSpaceValue::Collapse, NotFixed),
+            ],
+        },
+        OrdinaryInfo {
+            name: "ID",
+            base_type: OrdinaryBaseType::Named("NCName"),
+            variety: OrdinaryVariety::Atomic,
+            ordered: False,
+            bounded: false,
+            cardinality: CountablyInfinite,
+            numeric: false,
+            facets: &[
+                OrdinaryFacet::Pattern(&[r"\i\c*", r"[\i-[:]][\c-[:]]*"]),
+                OrdinaryFacet::WhiteSpace(WhiteSpaceValue::Collapse, NotFixed),
+            ],
+        },
+        OrdinaryInfo {
+            name: "IDREF",
+            base_type: OrdinaryBaseType::Named("NCName"),
+            variety: OrdinaryVariety::Atomic,
+            ordered: False,
+            bounded: false,
+            cardinality: CountablyInfinite,
+            numeric: false,
+            facets: &[
+                OrdinaryFacet::Pattern(&[r"\i\c*", r"[\i-[:]][\c-[:]]*"]),
+                OrdinaryFacet::WhiteSpace(WhiteSpaceValue::Collapse, NotFixed),
+            ],
+        },
+        OrdinaryInfo {
+            name: "IDREFS",
+            base_type: OrdinaryBaseType::AnonIndirectList("IDREF"),
+            variety: OrdinaryVariety::List("IDREF"),
+            ordered: False,
+            bounded: false,
+            cardinality: CountablyInfinite,
+            numeric: false,
+            facets: &[
+                OrdinaryFacet::MinLength(1),
+                OrdinaryFacet::WhiteSpace(WhiteSpaceValue::Collapse, NotFixed),
+            ],
+        },
+        OrdinaryInfo {
+            name: "ENTITY",
+            base_type: OrdinaryBaseType::Named("NCName"),
+            variety: OrdinaryVariety::Atomic,
+            ordered: False,
+            bounded: false,
+            cardinality: CountablyInfinite,
+            numeric: false,
+            facets: &[
+                OrdinaryFacet::Pattern(&[r"\i\c*", r"[\i-[:]][\c-[:]]*"]),
+                OrdinaryFacet::WhiteSpace(WhiteSpaceValue::Collapse, NotFixed),
+            ],
+        },
+        OrdinaryInfo {
+            name: "ENTITIES",
+            base_type: OrdinaryBaseType::AnonIndirectList("ENTITY"),
+            variety: OrdinaryVariety::List("ENTITY"),
+            ordered: False,
+            bounded: false,
+            cardinality: CountablyInfinite,
+            numeric: false,
+            facets: &[
+                OrdinaryFacet::MinLength(1),
+                OrdinaryFacet::WhiteSpace(WhiteSpaceValue::Collapse, NotFixed),
+            ],
+        },
+        OrdinaryInfo {
+            name: "integer",
+            base_type: OrdinaryBaseType::Named("decimal"),
+            variety: OrdinaryVariety::Atomic,
+            ordered: Total,
+            bounded: false,
+            cardinality: CountablyInfinite,
+            numeric: true,
+            facets: &[
+                OrdinaryFacet::FractionDigits(0, Fixed),
+                OrdinaryFacet::WhiteSpace(WhiteSpaceValue::Collapse, Fixed),
+                OrdinaryFacet::Pattern(&[r"[\-+]?[0-9]+"]),
+            ],
+        },
+        OrdinaryInfo {
+            name: "nonPositiveInteger",
+            base_type: OrdinaryBaseType::Named("integer"),
+            variety: OrdinaryVariety::Atomic,
+            ordered: Total,
+            bounded: false,
+            cardinality: CountablyInfinite,
+            numeric: true,
+            facets: &[
+                OrdinaryFacet::FractionDigits(0, Fixed),
+                OrdinaryFacet::WhiteSpace(WhiteSpaceValue::Collapse, Fixed),
+                OrdinaryFacet::Pattern(&[r"[\-+]?[0-9]+"]),
+                OrdinaryFacet::MaxInclusive("0"),
+            ],
+        },
+        OrdinaryInfo {
+            name: "negativeInteger",
+            base_type: OrdinaryBaseType::Named("nonPositiveInteger"),
+            variety: OrdinaryVariety::Atomic,
+            ordered: Total,
+            bounded: false,
+            cardinality: CountablyInfinite,
+            numeric: true,
+            facets: &[
+                OrdinaryFacet::FractionDigits(0, Fixed),
+                OrdinaryFacet::WhiteSpace(WhiteSpaceValue::Collapse, Fixed),
+                OrdinaryFacet::Pattern(&[r"[\-+]?[0-9]+"]), // TODO pattern seems wrong (spec issue?)
+                OrdinaryFacet::MaxInclusive("-1"),
+            ],
+        },
+        OrdinaryInfo {
+            name: "long",
+            base_type: OrdinaryBaseType::Named("integer"),
+            variety: OrdinaryVariety::Atomic,
+            ordered: Total,
+            bounded: true,
+            cardinality: Finite,
+            numeric: true,
+            facets: &[
+                OrdinaryFacet::FractionDigits(0, Fixed),
+                OrdinaryFacet::WhiteSpace(WhiteSpaceValue::Collapse, Fixed),
+                OrdinaryFacet::Pattern(&[r"[\-+]?[0-9]+"]),
+                OrdinaryFacet::MaxInclusive("9223372036854775807"),
+                OrdinaryFacet::MinInclusive("-9223372036854775808"),
+            ],
+        },
+        OrdinaryInfo {
+            name: "int",
+            base_type: OrdinaryBaseType::Named("long"),
+            variety: OrdinaryVariety::Atomic,
+            ordered: Total,
+            bounded: true,
+            cardinality: Finite,
+            numeric: true,
+            facets: &[
+                OrdinaryFacet::FractionDigits(0, Fixed),
+                OrdinaryFacet::WhiteSpace(WhiteSpaceValue::Collapse, Fixed),
+                OrdinaryFacet::Pattern(&[r"[\-+]?[0-9]+"]),
+                OrdinaryFacet::MaxInclusive("2147483647"),
+                OrdinaryFacet::MinInclusive("-2147483648"),
+            ],
+        },
+        OrdinaryInfo {
+            name: "short",
+            base_type: OrdinaryBaseType::Named("int"),
+            variety: OrdinaryVariety::Atomic,
+            ordered: Total,
+            bounded: true,
+            cardinality: Finite,
+            numeric: true,
+            facets: &[
+                OrdinaryFacet::FractionDigits(0, Fixed),
+                OrdinaryFacet::WhiteSpace(WhiteSpaceValue::Collapse, Fixed),
+                OrdinaryFacet::Pattern(&[r"[\-+]?[0-9]+"]),
+                OrdinaryFacet::MaxInclusive("32767"),
+                OrdinaryFacet::MinInclusive("-32768"),
+            ],
+        },
+        OrdinaryInfo {
+            name: "byte",
+            base_type: OrdinaryBaseType::Named("short"),
+            variety: OrdinaryVariety::Atomic,
+            ordered: Total,
+            bounded: true,
+            cardinality: Finite,
+            numeric: true,
+            facets: &[
+                OrdinaryFacet::FractionDigits(0, Fixed),
+                OrdinaryFacet::WhiteSpace(WhiteSpaceValue::Collapse, Fixed),
+                OrdinaryFacet::Pattern(&[r"[\-+]?[0-9]+"]),
+                OrdinaryFacet::MaxInclusive("127"),
+                OrdinaryFacet::MinInclusive("-128"),
+            ],
+        },
+        OrdinaryInfo {
+            name: "nonNegativeInteger",
+            base_type: OrdinaryBaseType::Named("integer"),
+            variety: OrdinaryVariety::Atomic,
+            ordered: Total,
+            bounded: false,
+            cardinality: CountablyInfinite,
+            numeric: true,
+            facets: &[
+                OrdinaryFacet::FractionDigits(0, Fixed),
+                OrdinaryFacet::WhiteSpace(WhiteSpaceValue::Collapse, Fixed),
+                OrdinaryFacet::Pattern(&[r"[\-+]?[0-9]+"]),
+                OrdinaryFacet::MinInclusive("0"),
+            ],
+        },
+        OrdinaryInfo {
+            name: "unsignedLong",
+            base_type: OrdinaryBaseType::Named("nonNegativeInteger"),
+            variety: OrdinaryVariety::Atomic,
+            ordered: Total,
+            bounded: true,
+            cardinality: Finite,
+            numeric: true,
+            facets: &[
+                OrdinaryFacet::FractionDigits(0, Fixed),
+                OrdinaryFacet::WhiteSpace(WhiteSpaceValue::Collapse, Fixed),
+                OrdinaryFacet::Pattern(&[r"[\-+]?[0-9]+"]),
+                OrdinaryFacet::MaxInclusive("18446744073709551615"),
+                OrdinaryFacet::MinInclusive("0"),
+            ],
+        },
+        OrdinaryInfo {
+            name: "unsignedInt",
+            base_type: OrdinaryBaseType::Named("unsignedLong"),
+            variety: OrdinaryVariety::Atomic,
+            ordered: Total,
+            bounded: true,
+            cardinality: Finite,
+            numeric: true,
+            facets: &[
+                OrdinaryFacet::FractionDigits(0, Fixed),
+                OrdinaryFacet::WhiteSpace(WhiteSpaceValue::Collapse, Fixed),
+                OrdinaryFacet::Pattern(&[r"[\-+]?[0-9]+"]),
+                OrdinaryFacet::MaxInclusive("4294967295"),
+                OrdinaryFacet::MinInclusive("0"),
+            ],
+        },
+        OrdinaryInfo {
+            name: "unsignedShort",
+            base_type: OrdinaryBaseType::Named("unsignedInt"),
+            variety: OrdinaryVariety::Atomic,
+            ordered: Total,
+            bounded: true,
+            cardinality: Finite,
+            numeric: true,
+            facets: &[
+                OrdinaryFacet::FractionDigits(0, Fixed),
+                OrdinaryFacet::WhiteSpace(WhiteSpaceValue::Collapse, Fixed),
+                OrdinaryFacet::Pattern(&[r"[\-+]?[0-9]+"]),
+                OrdinaryFacet::MaxInclusive("65535"),
+                OrdinaryFacet::MinInclusive("0"),
+            ],
+        },
+        OrdinaryInfo {
+            name: "unsignedByte",
+            base_type: OrdinaryBaseType::Named("unsignedShort"),
+            variety: OrdinaryVariety::Atomic,
+            ordered: Total,
+            bounded: true,
+            cardinality: Finite,
+            numeric: true,
+            facets: &[
+                OrdinaryFacet::FractionDigits(0, Fixed),
+                OrdinaryFacet::WhiteSpace(WhiteSpaceValue::Collapse, Fixed),
+                OrdinaryFacet::Pattern(&[r"[\-+]?[0-9]+"]),
+                OrdinaryFacet::MaxInclusive("255"),
+                OrdinaryFacet::MinInclusive("0"),
+            ],
+        },
+        OrdinaryInfo {
+            name: "positiveInteger",
+            base_type: OrdinaryBaseType::Named("nonNegativeInteger"),
+            variety: OrdinaryVariety::Atomic,
+            ordered: Total,
+            bounded: false,
+            cardinality: CountablyInfinite,
+            numeric: true,
+            facets: &[
+                OrdinaryFacet::FractionDigits(0, Fixed),
+                OrdinaryFacet::WhiteSpace(WhiteSpaceValue::Collapse, Fixed),
+                OrdinaryFacet::Pattern(&[r"[\-+]?[0-9]+"]),
+                OrdinaryFacet::MinInclusive("1"),
+            ],
+        },
+        OrdinaryInfo {
+            name: "yearMonthDuration",
+            base_type: OrdinaryBaseType::Named("duration"),
+            variety: OrdinaryVariety::Atomic,
+            ordered: Partial,
+            bounded: false,
+            cardinality: CountablyInfinite,
+            numeric: false,
+            facets: &[
+                OrdinaryFacet::WhiteSpace(WhiteSpaceValue::Collapse, Fixed),
+                OrdinaryFacet::Pattern(&["[^DT]*"]),
+            ],
+        },
+        OrdinaryInfo {
+            name: "dayTimeDuration",
+            base_type: OrdinaryBaseType::Named("duration"),
+            variety: OrdinaryVariety::Atomic,
+            ordered: Partial,
+            bounded: false,
+            cardinality: CountablyInfinite,
+            numeric: false,
+            facets: &[
+                OrdinaryFacet::WhiteSpace(WhiteSpaceValue::Collapse, Fixed),
+                OrdinaryFacet::Pattern(&["[^YM]*(T.*)?"]),
+            ],
+        },
+        OrdinaryInfo {
+            name: "dateTimeStamp",
+            base_type: OrdinaryBaseType::Named("dateTime"),
+            variety: OrdinaryVariety::Atomic,
+            ordered: Partial,
+            bounded: false,
+            cardinality: CountablyInfinite,
+            numeric: false,
+            facets: &[
+                OrdinaryFacet::WhiteSpace(WhiteSpaceValue::Collapse, Fixed),
+                OrdinaryFacet::ExplicitTimezone(ExplicitTimezoneValue::Required, Fixed),
+            ],
+        },
+    ];
 
-    let xs_integer = gen_ordinary_type_def(
-        context,
-        xs_decimal,
-        "integer",
-        simple_type_def::Variety::Atomic,
-        Set::new(), // TODO P2 §3.4.13.3
-        Set::new(), // TODO
-        None,
-    );
-    context.register(xs_integer);
+    for OrdinaryInfo {
+        name,
+        base_type,
+        variety,
+        ordered,
+        bounded,
+        cardinality,
+        numeric,
+        facets,
+    } in ORDINARY_TYPES
+    {
+        let simple_type_ref = context.reserve();
 
-    let xs_non_negative_integer = gen_ordinary_type_def(
-        context,
-        xs_integer,
-        "nonNegativeInteger",
-        simple_type_def::Variety::Atomic,
-        Set::new(), // TODO P2 §3.4.20.3
-        Set::new(), // TODO
-        None,
-    );
-    context.register(xs_non_negative_integer);
+        let base_type = match base_type {
+            OrdinaryBaseType::Named(base_type_name) => {
+                let base_type_name = QName::with_namespace(XS_NAMESPACE, base_type_name);
+                context.resolve(&base_type_name)
+            }
+            OrdinaryBaseType::AnonIndirectList(item_type_name) => {
+                let item_type_name = QName::with_namespace(XS_NAMESPACE, item_type_name);
+                let item_type = context.resolve(&item_type_name);
 
-    let xs_positive_integer = gen_ordinary_type_def(
-        context,
-        xs_non_negative_integer,
-        "positiveInteger",
-        simple_type_def::Variety::Atomic,
-        Set::new(), // TODO P2 §3.4.25.3
-        Set::new(), // TODO
-        None,
-    );
-    context.register(xs_positive_integer);
+                let xs_any_simple_type = context.resolve(&XS_ANY_SIMPLE_TYPE_NAME);
+                context.create(SimpleTypeDefinition {
+                    annotations: Sequence::new(),
+                    name: None,
+                    target_namespace: Some(XS_NAMESPACE.into()),
+                    final_: Set::new(),
+                    context: Some(simple_type_def::Context::SimpleType(simple_type_ref)),
+                    base_type_definition: xs_any_simple_type,
+                    facets: Set::new(),
+                    fundamental_facets: Set::new(),
+                    variety: Some(simple_type_def::Variety::List),
+                    primitive_type_definition: None,
+                    item_type_definition: Some(item_type),
+                    member_type_definitions: None,
+                })
+            }
+        };
 
-    let xs_normalized_string = gen_ordinary_type_def(
-        context,
-        xs_string,
-        "normalizedString",
-        simple_type_def::Variety::Atomic, // TODO
-        Set::new(),                       // TODO
-        Set::new(),                       // TODO
-        None,
-    );
-    context.register(xs_normalized_string);
+        let fundamental_facets = [
+            FundamentalFacet::Ordered(ordered),
+            FundamentalFacet::Bounded(bounded),
+            FundamentalFacet::Cardinality(cardinality),
+            FundamentalFacet::Numeric(numeric),
+        ]
+        .into_iter()
+        .collect();
 
-    let xs_token = gen_ordinary_type_def(
-        context,
-        xs_normalized_string,
-        "token",
-        simple_type_def::Variety::Atomic, // TODO
-        Set::new(),                       // TODO
-        Set::new(),                       // TODO
-        None,
-    );
-    context.register(xs_token);
+        let (variety, item_type) = match variety {
+            OrdinaryVariety::Atomic => (simple_type_def::Variety::Atomic, None),
+            OrdinaryVariety::List(item_type_name) => {
+                let item_type_name = QName::with_namespace(XS_NAMESPACE, item_type_name);
+                (
+                    simple_type_def::Variety::List,
+                    Some(context.resolve(&item_type_name)),
+                )
+            }
+        };
 
-    let xs_nmtoken = gen_ordinary_type_def(
-        context,
-        xs_token,
-        "NMTOKEN",
-        simple_type_def::Variety::Atomic, // TODO
-        Set::new(),                       // TODO
-        Set::new(),                       // TODO
-        None,
-    );
-    context.register(xs_nmtoken);
+        let facets = facets
+            .iter()
+            .map(|f| context.create(f.to_constraining_facet()))
+            .collect();
 
-    let xs_name = gen_ordinary_type_def(
-        context,
-        xs_token,
-        "Name",
-        simple_type_def::Variety::Atomic, // TODO
-        Set::new(),                       // TODO
-        Set::new(),                       // TODO
-        None,
-    );
-    context.register(xs_name);
-
-    let xs_ncname = gen_ordinary_type_def(
-        context,
-        xs_name,
-        "NCName",
-        simple_type_def::Variety::Atomic, // TODO
-        Set::new(),                       // TODO
-        Set::new(),                       // TODO
-        None,
-    );
-    context.register(xs_ncname);
-
-    let xs_id = gen_ordinary_type_def(
-        context,
-        xs_ncname,
-        "ID",
-        simple_type_def::Variety::Atomic, // TODO
-        Set::new(),                       // TODO
-        Set::new(),                       // TODO
-        None,
-    );
-    context.register(xs_id);
-
-    let xs_language = gen_ordinary_type_def(
-        context,
-        xs_token,
-        "language",
-        simple_type_def::Variety::Atomic, // TODO
-        Set::new(),                       // TODO
-        Set::new(),                       // TODO
-        None,
-    );
-    context.register(xs_language);
+        context.insert(
+            simple_type_ref,
+            SimpleTypeDefinition {
+            name: Some(name.into()),
+            target_namespace: Some(XS_NAMESPACE.into()),
+                base_type_definition: TypeDefinition::Simple(base_type),
+            final_: Set::new(),
+            variety: Some(variety),
+            primitive_type_definition: match variety {
+                    simple_type_def::Variety::Atomic => {
+                        base_type
+                            .get(context.components())
+                            .primitive_type_definition
+                    }
+                _ => None,
+            },
+            facets,
+            fundamental_facets,
+            context: None,
+            item_type_definition: match variety {
+                simple_type_def::Variety::Atomic => None,
+                _ => Some(item_type.unwrap()),
+            },
+            member_type_definitions: None,
+            annotations: Sequence::new(),
+            },
+        );
+        context.register(simple_type_ref);
+    }
 }
 
 fn register_builtin_attribute_decls(context: &mut MappingContext) {
