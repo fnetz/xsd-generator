@@ -5,9 +5,15 @@ use super::components::Ref;
 use super::constraining_facet::{ConstrainingFacet, WhiteSpace, WhiteSpaceValue};
 use super::fundamental_facet::{CardinalityValue, FundamentalFacet, OrderedValue};
 use super::mapping_context::MappingContext;
+use super::model_group::Compositor;
+use super::particle::MaxOccurs;
 use super::simple_type_def::{self, SimpleTypeDefinition};
+use super::wildcard::{NamespaceConstraint, NamespaceConstraintVariety, ProcessContents};
 use super::xstypes::QName;
-use super::{attribute_decl, AttributeDeclaration, Sequence, Set, TypeDefinition};
+use super::{
+    attribute_decl, AttributeDeclaration, ModelGroup, Particle, Sequence, Set, Term,
+    TypeDefinition, Wildcard,
+};
 
 // Namespaces used by the specification (pt. 1, §1.3.1)
 pub const XS_NAMESPACE: &str = "http://www.w3.org/2001/XMLSchema";
@@ -142,28 +148,71 @@ fn gen_ordinary_type_def(
 }
 
 pub(super) fn register_builtins(context: &mut MappingContext) {
+    register_xs_any_type(context);
     register_builtin_types(context);
     register_builtin_attribute_decls(context);
 }
 
-fn register_builtin_types(context: &mut MappingContext) {
+/// Registers the only built-in complex type, `xs:anyType` (§3.4.7 Built-in Complex Type Definition)
+fn register_xs_any_type(context: &mut MappingContext) {
+    // The inner particle of ·xs:anyType· contains a wildcard which matches any element:
+    let inner_particle_term = context.create(Wildcard {
+        namespace_constraint: NamespaceConstraint {
+            variety: NamespaceConstraintVariety::Any,
+            namespaces: Set::new(),
+            disallowed_names: Set::new(),
+        },
+        process_contents: ProcessContents::Lax,
+        annotations: Sequence::new(),
+    });
+
+    let inner_particle = context.create(Particle {
+        min_occurs: 0,
+        max_occurs: MaxOccurs::Unbounded,
+        term: Term::Wildcard(inner_particle_term),
+        annotations: Sequence::new(),
+    });
+
+    // The outer particle of ·xs:anyType· contains a sequence with a single term:
+    let outer_particle_term = context.create(ModelGroup {
+        compositor: Compositor::Sequence,
+        particles: vec![inner_particle],
+        annotations: Sequence::new(),
+    });
+
+    let outer_particle = context.create(Particle {
+        min_occurs: 1,
+        max_occurs: MaxOccurs::Count(1),
+        term: Term::ModelGroup(outer_particle_term),
+        annotations: Sequence::new(),
+    });
+
+    let wildcard = context.create(Wildcard {
+        namespace_constraint: NamespaceConstraint {
+            variety: NamespaceConstraintVariety::Any,
+            namespaces: Set::new(),
+            disallowed_names: Set::new(),
+        },
+        process_contents: ProcessContents::Lax,
+        annotations: Sequence::new(),
+    });
+
     let xs_any_type = context.reserve();
-    let xs_any_type_def = TypeDefinition::Complex(xs_any_type);
     context.insert(
         xs_any_type,
         ComplexTypeDefinition {
             name: Some("anyType".into()),
             target_namespace: Some(XS_NAMESPACE.into()),
-            base_type_definition: xs_any_type_def,
+            base_type_definition: TypeDefinition::Complex(xs_any_type),
             derivation_method: Some(complex_type_def::DerivationMethod::Restriction),
             content_type: complex_type_def::ContentType {
                 variety: complex_type_def::ContentTypeVariety::Mixed,
-                particle: None, // TODO §3.4.7
-                open_content: None,
+                particle: Some(outer_particle),
                 simple_type_definition: None,
+                open_content: None,
             },
             attribute_uses: Set::new(),
-            attribute_wildcard: None, // TODO
+            attribute_wildcard: Some(wildcard),
             final_: Set::new(),
             context: None,
             prohibited_substitutions: Set::new(),
@@ -172,11 +221,15 @@ fn register_builtin_types(context: &mut MappingContext) {
             annotations: Sequence::new(),
         },
     );
-    context.register(xs_any_type_def);
+    context.register(TypeDefinition::Complex(xs_any_type));
+}
 
+fn register_builtin_types(context: &mut MappingContext) {
     // == Part 2 §4.1.6 Built-in Simple Type Definitions ==
 
     // anySimpleType
+    let xs_any_type = context.resolve(&XS_ANY_TYPE_NAME);
+
     let xs_any_simple_type = context.reserve();
     let xs_any_simple_type_def = TypeDefinition::Simple(xs_any_simple_type);
     context.insert(
@@ -186,7 +239,7 @@ fn register_builtin_types(context: &mut MappingContext) {
             target_namespace: Some(XS_NAMESPACE.into()),
             final_: Set::new(),
             context: None,
-            base_type_definition: xs_any_type_def,
+            base_type_definition: TypeDefinition::Complex(xs_any_type),
             facets: Set::new(),
             fundamental_facets: Set::new(),
             variety: None,
