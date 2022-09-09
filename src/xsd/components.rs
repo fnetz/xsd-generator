@@ -5,7 +5,7 @@ use std::hash::Hash;
 use std::marker::PhantomData;
 use std::num::{NonZeroU32, NonZeroUsize};
 
-use clap::ValueEnum;
+use crate::cli::BuiltinOverwriteAction;
 
 use roxmltree::Node;
 
@@ -471,14 +471,6 @@ impl Lookup<Ref<ComplexTypeDefinition>> for LookupTables {
             .get(key)
             .and_then(|type_def| type_def.complex())
     }
-}
-
-// TODO move?
-#[derive(Copy, Clone, Debug, ValueEnum)]
-pub enum BuiltinOverwriteAction {
-    Deny,
-    Warn,
-    Allow,
 }
 
 /// QName resolution according to §3.17.6.2

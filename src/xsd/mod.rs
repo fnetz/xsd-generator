@@ -54,9 +54,9 @@ pub use components::{Ref, RefNamed};
 use mapping_context::MappingContext;
 use xstypes::{Sequence, Set};
 
-pub use self::components::BuiltinOverwriteAction;
+use crate::cli::BuiltinOverwriteAction;
 
-pub use self::components::SchemaComponentTable;
+pub use components::SchemaComponentTable;
 
 pub fn read_schema(
     schema: roxmltree::Document,

@@ -4,14 +4,15 @@ use roxmltree::{Node, NodeId};
 
 use super::{
     components::{
-        BuiltinOverwriteAction, Component, ComponentResolver, ComponentTraits,
-        ConstructionComponentTable, DynamicRef, HasArenaContainer, Lookup, LookupTables, RefNamed,
+        Component, ComponentResolver, ComponentTraits, ConstructionComponentTable, DynamicRef,
+        HasArenaContainer, Lookup, LookupTables, RefNamed,
     },
     xstypes::QName,
     AttributeDeclaration, AttributeGroupDefinition, ComplexTypeDefinition, ElementDeclaration,
     IdentityConstraintDefinition, ModelGroupDefinition, NotationDeclaration, Ref,
     SimpleTypeDefinition,
 };
+use crate::cli::BuiltinOverwriteAction;
 
 #[derive(Default)]
 pub(super) struct TopLevelElements<'a, 'input> {
