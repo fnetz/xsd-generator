@@ -868,28 +868,28 @@ fn register_builtin_ordinary_types(context: &mut MappingContext) {
         context.insert(
             simple_type_ref,
             SimpleTypeDefinition {
-            name: Some(name.into()),
-            target_namespace: Some(XS_NAMESPACE.into()),
+                name: Some(name.into()),
+                target_namespace: Some(XS_NAMESPACE.into()),
                 base_type_definition: TypeDefinition::Simple(base_type),
-            final_: Set::new(),
-            variety: Some(variety),
-            primitive_type_definition: match variety {
+                final_: Set::new(),
+                variety: Some(variety),
+                primitive_type_definition: match variety {
                     simple_type_def::Variety::Atomic => {
                         base_type
                             .get(context.components())
                             .primitive_type_definition
                     }
-                _ => None,
-            },
-            facets,
-            fundamental_facets,
-            context: None,
-            item_type_definition: match variety {
-                simple_type_def::Variety::Atomic => None,
-                _ => Some(item_type.unwrap()),
-            },
-            member_type_definitions: None,
-            annotations: Sequence::new(),
+                    _ => None,
+                },
+                facets,
+                fundamental_facets,
+                context: None,
+                item_type_definition: match variety {
+                    simple_type_def::Variety::Atomic => None,
+                    _ => Some(item_type.unwrap()),
+                },
+                member_type_definitions: None,
+                annotations: Sequence::new(),
             },
         );
         context.register(simple_type_ref);
@@ -928,6 +928,7 @@ fn register_builtin_attribute_decls(context: &mut MappingContext) {
     });
     context.register(xsi_nil);
 
+    let xsi_schema_location = context.reserve();
     let schema_location_simple_type = context.create(SimpleTypeDefinition {
         name: None,
         target_namespace: Some(XSI_NAMESPACE.into()),
@@ -936,22 +937,24 @@ fn register_builtin_attribute_decls(context: &mut MappingContext) {
         variety: Some(simple_type_def::Variety::List),
         item_type_definition: Some(any_uri),
         annotations: Sequence::new(),
-
         final_: Set::new(),
-        context: None,
-        fundamental_facets: Set::new(), // TODO
+        context: Some(simple_type_def::Context::Attribute(xsi_schema_location)),
+        fundamental_facets: Set::new(),
         primitive_type_definition: None,
         member_type_definitions: None,
     });
-    let xsi_schema_location = context.create(AttributeDeclaration {
-        name: "schemaLocation".into(),
-        target_namespace: Some(XSI_NAMESPACE.into()),
-        type_definition: schema_location_simple_type,
-        scope: attribute_decl::Scope::new_global(),
-        value_constraint: None,
-        annotations: Sequence::new(),
-        inheritable: false,
-    });
+    context.insert(
+        xsi_schema_location,
+        AttributeDeclaration {
+            name: "schemaLocation".into(),
+            target_namespace: Some(XSI_NAMESPACE.into()),
+            type_definition: schema_location_simple_type,
+            scope: attribute_decl::Scope::new_global(),
+            value_constraint: None,
+            annotations: Sequence::new(),
+            inheritable: false,
+        },
+    );
     context.register(xsi_schema_location);
 
     let xsi_no_namespace_schema_location = context.create(AttributeDeclaration {
