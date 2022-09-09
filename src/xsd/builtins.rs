@@ -1026,3 +1026,23 @@ pub fn is_builtin_attribute_decl_name(name: &QName) -> bool {
 
     BUILTIN_ATTRIBUTE_NAMES.contains(&name.local_name.as_str())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cli::{BuiltinOverwriteAction, RegisterBuiltins};
+
+    #[test]
+    fn registers_builtins_without_crashing() {
+        let mock_schema = roxmltree::Document::parse("<schema/>").unwrap();
+        let mock_schema = mock_schema.root_element();
+
+        let mut context = MappingContext::new(
+            mock_schema,
+            BuiltinOverwriteAction::Deny,
+            RegisterBuiltins::No,
+        );
+
+        register_builtins(&mut context);
+    }
+}
