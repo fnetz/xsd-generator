@@ -83,13 +83,20 @@ impl SimpleTypeDefinition {
         name.map(|name| QName::with_optional_namespace(target_namespace, name))
     }
 
+    /// Maps a Simple Type Definition from its XML representation
+    ///
+    /// In case of non-top-level Simple Type Definitions, the parent must be `Some`; see
+    /// Specification pt. 1, §3.16.2.1, {context}, clause 2
     pub(super) fn map_from_xml(
         ctx: &mut MappingContext,
         simple_type: Node,
         schema: Node,
         tlref: Option<Ref<Self>>,
+        parent: Option<Context>,
     ) -> Ref<Self> {
         assert_eq!(simple_type.tag_name().name(), Self::TAG_NAME);
+
+        let self_ref = tlref.unwrap_or_else(|| ctx.reserve());
 
         // {name}
         //   The ·actual value· of the name [attribute] if present on the <simpleType> element,
@@ -138,7 +145,15 @@ impl SimpleTypeDefinition {
                     let st = simple_type
                         .children()
                         .find(|c| c.tag_name().name() == Self::TAG_NAME)
-                        .map(|st| Self::map_from_xml(ctx, st, schema, None))
+                        .map(|st| {
+                            Self::map_from_xml(
+                                ctx,
+                                st,
+                                schema,
+                                None,
+                                Some(Context::SimpleType(self_ref)),
+                            )
+                        })
                         .unwrap();
                     TypeDefinition::Simple(st)
                 })
@@ -234,8 +249,9 @@ impl SimpleTypeDefinition {
             None
         } else {
             // 2 otherwise the appropriate case among the following:
-            // TODO
-            None
+            //   (see spec; in our case, the caller already knows the appropriate case)
+            let context = parent.expect("Unnamed simple type must have a parent");
+            Some(context)
         };
 
         // {variety}
@@ -302,7 +318,13 @@ impl SimpleTypeDefinition {
                                 list.children()
                                     .find(|c| c.tag_name().name() == Self::TAG_NAME)
                                     .map(|simple_type| {
-                                        Self::map_from_xml(ctx, simple_type, schema, None)
+                                        Self::map_from_xml(
+                                            ctx,
+                                            simple_type,
+                                            schema,
+                                            None,
+                                            Some(Context::SimpleType(self_ref)),
+                                        )
                                     })
                             })
                             .unwrap()
@@ -347,7 +369,13 @@ impl SimpleTypeDefinition {
                                 .children()
                                 .filter(|c| c.tag_name().name() == Self::TAG_NAME)
                                 .map(|simple_type| {
-                                    Self::map_from_xml(ctx, simple_type, schema, None)
+                                    Self::map_from_xml(
+                                        ctx,
+                                        simple_type,
+                                        schema,
+                                        None,
+                                        Some(Context::SimpleType(self_ref)),
+                                    )
                                 }),
                         );
 
@@ -367,10 +395,8 @@ impl SimpleTypeDefinition {
         // TODO
         let fundamental_facets = Set::new();
 
-        let simple_type_def = tlref.unwrap_or_else(|| ctx.reserve());
-
         ctx.insert(
-            simple_type_def,
+            self_ref,
             Self {
                 name,
                 target_namespace,
@@ -387,7 +413,7 @@ impl SimpleTypeDefinition {
             },
         );
 
-        simple_type_def
+        self_ref
     }
 
     pub fn is_primitive(&self) -> bool {
@@ -442,6 +468,6 @@ impl TopLevelMappable for SimpleTypeDefinition {
         simple_type: Node,
         schema: Node,
     ) {
-        Self::map_from_xml(context, simple_type, schema, Some(self_ref));
+        Self::map_from_xml(context, simple_type, schema, Some(self_ref), None);
     }
 }

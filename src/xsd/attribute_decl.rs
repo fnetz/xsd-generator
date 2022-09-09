@@ -1,3 +1,4 @@
+use super::simple_type_def::Context as SimpleContext;
 use super::{
     components::{Component, Named, NamedXml},
     mapping_context::TopLevelMappable,
@@ -84,7 +85,13 @@ impl AttributeDeclaration {
             .children()
             .find(|c| c.tag_name().name() == SimpleTypeDefinition::TAG_NAME)
             .map(|simple_type| {
-                SimpleTypeDefinition::map_from_xml(context, simple_type, schema, None)
+                SimpleTypeDefinition::map_from_xml(
+                    context,
+                    simple_type,
+                    schema,
+                    None,
+                    Some(SimpleContext::Attribute(tlref)),
+                )
             });
 
         let type_definition = if let Some(simple_type_def) = simple_type_def {
@@ -237,6 +244,7 @@ impl AttributeDeclaration {
             (None, attribute_use)
         } else {
             // ===== Attribute Declaration =====
+            let self_ref = context.reserve();
 
             // {name}
             //   The ·actual value· of the name [attribute]
@@ -279,7 +287,13 @@ impl AttributeDeclaration {
                 .children()
                 .find(|c| c.tag_name().name() == "simpleType")
                 .map(|simple_type| {
-                    SimpleTypeDefinition::map_from_xml(context, simple_type, schema, None)
+                    SimpleTypeDefinition::map_from_xml(
+                        context,
+                        simple_type,
+                        schema,
+                        None,
+                        Some(SimpleContext::Attribute(self_ref)),
+                    )
                 });
 
             let type_definition = if let Some(simple_type_def) = simple_type_def {
@@ -313,15 +327,18 @@ impl AttributeDeclaration {
                 .map(|v| actual_value::<bool>(v, attribute))
                 .unwrap_or(false);
 
-            let attribute_declaration = context.create(AttributeDeclaration {
-                annotations: annotations.clone(),
-                name,
-                target_namespace,
-                type_definition,
-                scope,
-                value_constraint,
-                inheritable,
-            });
+            let attribute_declaration = context.insert(
+                self_ref,
+                AttributeDeclaration {
+                    annotations: annotations.clone(),
+                    name,
+                    target_namespace,
+                    type_definition,
+                    scope,
+                    value_constraint,
+                    inheritable,
+                },
+            );
 
             // ===== Attribute Use =====
 

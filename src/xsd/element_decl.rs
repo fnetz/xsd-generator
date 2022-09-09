@@ -1,3 +1,4 @@
+use super::simple_type_def::Context as SimpleContext;
 use super::{
     annotation::Annotation,
     builtins::XS_ANY_TYPE_NAME,
@@ -12,6 +13,7 @@ use super::{
     xstypes::{AnyURI, NCName, QName, Sequence, Set},
     MappingContext, Ref, SimpleTypeDefinition,
 };
+
 use roxmltree::Node;
 
 /// Schema Component: Element Declaration, a kind of [Term](super::shared::Term) (§3.3)
@@ -116,8 +118,13 @@ impl ElementDeclaration {
             .children()
             .find(|c| c.tag_name().name() == "simpleType")
             .map(|simple_type| {
-                let simple_type_def =
-                    SimpleTypeDefinition::map_from_xml(context, simple_type, schema, None);
+                let simple_type_def = SimpleTypeDefinition::map_from_xml(
+                    context,
+                    simple_type,
+                    schema,
+                    None,
+                    Some(SimpleContext::Element(self_ref)),
+                );
                 TypeDefinition::Simple(simple_type_def)
             })
             .or_else(|| {
