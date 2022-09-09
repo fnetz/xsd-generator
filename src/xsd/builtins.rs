@@ -30,78 +30,8 @@ lazy_static! {
     pub static ref XS_QNAME_NAME: QName = QName::with_namespace(XS_NAMESPACE, "QName");
     pub static ref XS_ANY_URI_NAME: QName = QName::with_namespace(XS_NAMESPACE, "anyURI");
     pub static ref XS_BOOLEAN_NAME: QName = QName::with_namespace(XS_NAMESPACE, "boolean");
-
-}
-
-fn gen_primitive_type_def(
-    context: &mut MappingContext,
-    base_type: TypeDefinition,
-    name: &str,
-) -> TypeDefinition {
-    // Fundamental facets (from table F.1)
-    use CardinalityValue::*;
-    use OrderedValue::*;
-    let (ordered, bounded, cardinality, numeric) = match name {
-        "string" => (False, false, CountablyInfinite, false),
-        "boolean" => (False, false, Finite, false),
-        "float" => (Partial, true, Finite, true),
-        "double" => (Partial, true, Finite, true),
-        "decimal" => (Total, false, CountablyInfinite, true),
-        "duration" => (Partial, false, CountablyInfinite, false),
-        "dateTime" => (Partial, false, CountablyInfinite, false),
-        "time" => (Partial, false, CountablyInfinite, false),
-        "date" => (Partial, false, CountablyInfinite, false),
-        "gYearMonth" => (Partial, false, CountablyInfinite, false),
-        "gYear" => (Partial, false, CountablyInfinite, false),
-        "gMonthDay" => (Partial, false, CountablyInfinite, false),
-        "gDay" => (Partial, false, CountablyInfinite, false),
-        "gMonth" => (Partial, false, CountablyInfinite, false),
-        "hexBinary" => (False, false, CountablyInfinite, false),
-        "base64Binary" => (False, false, CountablyInfinite, false),
-        "anyURI" => (False, false, CountablyInfinite, false),
-        "QName" => (False, false, CountablyInfinite, false),
-        "NOTATION" => (False, false, CountablyInfinite, false),
-        _ => unreachable!("Tried to generate primitive type def for non-primitive {name}"),
-    };
-    let fundamental_facets = [
-        FundamentalFacet::Ordered(ordered),
-        FundamentalFacet::Bounded(bounded),
-        FundamentalFacet::Cardinality(cardinality),
-        FundamentalFacet::Numeric(numeric),
-    ]
-    .into_iter()
-    .collect();
-
-    // Constraining facets (whiteSpace)
-    let (ws_value, ws_fixed) = match name {
-        "string" => (WhiteSpaceValue::Preserve, false),
-        _ => (WhiteSpaceValue::Collapse, true),
-    };
-    let ws_facet = context.create(ConstrainingFacet::WhiteSpace(WhiteSpace::new(
-        ws_value, ws_fixed,
-    )));
-
-    let simple_type_def = context.reserve();
-    let type_def = TypeDefinition::Simple(simple_type_def);
-    context.insert(
-        simple_type_def,
-        SimpleTypeDefinition {
-            name: Some(name.into()),
-            target_namespace: Some(XS_NAMESPACE.into()),
-            base_type_definition: base_type,
-            final_: Set::new(),
-            variety: Some(simple_type_def::Variety::Atomic),
-            primitive_type_definition: Some(simple_type_def),
-            facets: vec![ws_facet],
-            fundamental_facets,
-            context: None,
-            item_type_definition: None,
-            member_type_definitions: None,
-            annotations: Sequence::new(),
-        },
-    );
-
-    type_def
+    pub static ref XS_DECIMAL_NAME: QName = QName::with_namespace(XS_NAMESPACE, "decimal");
+    pub static ref XS_STRING_NAME: QName = QName::with_namespace(XS_NAMESPACE, "string");
 }
 
 fn gen_ordinary_type_def(
@@ -140,7 +70,7 @@ fn gen_ordinary_type_def(
                 _ => Some(item_type_def.unwrap()),
             },
             member_type_definitions: None,
-            annotations: Sequence::new(), // TODO
+            annotations: Sequence::new(),
         },
     );
 
@@ -149,7 +79,11 @@ fn gen_ordinary_type_def(
 
 pub(super) fn register_builtins(context: &mut MappingContext) {
     register_xs_any_type(context);
-    register_builtin_types(context);
+    register_special_types(context);
+    register_xs_error(context);
+    register_builtin_primitive_types(context);
+    register_builtin_ordinary_types(context);
+
     register_builtin_attribute_decls(context);
 }
 
@@ -224,12 +158,13 @@ fn register_xs_any_type(context: &mut MappingContext) {
     context.register(TypeDefinition::Complex(xs_any_type));
 }
 
-fn register_builtin_types(context: &mut MappingContext) {
-    // == Part 2 §4.1.6 Built-in Simple Type Definitions ==
-
-    // anySimpleType
+/// Registers the special built-in datatypes, `xs:anySimpleType` and ` xs:anyAtomicType`
+/// (see Specification pt. 2, §3.2 Special Built-in Datatypes; and pt. 2, §4.1.6 Built-in Simple
+/// Type Definitions)
+fn register_special_types(context: &mut MappingContext) {
     let xs_any_type = context.resolve(&XS_ANY_TYPE_NAME);
 
+    // anySimpleType (pt. 2, §3.2.1)
     let xs_any_simple_type = context.reserve();
     let xs_any_simple_type_def = TypeDefinition::Simple(xs_any_simple_type);
     context.insert(
@@ -251,7 +186,7 @@ fn register_builtin_types(context: &mut MappingContext) {
     );
     context.register(xs_any_simple_type_def);
 
-    // anyAtomicType
+    // anyAtomicType (pt. 2, §3.2.2)
     let xs_any_atomic_type = context.reserve();
     let xs_any_atomic_type_def = TypeDefinition::Simple(xs_any_atomic_type);
     context.insert(
@@ -272,95 +207,144 @@ fn register_builtin_types(context: &mut MappingContext) {
         },
     );
     context.register(xs_any_atomic_type_def);
+}
 
-    let xs_error = context.reserve();
-    let xs_error_def = TypeDefinition::Simple(xs_error);
-    context.insert(
-        xs_error,
-        SimpleTypeDefinition {
-            name: Some("error".into()),
-            target_namespace: Some(XS_NAMESPACE.into()),
-            final_: [
-                simple_type_def::DerivationMethod::Extension,
-                simple_type_def::DerivationMethod::Restriction,
-                simple_type_def::DerivationMethod::List,
-                simple_type_def::DerivationMethod::Union,
-            ]
-            .into_iter()
-            .collect(),
-            context: None,
-            base_type_definition: xs_any_simple_type_def,
-            facets: Set::new(),
-            fundamental_facets: Set::new(),
-            variety: Some(simple_type_def::Variety::Union),
-            primitive_type_definition: None,
-            item_type_definition: None,
-            member_type_definitions: Some(Sequence::new()),
-            annotations: Sequence::new(),
-        },
-    );
-    context.register(xs_error_def);
+/// Registers the built-in `xs:error` type (see Specification pt. 1, §3.16.7.3)
+fn register_xs_error(context: &mut MappingContext) {
+    let xs_any_simple_type_def = context.resolve(&XS_ANY_SIMPLE_TYPE_NAME);
 
-    // primitive data types
+    let xs_error = context.create(SimpleTypeDefinition {
+        name: Some("error".into()),
+        target_namespace: Some(XS_NAMESPACE.into()),
+        final_: [
+            simple_type_def::DerivationMethod::Extension,
+            simple_type_def::DerivationMethod::Restriction,
+            simple_type_def::DerivationMethod::List,
+            simple_type_def::DerivationMethod::Union,
+        ]
+        .into_iter()
+        .collect(),
+        context: None,
+        base_type_definition: xs_any_simple_type_def,
+        facets: Set::new(),
+        fundamental_facets: Set::new(),
+        variety: Some(simple_type_def::Variety::Union),
+        primitive_type_definition: None,
+        item_type_definition: None,
+        member_type_definitions: Some(Sequence::new()),
+        annotations: Sequence::new(),
+    });
+    context.register(TypeDefinition::Simple(xs_error));
+}
 
-    let xs_string = gen_primitive_type_def(context, xs_any_atomic_type_def, "string");
-    context.register(xs_string);
+struct PrimitiveInfo {
+    name: &'static str,
+    ordered: OrderedValue,
+    bounded: bool,
+    cardinality: CardinalityValue,
+    numeric: bool,
+}
 
-    let xs_boolean = gen_primitive_type_def(context, xs_any_atomic_type_def, "boolean");
-    context.register(xs_boolean);
+impl PrimitiveInfo {
+    const fn new(
+        name: &'static str,
+        ordered: OrderedValue,
+        bounded: bool,
+        cardinality: CardinalityValue,
+        numeric: bool,
+    ) -> Self {
+        Self {
+            name,
+            ordered,
+            bounded,
+            cardinality,
+            numeric,
+        }
+    }
+}
 
-    let xs_float = gen_primitive_type_def(context, xs_any_atomic_type_def, "float");
-    context.register(xs_float);
+/// Registers the 19 builtin primitive types given by the Specification, according to
+/// pt. 1, §3.16.7.4
+fn register_builtin_primitive_types(context: &mut MappingContext) {
+    // The list of primitive type names, along with their fundamental facets (from Table F.1):
+    // (name, ordered, bounded, cardinality, numeric)
+    use CardinalityValue::*;
+    use OrderedValue::*;
+    const PRIMITIVE_TYPES: [PrimitiveInfo; 19] = [
+        PrimitiveInfo::new("string", False, false, CountablyInfinite, false),
+        PrimitiveInfo::new("boolean", False, false, Finite, false),
+        PrimitiveInfo::new("float", Partial, true, Finite, true),
+        PrimitiveInfo::new("double", Partial, true, Finite, true),
+        PrimitiveInfo::new("decimal", Total, false, CountablyInfinite, true),
+        PrimitiveInfo::new("dateTime", Partial, false, CountablyInfinite, false),
+        PrimitiveInfo::new("duration", Partial, false, CountablyInfinite, false),
+        PrimitiveInfo::new("time", Partial, false, CountablyInfinite, false),
+        PrimitiveInfo::new("date", Partial, false, CountablyInfinite, false),
+        PrimitiveInfo::new("gMonth", Partial, false, CountablyInfinite, false),
+        PrimitiveInfo::new("gMonthDay", Partial, false, CountablyInfinite, false),
+        PrimitiveInfo::new("gDay", Partial, false, CountablyInfinite, false),
+        PrimitiveInfo::new("gYear", Partial, false, CountablyInfinite, false),
+        PrimitiveInfo::new("gYearMonth", Partial, false, CountablyInfinite, false),
+        PrimitiveInfo::new("hexBinary", False, false, CountablyInfinite, false),
+        PrimitiveInfo::new("base64Binary", False, false, CountablyInfinite, false),
+        PrimitiveInfo::new("anyURI", False, false, CountablyInfinite, false),
+        PrimitiveInfo::new("QName", False, false, CountablyInfinite, false),
+        PrimitiveInfo::new("NOTATION", False, false, CountablyInfinite, false),
+    ];
 
-    let xs_double = gen_primitive_type_def(context, xs_any_atomic_type_def, "double");
-    context.register(xs_double);
+    let xs_any_atomic_type_def = context.resolve(&XS_ANY_ATOMIC_TYPE_NAME);
 
-    let xs_decimal = gen_primitive_type_def(context, xs_any_atomic_type_def, "decimal");
-    context.register(xs_decimal);
+    for PrimitiveInfo {
+        name,
+        ordered,
+        bounded,
+        cardinality,
+        numeric,
+    } in PRIMITIVE_TYPES
+    {
+        let fundamental_facets = [
+            FundamentalFacet::Ordered(ordered),
+            FundamentalFacet::Bounded(bounded),
+            FundamentalFacet::Cardinality(cardinality),
+            FundamentalFacet::Numeric(numeric),
+        ]
+        .into_iter()
+        .collect();
 
-    let xs_date_time = gen_primitive_type_def(context, xs_any_atomic_type_def, "dateTime");
-    context.register(xs_date_time);
+        // Constraining facets (whiteSpace)
+        let (ws_value, ws_fixed) = match name {
+            "string" => (WhiteSpaceValue::Preserve, false),
+            _ => (WhiteSpaceValue::Collapse, true),
+        };
+        let whitespace = context.create(ConstrainingFacet::WhiteSpace(WhiteSpace::new(
+            ws_value, ws_fixed,
+        )));
 
-    let xs_duration = gen_primitive_type_def(context, xs_any_atomic_type_def, "duration");
-    context.register(xs_duration);
+        let simple_type_def = context.reserve();
+        context.insert(
+            simple_type_def,
+            SimpleTypeDefinition {
+                name: Some(name.into()),
+                target_namespace: Some(XS_NAMESPACE.into()),
+                base_type_definition: xs_any_atomic_type_def,
+                final_: Set::new(),
+                variety: Some(simple_type_def::Variety::Atomic),
+                primitive_type_definition: Some(simple_type_def),
+                facets: vec![whitespace],
+                fundamental_facets,
+                context: None,
+                item_type_definition: None,
+                member_type_definitions: None,
+                annotations: Sequence::new(),
+            },
+        );
+        context.register(simple_type_def);
+    }
+}
 
-    let xs_time = gen_primitive_type_def(context, xs_any_atomic_type_def, "time");
-    context.register(xs_time);
-
-    let xs_date = gen_primitive_type_def(context, xs_any_atomic_type_def, "date");
-    context.register(xs_date);
-
-    let xs_g_month = gen_primitive_type_def(context, xs_any_atomic_type_def, "gMonth");
-    context.register(xs_g_month);
-
-    let xs_g_month_day = gen_primitive_type_def(context, xs_any_atomic_type_def, "gMonthDay");
-    context.register(xs_g_month_day);
-
-    let xs_g_day = gen_primitive_type_def(context, xs_any_atomic_type_def, "gDay");
-    context.register(xs_g_day);
-
-    let xs_g_year = gen_primitive_type_def(context, xs_any_atomic_type_def, "gYear");
-    context.register(xs_g_year);
-
-    let xs_g_year_month = gen_primitive_type_def(context, xs_any_atomic_type_def, "gYearMonth");
-    context.register(xs_g_year_month);
-
-    let xs_hex_binary = gen_primitive_type_def(context, xs_any_atomic_type_def, "hexBinary");
-    context.register(xs_hex_binary);
-
-    let xs_base64_binary = gen_primitive_type_def(context, xs_any_atomic_type_def, "base64Binary");
-    context.register(xs_base64_binary);
-
-    let xs_any_uri = gen_primitive_type_def(context, xs_any_atomic_type_def, "anyURI");
-    context.register(xs_any_uri);
-
-    let xs_qname = gen_primitive_type_def(context, xs_any_atomic_type_def, "QName");
-    context.register(xs_qname);
-
-    let xs_notation = gen_primitive_type_def(context, xs_any_atomic_type_def, "NOTATION");
-    context.register(xs_notation);
-
-    // ordinary data types
+fn register_builtin_ordinary_types(context: &mut MappingContext) {
+    let xs_decimal = context.resolve(&XS_DECIMAL_NAME);
+    let xs_string = context.resolve(&XS_STRING_NAME);
 
     let xs_integer = gen_ordinary_type_def(
         context,
