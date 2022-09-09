@@ -12,7 +12,7 @@ use super::{
     IdentityConstraintDefinition, ModelGroupDefinition, NotationDeclaration, Ref,
     SimpleTypeDefinition,
 };
-use crate::cli::BuiltinOverwriteAction;
+use crate::cli::{BuiltinOverwriteAction, RegisterBuiltins};
 
 #[derive(Default)]
 pub(super) struct TopLevelElements<'a, 'input> {
@@ -107,7 +107,11 @@ pub(super) struct MappingContext<'a, 'input: 'a, 'p> {
 }
 
 impl<'a, 'input: 'a, 'p> MappingContext<'a, 'input, 'p> {
-    pub(super) fn new(schema: Node<'a, 'input>, builtin_overwrite: BuiltinOverwriteAction) -> Self {
+    pub(super) fn new(
+        schema: Node<'a, 'input>,
+        builtin_overwrite: BuiltinOverwriteAction,
+        register_builtins: RegisterBuiltins,
+    ) -> Self {
         let mut context = MappingContext {
             core: ContextCore::Root(Box::new(RootContextCore {
                 components: ConstructionComponentTable::new(),
@@ -117,7 +121,9 @@ impl<'a, 'input: 'a, 'p> MappingContext<'a, 'input, 'p> {
             in_progress_top_level: HashSet::new(),
             schema_node: schema,
         };
-        super::builtins::register_builtins(&mut context);
+        if register_builtins == RegisterBuiltins::Yes {
+            super::builtins::register_builtins(&mut context);
+        }
         context
     }
 

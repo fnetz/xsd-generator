@@ -54,16 +54,17 @@ pub use components::{Ref, RefNamed};
 use mapping_context::MappingContext;
 use xstypes::{Sequence, Set};
 
-use crate::cli::BuiltinOverwriteAction;
+use crate::cli::{BuiltinOverwriteAction, RegisterBuiltins};
 
 pub use components::SchemaComponentTable;
 
 pub fn read_schema(
     schema: roxmltree::Document,
     builtin_overwrite: BuiltinOverwriteAction,
+    register_builtins: RegisterBuiltins,
 ) -> (Schema, SchemaComponentTable) {
     let schema = schema.root_element();
-    let mut ctx = MappingContext::new(schema, builtin_overwrite);
+    let mut ctx = MappingContext::new(schema, builtin_overwrite, register_builtins);
     let schema = Schema::map_from_xml(&mut ctx, schema);
     let components = ctx.take_components().convert_to_schema_table().unwrap();
     (schema, components)

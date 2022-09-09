@@ -12,7 +12,7 @@ fn main() {
         allow_dtd: cli.allow_dtd,
     };
     let xsd = roxmltree::Document::parse_with_options(&xsd, options).unwrap();
-    let (schema, components) = xsd::read_schema(xsd, cli.builtin_overwrite);
+    let (schema, components) = xsd::read_schema(xsd, cli.builtin_overwrite, cli.register_builtins);
     let rst = generator::generate_rust(&schema, &components);
     print!("{rst}");
 }
