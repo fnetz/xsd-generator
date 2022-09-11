@@ -22,13 +22,32 @@ pub struct SimpleTypeDefinition {
     pub name: Option<NCName>,
     pub target_namespace: Option<AnyURI>,
     pub final_: Set<DerivationMethod>,
+    /// Required if `name` is `None`, otherwise must be `None`.
     pub context: Option<Context>,
+    /// With one exception, the `base_type_definition` of any Simple Type Definition is a Simple
+    /// Type Definition. The exception is `anySimpleType`, which has `anyType`, a
+    /// [Complex Type Definition](ComplexTypeDefinition), as its `base_type_definition`.
     pub base_type_definition: TypeDefinition,
     pub facets: Set<Ref<ConstrainingFacet>>,
     pub fundamental_facets: Set<FundamentalFacet>,
+    /// Required for all Simple Type Definitions except `anySimpleType`, in which it is `None`.
     pub variety: Option<Variety>,
+    /// With one exception, required if `variety` is atomic, otherwise must be `None`. The exception
+    /// is `anyAtomicType`, whose `primitive_type_definition` is `None`. If not `None`, must be a
+    /// _primitive_ built-in definition.
     pub primitive_type_definition: Option<Ref<SimpleTypeDefinition>>,
+    /// Required if `variety` is [list](Variety::List), otherwise must be `None`. The value of this
+    /// property must be a _primitive_ or _ordinary_ simple type definition with `variety` =
+    /// [atomic](Variety::Atomic), or an _ordinary_ simple type definition with `variety` =
+    /// [union](Variety::Union) whose basic members are all atomic; the value must not itself be a
+    /// list type (have `variety` = [list](Variety::List)) or have any basic members which are
+    /// list types.
     pub item_type_definition: Option<Ref<SimpleTypeDefinition>>,
+    /// A sequence of _primitive_ or _ordinary_ Simple Type Definition components. Must be present
+    /// (but may be empty) if `variety` is [union](Variety::Union), otherwise must be `None`.
+    ///
+    /// The sequence may contain any _primitive_ or _ordinary_ simple type definition, but must not
+    /// contain any _special_ type definitions.
     pub member_type_definitions: Option<Sequence<Ref<SimpleTypeDefinition>>>,
 }
 

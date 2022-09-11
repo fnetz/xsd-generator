@@ -26,6 +26,7 @@ pub struct ComplexTypeDefinition {
     pub target_namespace: Option<AnyURI>,
     pub base_type_definition: TypeDefinition,
     pub final_: Set<DerivationMethod>,
+    /// Required if `name` is `None`, otherwise must be `None`.
     pub context: Option<Context>,
     pub derivation_method: Option<DerivationMethod>,
     pub abstract_: bool,
@@ -62,8 +63,13 @@ impl ActualValue<'_> for DerivationMethod {
 #[derive(Clone, Debug)]
 pub struct ContentType {
     pub variety: ContentTypeVariety,
+    /// Required if `variety` is [element-only](ContentTypeVariety::ElementOnly) or
+    /// [mixed](ContentTypeVariety::Mixed), otherwise must be `None`.
     pub particle: Option<Ref<Particle>>,
+    /// Optional if `variety` is [element-only](ContentTypeVariety::ElementOnly) or
+    /// [mixed](ContentTypeVariety::Mixed), otherwise must be `None`.
     pub open_content: Option<OpenContent>,
+    ///  Required if `variety` is [simple](ContentTypeVariety::Simple), otherwise must be `None`.
     pub simple_type_definition: Option<Ref<SimpleTypeDefinition>>,
 }
 
