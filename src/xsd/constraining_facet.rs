@@ -388,6 +388,12 @@ impl ConstrainingFacet {
             ConstrainingFacet::ExplicitTimezone(c) => &c.annotations,
         }
     }
+
+    /// Checks whether `self` is of the same kind as `other`. This effectively only compares the
+    /// _discriminant_, i.e. ignores the data.
+    pub fn is_of_same_kind_as(&self, other: &Self) -> bool {
+        std::mem::discriminant(self) == std::mem::discriminant(other)
+    }
 }
 
 impl WhiteSpace {

@@ -236,18 +236,57 @@ impl SimpleTypeDefinition {
             //   element maps to no component at all (but is not in error solely on account of the
             //   presence of the unknown element).
             ChildType::Restriction => {
-                // TODO ·overlaying· algorithm
-                let mut facet_nodes = Vec::new();
-                for facet in child.children() {
-                    if !facet.is_element() {
-                        continue;
+                if target_namespace == XS_ANY_SIMPLE_TYPE_NAME.namespace_name
+                    && name.as_ref() == Some(&XS_ANY_SIMPLE_TYPE_NAME.local_name)
+                {
+                    // Special handling for xs:anySimpleType, in case it is ever loaded via this
+                    // route and not as builtin: As the base is complex and anySimpleType doesn't
+                    // have any facets, we just yield the empty set here.
+                    Set::new()
+                } else {
+                    let base_type_definition = base_type_definition.simple().expect(
+                        "Any type which is not anySimpleType must have a simple type as base",
+                    );
+
+                    let mut facet_nodes = Vec::new();
+                    for facet in child.children() {
+                        if !facet.is_element() {
+                            continue;
+                        }
+                        if [Self::TAG_NAME, Annotation::TAG_NAME].contains(&facet.tag_name().name())
+                        {
+                            continue;
+                        }
+                        facet_nodes.push(facet);
                     }
-                    if [Self::TAG_NAME, Annotation::TAG_NAME].contains(&facet.tag_name().name()) {
-                        continue;
-                    }
-                    facet_nodes.push(facet);
+                    let facets =
+                        ConstrainingFacet::map_from_xml(ctx, &facet_nodes, schema).unwrap();
+
+                    // Request the component here to avoid a mutable borrow through b
+                    ctx.request(base_type_definition);
+
+                    // Given two sets of facets B and S, the result of overlaying B with S is the
+                    // set of facets R for which all of the following are true:
+                    let s = facets;
+                    let b = &base_type_definition.get(ctx.components()).facets;
+                    let mut r = Vec::<Ref<ConstrainingFacet>>::new();
+
+                    // 1 Every facet in S is in R.
+                    r.extend(s.iter());
+
+                    // 2 Every facet in B is in R, unless it is of the same kind as some facet in S,
+                    //   in which case it is not included in R.
+                    r.extend(b.iter().filter(|f1| {
+                        let f1 = f1.get(ctx.components());
+                        s.iter()
+                            .any(|f2| f1.is_of_same_kind_as(f2.get(ctx.components())))
+                    }));
+
+                    // 3 Every facet in R is required by clause 1 or clause 2 above.
+                    //   --trivial--
+
+                    r
                 }
-                ConstrainingFacet::map_from_xml(ctx, &facet_nodes, schema).unwrap()
             }
             // 3 If the <list> alternative is chosen, then a set with one member, a whiteSpace facet
             //   with {value} = collapse and {fixed} = true.
