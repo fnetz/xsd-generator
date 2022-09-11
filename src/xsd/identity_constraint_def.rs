@@ -63,14 +63,21 @@ impl IdentityConstraintDefinition {
     pub const KEYREF_TAG_NAME: &'static str = "keyref";
     pub const UNIQUE_TAG_NAME: &'static str = "unique";
 
-    pub(super) fn map_from_xml(
+    pub(super) fn map_from_xml_local(
         context: &mut MappingContext,
         icd: Node,
         schema: Node,
-        tlref: Option<Ref<Self>>,
     ) -> Ref<Self> {
-        let ref_ = tlref.unwrap_or_else(|| context.reserve());
+        let self_ref = context.reserve();
+        Self::map_from_xml(context, icd, schema, self_ref)
+    }
 
+    fn map_from_xml(
+        context: &mut MappingContext,
+        icd: Node,
+        schema: Node,
+        self_ref: Ref<Self>,
+    ) -> Ref<Self> {
         let QName {
             local_name: name,
             namespace_name: target_namespace,
@@ -130,7 +137,7 @@ impl IdentityConstraintDefinition {
         let annotations = Annotation::xml_element_set_annotation_mapping(context, &ae);
 
         context.insert(
-            ref_,
+            self_ref,
             Self {
                 annotations,
                 name,
@@ -155,6 +162,6 @@ impl TopLevelMappable for IdentityConstraintDefinition {
         icd: Node,
         schema: Node,
     ) {
-        Self::map_from_xml(context, icd, schema, Some(self_ref));
+        Self::map_from_xml(context, icd, schema, self_ref);
     }
 }

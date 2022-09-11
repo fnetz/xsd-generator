@@ -1,15 +1,15 @@
 use super::simple_type_def::Context as SimpleContext;
 use super::{
     annotation::Annotation,
-    builtins::XS_ANY_TYPE_NAME,
-    complex_type_def::{self, ComplexTypeDefinition},
+    builtins::{XS_ANY_TYPE_NAME, XS_STRING_NAME},
+    complex_type_def::{self, ComplexTypeDefinition, ContentTypeVariety},
     components::{Component, Named, NamedXml},
     identity_constraint_def::IdentityConstraintDefinition,
     mapping_context::TopLevelMappable,
     model_group_def::ModelGroupDefinition,
     shared::{self, TypeDefinition},
     type_alternative::TypeAlternative,
-    values::actual_value,
+    values::{actual_value, ActualValue},
     xstypes::{AnyURI, NCName, QName, Sequence, Set},
     MappingContext, Ref, SimpleTypeDefinition,
 };
@@ -30,17 +30,28 @@ pub struct ElementDeclaration {
     pub identity_constraint_definitions: Set<Ref<IdentityConstraintDefinition>>,
     pub substitution_group_affiliations: Set<Ref<ElementDeclaration>>,
     pub substitution_group_exclusions: Set<GroupExlusion>,
-    pub disallowed_substitutions: Set<SubstitutionMethods>,
+    pub disallowed_substitutions: Set<SubstitutionMethod>,
     pub abstract_: bool,
 }
 
 pub type GroupExlusion = complex_type_def::DerivationMethod;
 
-#[derive(Clone, Debug)]
-pub enum SubstitutionMethods {
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum SubstitutionMethod {
     Substitution,
     Extension,
     Restriction,
+}
+
+impl ActualValue<'_> for SubstitutionMethod {
+    fn convert(src: &str, _parent: Node) -> Self {
+        match src {
+            "substitution" => Self::Substitution,
+            "extension" => Self::Extension,
+            "restriction" => Self::Restriction,
+            _ => panic!("Invalid value for substitution method"),
+        }
+    }
 }
 
 /// Property Record: Type Table (§3.3)
@@ -54,6 +65,7 @@ pub struct TypeTable {
 pub type Scope = shared::Scope<ScopeParent>;
 
 pub use shared::ScopeVariety;
+use shared::ValueConstraintVariety;
 
 #[derive(Clone, Debug)]
 pub enum ScopeParent {
@@ -224,36 +236,99 @@ impl ElementDeclaration {
             .unwrap_or(false);
 
         // {value constraint}
-        //   If there is a default or a fixed [attribute], then a Value
-        //   Constraint as follows, otherwise ·absent·. [Definition:]  Use the
-        //   name effective simple type definition for the declared {type
-        //   definition}, if it is a simple type definition, or, if {type
-        //   definition}.{content type}.{variety} = simple, for {type
-        //   definition}.{content type}.{simple type definition}, or else for
-        //   the built-in string simple type definition).
-        // TODO
-        let value_constraint = None;
+        //   If there is a default or a fixed [attribute], then a Value Constraint as follows,
+        //   otherwise ·absent·.
+        let value_constraint = if element.has_attribute("default") || element.has_attribute("fixed")
+        {
+            // [Definition:]
+            //   Use the name effective simple type definition for the declared {type definition},
+            //   if it is a simple type definition, or, if {type definition}.{content type}
+            //   .{variety} = simple, for {type definition}.{content type}.{simple type definition},
+            //   or else for the built-in string simple type definition).
+            // TODO store as the effective type
+            let _effective_simple_type_definition =
+                if let TypeDefinition::Simple(st) = type_definition {
+                    st
+                } else {
+                    let ct = context.request(type_definition.complex().unwrap());
+                    if ct.content_type.variety == ContentTypeVariety::Simple {
+                        ct.content_type.simple_type_definition.unwrap()
+                    } else {
+                        context.resolve(&XS_STRING_NAME)
+                    }
+                };
+
+            let (variety, value) = if let Some(default) = element.attribute("default") {
+                (ValueConstraintVariety::Default, default)
+            } else if let Some(fixed) = element.attribute("fixed") {
+                (ValueConstraintVariety::Fixed, fixed)
+            } else {
+                unreachable!()
+            };
+
+            Some(ValueConstraint {
+                variety,
+                value: value.into(),
+                lexical_form: value.into(),
+            })
+        } else {
+            None
+        };
 
         // {identity-constraint definitions}
         //   A set consisting of the identity-constraint-definitions
         //   corresponding to all the <key>, <unique> and <keyref> element
         //   information items in the [children], if any, otherwise the empty
         //   set.
-        // TODO
-        let identity_constraint_definitions = Set::new();
+        let identity_constraint_definitions = element
+            .children()
+            .filter(|c| {
+                [
+                    IdentityConstraintDefinition::KEY_TAG_NAME,
+                    IdentityConstraintDefinition::UNIQUE_TAG_NAME,
+                    IdentityConstraintDefinition::KEYREF_TAG_NAME,
+                ]
+                .contains(&c.tag_name().name())
+            })
+            .map(|icd| IdentityConstraintDefinition::map_from_xml_local(context, icd, schema))
+            .collect();
 
         // {substitution group affiliations}
         //   A set of the element declarations ·resolved· to by the items in the
         //   ·actual value· of the substitutionGroup [attribute], if present,
         //   otherwise the empty set.
-        // TODO
-        let substitution_group_affiliations = Set::new();
+        let substitution_group_affiliations = element
+            .attribute("substitutionGroup")
+            .map(|v| actual_value::<Vec<QName>>(v, element))
+            .map(|v| v.iter().map(|c| context.resolve(c)).collect())
+            .unwrap_or_default();
 
-        // TODO impl, doc
-        let disallowed_substitutions = Set::new();
+        // {disallowed substitutions} (see the helper function for explanation)
+        let disallowed_substitutions = Self::map_attrib_set_helper(
+            "block",
+            "blockDefault",
+            &[
+                SubstitutionMethod::Extension,
+                SubstitutionMethod::Restriction,
+                SubstitutionMethod::Substitution,
+            ],
+            element,
+            schema,
+        );
 
-        // TODO same
-        let substitution_group_exclusions = Set::new();
+        // As for {disallowed substitutions} above, but using the final and finalDefault
+        // [attributes] in place of the block and blockDefault [attributes] and with the relevant
+        // set being {extension, restriction}.
+        let substitution_group_exclusions = Self::map_attrib_set_helper(
+            "final",
+            "finalDefault",
+            &[
+                complex_type_def::DerivationMethod::Extension,
+                complex_type_def::DerivationMethod::Restriction,
+            ],
+            element,
+            schema,
+        );
 
         // {abstract}
         //   The ·actual value· of the abstract [attribute], if present,
@@ -347,6 +422,45 @@ impl ElementDeclaration {
             },
         );
         self_ref
+    }
+
+    fn map_attrib_set_helper<'a, T: ActualValue<'a> + PartialEq + Copy>(
+        local_attrib: &str,
+        default_attrib: &str,
+        relevant_set: &[T],
+        element: Node<'a, 'a>,
+        schema: Node<'a, 'a>,
+    ) -> Set<T> {
+        // Comment text is from {disallowed substitutions}, but this applies to {substitution group
+        // exclusions} as well
+
+        // A set depending on the ·actual value· of the block [attribute], if present, otherwise on
+        // the ·actual value· of the blockDefault [attribute] of the ancestor <schema> element
+        // information item, if present, otherwise on the empty string.
+        // Call this the EBV (for effective block value).
+        let effective_value = element
+            .attribute(local_attrib)
+            .or_else(|| schema.attribute(default_attrib))
+            .unwrap_or_default();
+
+        // Then the value of this property is the appropriate case among the following:
+        if effective_value.is_empty() {
+            // 1 If the EBV is the empty string, then the empty set;
+            Set::new()
+        } else if effective_value == "#all" {
+            // 2 If the EBV is #all, then {extension, restriction, substitution};
+            relevant_set.to_vec()
+        } else {
+            // otherwise a set with members drawn from the set above, each being present or absent
+            // depending on whether the ·actual value· (which is a list) contains an equivalently
+            // named item.
+            let effective_block_value = actual_value::<Vec<T>>(effective_value, element);
+            relevant_set
+                .iter()
+                .filter(|m| effective_block_value.contains(m))
+                .copied()
+                .collect()
+        }
     }
 }
 

@@ -11,7 +11,7 @@ use super::{
     particle::{MaxOccurs, Particle},
     shared::TypeDefinition,
     simple_type_def::SimpleTypeDefinition,
-    values::actual_value,
+    values::{actual_value, ActualValue},
     wildcard::{self, Wildcard},
     xstypes::{AnyURI, NCName, QName, Sequence, Set},
     AttributeDeclaration, MappingContext, ModelGroup, Ref, Term,
@@ -46,6 +46,16 @@ pub enum Context {
 pub enum DerivationMethod {
     Extension,
     Restriction,
+}
+
+impl ActualValue<'_> for DerivationMethod {
+    fn convert(src: &str, _parent: Node) -> Self {
+        match src {
+            "extension" => Self::Extension,
+            "restriction" => Self::Restriction,
+            _ => panic!("Invalid value for derivation method"),
+        }
+    }
 }
 
 /// Property Record: Content Type (§3.4)
