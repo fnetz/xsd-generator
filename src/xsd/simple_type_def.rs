@@ -1,7 +1,7 @@
 use super::{
     annotation::Annotation,
     attribute_decl::AttributeDeclaration,
-    builtins::{XS_ANY_SIMPLE_TYPE_NAME, XS_ANY_TYPE_NAME, XS_NAMESPACE},
+    builtins::{XS_ANY_ATOMIC_TYPE_NAME, XS_ANY_SIMPLE_TYPE_NAME, XS_ANY_TYPE_NAME, XS_NAMESPACE},
     complex_type_def::ComplexTypeDefinition,
     components::{Component, Named, RefNamed},
     constraining_facet::{ConstrainingFacet, WhiteSpace, WhiteSpaceValue},
@@ -320,9 +320,25 @@ impl SimpleTypeDefinition {
             ChildType::List => Some(Variety::List),
             ChildType::Union => Some(Variety::Union),
             ChildType::Restriction => {
-                // TODO what happens when the parent variety is ·absent·?
-                // TODO always simple?
-                ctx.request(base_type_definition.simple().unwrap()).variety
+                if target_namespace == XS_ANY_ATOMIC_TYPE_NAME.namespace_name
+                    && name.as_ref() == Some(&XS_ANY_ATOMIC_TYPE_NAME.local_name)
+                {
+                    // The type ·xs:anyAtomicType· is an exception because its {base type
+                    // definition} is ·xs:anySimpleType·, whose {variety} is ·absent·.
+                    // (See pt. 1, §3.16.6.2, clause 1.1)
+                    Some(Variety::Atomic)
+                } else {
+                    let base_type_definition = base_type_definition.simple().expect(
+                        "Any type which is not anySimpleType must have a simple type as base",
+                    );
+
+                    let variety = ctx
+                        .request(base_type_definition)
+                        .variety
+                        .expect("Any type which is not anySimpleType must have a variety");
+
+                    Some(variety)
+                }
             }
         };
 
