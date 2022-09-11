@@ -10,7 +10,7 @@ pub struct ModelGroup {
     pub particles: Sequence<Ref<Particle>>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Compositor {
     All,
     Choice,

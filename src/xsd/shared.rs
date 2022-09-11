@@ -148,7 +148,7 @@ impl TypeDefinition {
 }
 
 /// Supertype of the three types that can appear in [Particle](super::Particle)s (§2.2.3.2)
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum Term {
     ElementDeclaration(Ref<ElementDeclaration>),
     ModelGroup(Ref<ModelGroup>),
@@ -156,6 +156,13 @@ pub enum Term {
 }
 
 impl Term {
+    pub fn model_group(self) -> Option<Ref<ModelGroup>> {
+        match self {
+            Self::ModelGroup(g) => Some(g),
+            _ => None,
+        }
+    }
+
     pub fn is_basic(&self) -> bool {
         matches!(self, Self::ElementDeclaration(_) | Self::Wildcard(_))
     }

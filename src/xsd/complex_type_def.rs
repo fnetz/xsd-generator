@@ -182,6 +182,7 @@ impl ComplexTypeDefinition {
             None,
             schema,
             derivation_method,
+            base_type_definition,
         );
 
         let common = Self::map_common(context, complex_type, schema, ancestor_element);
@@ -223,6 +224,7 @@ impl ComplexTypeDefinition {
             None,
             schema,
             derivation_method.unwrap(),
+            base_type_definition,
         );
 
         let common = Self::map_common(context, complex_type, schema, ancestor_element);
@@ -422,6 +424,7 @@ impl ContentType {
         complex_content: Option<Node>,
         schema: Node,
         derivation_method: DerivationMethod,
+        base_type_definition: TypeDefinition,
     ) -> Self {
         // When the mapping rule below refers to "the [children]", ...
         let children_elem = if let Some(complex_content) = complex_content {
@@ -517,52 +520,15 @@ impl ContentType {
         };
 
         // TODO derivation method == None?
-        // 4 Let the explicit content type be the appropriate case among the following:
-        let explicit_content_type = if derivation_method == DerivationMethod::Restriction {
-            // 4.1 If {derivation method} = restriction, then the appropriate case among the
-            //   following:
-            if let Some(effective_content) = effective_content {
-                // 4.1.2 otherwise a Content Type as follows:
-                // {variety}                 mixed if the ·effective mixed· is true, otherwise
-                //                           element-only
-                // {particle}                The ·effective content·
-                // {open content}           ·absent·
-                // {simple type definition} ·absent·
-                ContentType {
-                    variety: if effective_mixed {
-                        ContentTypeVariety::Mixed
-                    } else {
-                        ContentTypeVariety::ElementOnly
-                    },
-                    particle: Some(effective_content),
-                    open_content: None,
-                    simple_type_definition: None,
-                }
-            } else {
-                // 4.1.1 If the ·effective content· is empty , then a Content Type as follows:
-                // {variety}                empty
-                // {particle}               ·absent·
-                // {open content}           ·absent·
-                // {simple type definition} ·absent·
-                ContentType {
-                    variety: ContentTypeVariety::Empty,
-                    particle: None,
-                    open_content: None,
-                    simple_type_definition: None,
-                }
-            }
-        } else {
-            // 4.2 If {derivation method} = extension, then the appropriate case among the following:
-
-            // 4.2.1 If the {base type definition} is a simple type definition or is a complex type
-            //   definition whose {content type}.{variety} = empty or simple, then a Content Type
-            //   as per clause 4.1.1 and clause 4.1.2 above;
-            // 4.2.2 If the {base type definition} is a complex type definition whose {content
-            //   type}.{variety} = element-only or mixed and the ·effective content· is empty, then
-            //   {base type definition}.{content type};
-            // 4.2.3 otherwise a Content Type as follows:
-            todo!()
-        };
+        // 4 [explicit content type]
+        let explicit_content_type = Self::explicit_content_type(
+            derivation_method,
+            explicit_content,
+            effective_content,
+            effective_mixed,
+            base_type_definition,
+            context,
+        );
 
         // 5 Let the wildcard element be the appropriate case among the following:
         let wildcard_element = if let Some(open_content) = children_elem
@@ -693,8 +659,196 @@ impl ContentType {
         }
     }
 
-    fn map_simple() -> Self {
-        todo!()
+    /// Shared construction code used by both restriction and extension derivation methods
+    fn explicit_content_type_shared(
+        effective_content: Option<Ref<Particle>>,
+        effective_mixed: bool,
+    ) -> ContentType {
+        if let Some(effective_content) = effective_content {
+            // 4.1.2 otherwise a Content Type as follows:
+            // {variety}                 mixed if the ·effective mixed· is true, otherwise
+            //                           element-only
+            // {particle}                The ·effective content·
+            // {open content}           ·absent·
+            // {simple type definition} ·absent·
+            ContentType {
+                variety: if effective_mixed {
+                    ContentTypeVariety::Mixed
+                } else {
+                    ContentTypeVariety::ElementOnly
+                },
+                particle: Some(effective_content),
+                open_content: None,
+                simple_type_definition: None,
+            }
+        } else {
+            // 4.1.1 If the ·effective content· is empty , then a Content Type as follows:
+            // {variety}                empty
+            // {particle}               ·absent·
+            // {open content}           ·absent·
+            // {simple type definition} ·absent·
+            ContentType {
+                variety: ContentTypeVariety::Empty,
+                particle: None,
+                open_content: None,
+                simple_type_definition: None,
+            }
+        }
+    }
+
+    fn explicit_content_type(
+        derivation_method: DerivationMethod,
+        explicit_content: Option<Ref<Particle>>,
+        effective_content: Option<Ref<Particle>>,
+        effective_mixed: bool,
+        base_type_definition: TypeDefinition,
+        context: &mut MappingContext,
+    ) -> ContentType {
+        // 4 Let the explicit content type be the appropriate case among the following:
+        if derivation_method == DerivationMethod::Restriction {
+            // 4.1 If {derivation method} = restriction, then the appropriate case among the
+            //   following:
+            Self::explicit_content_type_shared(effective_content, effective_mixed)
+        } else {
+            // 4.2 If {derivation method} = extension, then the appropriate case among the following:
+
+            // 4.2.1 If the {base type definition} is a simple type definition or is a complex type
+            //   definition whose {content type}.{variety} = empty or simple, then a Content Type
+            //   as per clause 4.1.1 and clause 4.1.2 above;
+            let is_first_case = match base_type_definition {
+                TypeDefinition::Simple(_) => true,
+                TypeDefinition::Complex(c) => matches!(
+                    context.request(c).content_type.variety,
+                    ContentTypeVariety::Empty | ContentTypeVariety::Simple
+                ),
+            };
+
+            if is_first_case {
+                return Self::explicit_content_type_shared(effective_content, effective_mixed);
+            }
+
+            // The base type must be a complex type here
+            let base_type_definition = base_type_definition.complex().unwrap();
+            let base_type_definition = context.request(base_type_definition);
+
+            // 4.2.2 If the {base type definition} is a complex type definition whose {content
+            //   type}.{variety} = element-only or mixed and the ·effective content· is empty, then
+            //   {base type definition}.{content type};
+            if matches!(
+                base_type_definition.content_type.variety,
+                ContentTypeVariety::ElementOnly | ContentTypeVariety::Mixed
+            ) && effective_content.is_none()
+            {
+                return base_type_definition.content_type.clone();
+            };
+
+            // 4.2.3 otherwise a Content Type as follows:
+
+            // {variety} mixed if the ·effective mixed· is true, otherwise element-only
+            let variety = if effective_mixed {
+                ContentTypeVariety::Mixed
+            } else {
+                ContentTypeVariety::ElementOnly
+            };
+
+            // {open content} the {open content} of the {content type} of the {base type definition}.
+            let open_content = base_type_definition.content_type.open_content.clone();
+
+            // {particle}
+            //   Let the base particle be the particle of the {content type} of the
+            //   {base type definition}.
+            // TODO None particle?
+            let base_particle = base_type_definition.content_type.particle.unwrap();
+            let base_particle_d = base_particle.get(context.components());
+
+            let base_has_compositor_all = base_particle_d
+                .term
+                .model_group()
+                .map(|mg| mg.get(context.components()).compositor == Compositor::All)
+                .unwrap_or(false);
+
+            //   Then the appropriate case among the following:
+            // TODO Non-modelgroup term?
+            let particle = if base_has_compositor_all && explicit_content.is_none() {
+                // 4.2.3.1 If the {term} of the ·base particle· has {compositor} all and the
+                //         ·explicit content· is empty, then the ·base particle·.
+                Some(base_particle)
+            } else if base_has_compositor_all
+                && effective_content
+                    .map(|ec| {
+                        ec.get(context.components())
+                            .term
+                            .model_group()
+                            .map(|mg| mg.get(context.components()).compositor == Compositor::All)
+                            .unwrap_or(false)
+                    })
+                    .unwrap_or(false)
+            {
+                // 4.2.3.2 If the {term} of the ·base particle· has {compositor} all and the {term}
+                //         of the ·effective content· also has {compositor} all, then a Particle
+                //         whose properties are as follows:
+
+                // {term} a model group whose {compositor} is all and whose {particles} are the
+                //        {particles} of the {term} of the ·base particle· followed by the
+                //        {particles} of the {term} of the ·effective content·.
+                let term = context.create(ModelGroup {
+                    compositor: Compositor::All,
+                    particles: base_particle_d
+                        .term
+                        .model_group()
+                        .unwrap()
+                        .get(context.components())
+                        .particles
+                        .iter()
+                        .copied()
+                        .chain(
+                            effective_content
+                                .unwrap()
+                                .get(context.components())
+                                .term
+                                .model_group()
+                                .unwrap()
+                                .get(context.components())
+                                .particles
+                                .iter()
+                                .copied(),
+                        )
+                        .collect(),
+                    annotations: Sequence::new(),
+                });
+                Some(
+                    context.create(Particle {
+                        min_occurs: effective_content
+                            .unwrap()
+                            .get(context.components())
+                            .min_occurs,
+                        max_occurs: MaxOccurs::Count(1),
+                        term: Term::ModelGroup(term),
+                        annotations: Sequence::new(),
+                    }),
+                )
+            } else {
+                // TODO effective content None?
+                let mg = context.create(ModelGroup {
+                    compositor: Compositor::Sequence,
+                    particles: vec![base_particle, effective_content.unwrap()],
+                    annotations: Sequence::new(),
+                });
+                Some(context.create(Particle {
+                    min_occurs: 1,
+                    max_occurs: MaxOccurs::Count(1),
+                    term: Term::ModelGroup(mg),
+                    annotations: Sequence::new(),
+                }))
+            };
+
+            Self {
+                variety,
+                particle,
+                open_content,
+                simple_type_definition: None,
+            }
+        }
     }
 }
 
