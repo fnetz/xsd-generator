@@ -1,3 +1,5 @@
+use crate::xsd::fundamental_facet::{CardinalityValue, OrderedValue};
+
 use super::{
     annotation::Annotation,
     attribute_decl::AttributeDeclaration,
@@ -6,7 +8,7 @@ use super::{
     components::{Component, Named, RefNamed},
     constraining_facet::{ConstrainingFacet, WhiteSpace, WhiteSpaceValue},
     element_decl::ElementDeclaration,
-    fundamental_facet::FundamentalFacet,
+    fundamental_facet::{FundamentalFacet, FundamentalFacetSet},
     mapping_context::{MappingContext, TopLevelMappable},
     shared::TypeDefinition,
     values::actual_value,
@@ -29,7 +31,7 @@ pub struct SimpleTypeDefinition {
     /// [Complex Type Definition](ComplexTypeDefinition), as its `base_type_definition`.
     pub base_type_definition: TypeDefinition,
     pub facets: Set<Ref<ConstrainingFacet>>,
-    pub fundamental_facets: Set<FundamentalFacet>,
+    pub fundamental_facets: FundamentalFacetSet,
     /// Required for all Simple Type Definitions except `anySimpleType`, in which it is `None`.
     pub variety: Option<Variety>,
     /// With one exception, required if `variety` is atomic, otherwise must be `None`. The exception
@@ -467,7 +469,108 @@ impl SimpleTypeDefinition {
         }
 
         // TODO
-        let fundamental_facets = Set::new();
+        let fundamental_facets = {
+            let base_type_definition = base_type_definition.simple().unwrap();
+            ctx.request(base_type_definition);
+            let base_type_definition = base_type_definition.get(ctx.components());
+
+            // === ordered ===
+            // The appropriate case among the following must be true:
+            let ordered = match variety.unwrap() {
+                // 1 If the ·owner's· {variety} is atomic, then the appropriate case among the following must be true:
+                Variety::Atomic => {
+                    // 1.1 If the ·owner· is ·primitive·, then {value} is as specified in the table
+                    //     in Fundamental Facets (§F.1).
+                    // -- currently not applicable --
+                    // 1.2 otherwise {value} is the ·owner's· {base type definition}'s ordered {value}.
+                    base_type_definition.fundamental_facets.ordered().unwrap()
+                }
+                // 2 If the ·owner's· {variety} is list, then {value} is false.
+                Variety::List => OrderedValue::False,
+                // 3 otherwise the ·owner's· {variety} is union; the appropriate case among the following must be true:
+                Variety::Union => {
+                    let member_type_definitions = member_type_definitions.as_ref().unwrap();
+                    // 3.1 If every ·basic member· of the ·owner· has {variety} atomic and has the
+                    //     same {primitive type definition}, then {value} is the same as the ordered
+                    //     component's {value} in that primitive type definition's {fundamental
+                    //     facets}.
+                    // TODO
+
+                    // 3.2 If each member of the ·owner's· {member type definitions} has an ordered
+                    //     component in its {fundamental facets} whose {value} is false, then
+                    //     {value} is false.
+                    if member_type_definitions.iter().all(|&member| {
+                        let member = ctx.request(member);
+                        member.fundamental_facets.ordered() == Some(OrderedValue::False)
+                    }) {
+                        OrderedValue::False
+                    } else {
+                        // 3.3 otherwise {value} is partial.
+                        OrderedValue::Partial
+                    }
+                }
+            };
+
+            // === bounded ===
+            // When the ·owner· is ·primitive·, {value} is as specified in the table in
+            // Fundamental Facets (§F.1).
+            // -- currently not applicable --
+
+            let bounded = match variety.unwrap() {
+                Variety::Atomic => {
+                    // Otherwise, when the ·owner's· {variety} is atomic, if one of minInclusive
+                    // or minExclusive and one of maxInclusive or maxExclusive are members of
+                    // the ·owner's· {facets} set, then {value} is true; otherwise {value} is
+                    // false.
+                    facets.iter().any(|facet| {
+                        matches!(
+                            facet.get(ctx.components()),
+                            ConstrainingFacet::MinInclusive(_) | ConstrainingFacet::MinExclusive(_)
+                        )
+                    }) && facets.iter().any(|facet| {
+                        matches!(
+                            facet.get(ctx.components()),
+                            ConstrainingFacet::MaxInclusive(_) | ConstrainingFacet::MaxExclusive(_)
+                        )
+                    })
+                }
+                // When the ·owner's· {variety} is list, {value} is false.
+                Variety::List => false,
+                Variety::Union => {
+                    // When the ·owner's· {variety} is union, if {value} is true for every member of
+                    // the ·owner's· {member type definitions} set and all of the ·owner's·
+                    // ·basic members· have the same {primitive type definition}, then {value} is
+                    // true; otherwise {value} is false.
+                    // TODO
+                    false
+                }
+            };
+
+            // === cardinality ===
+            // When the ·owner· is ·primitive·, {value} is as specified in the table in
+            // Fundamental Facets (§F.1).
+            // -- currently not applicable --
+
+            let cardinality = match variety.unwrap() {
+                Variety::Atomic => {
+                    // TODO docs
+                    Self::map_cardinality_atomic(
+                        ctx,
+                        &facets,
+                        base_type_definition,
+                        todo!(),
+                    )
+                }
+                Variety::List => todo!(),
+                Variety::Union => todo!(),
+            };
+
+            FundamentalFacetSet::new(vec![
+                FundamentalFacet::Ordered(ordered),
+                FundamentalFacet::Bounded(bounded),
+                FundamentalFacet::Cardinality(cardinality),
+            ])
+        };
 
         ctx.insert(
             self_ref,
@@ -490,11 +593,68 @@ impl SimpleTypeDefinition {
         self_ref
     }
 
+    fn map_cardinality_atomic(
+        ctx: &MappingContext,
+        facets: &[Ref<ConstrainingFacet>],
+        base_type_definition: &SimpleTypeDefinition,
+        primitive_type_definition: &SimpleTypeDefinition,
+    ) -> CardinalityValue {
+        // Otherwise, when the ·owner's· {variety} is atomic, {value} is countably infinite unless
+        // any of the following conditions are true, in which case {value} is finite:
+        if base_type_definition.fundamental_facets.cardinality() == Some(CardinalityValue::Finite) {
+            return CardinalityValue::Finite;
+        }
+
+        if facets.iter().any(|facet| {
+            matches!(
+                facet.get(ctx.components()),
+                ConstrainingFacet::Length(_)
+                    | ConstrainingFacet::MaxLength(_)
+                    | ConstrainingFacet::TotalDigits(_)
+            )
+        }) {
+            return CardinalityValue::Finite;
+        }
+
+        if !facets.iter().any(|facet| {
+            matches!(
+                facet.get(ctx.components()),
+                ConstrainingFacet::MinInclusive(_) | ConstrainingFacet::MinExclusive(_)
+            )
+        }) {
+            return CardinalityValue::CountablyInfinite;
+        }
+
+        if !facets.iter().any(|facet| {
+            matches!(
+                facet.get(ctx.components()),
+                ConstrainingFacet::MaxInclusive(_) | ConstrainingFacet::MaxExclusive(_)
+            )
+        }) {
+            return CardinalityValue::CountablyInfinite;
+        }
+
+        if facets.iter().any(|facet| {
+            matches!(
+                facet.get(ctx.components()),
+                ConstrainingFacet::FractionDigits(_)
+            )
+        }) {
+            return CardinalityValue::Finite;
+        }
+
+        // TODO {primitive type definition} is one of date, gYearMonth, gYear, gMonthDay, gDay or gMonth
+
+        CardinalityValue::CountablyInfinite
+    }
+
     pub fn is_primitive(&self) -> bool {
         if self.target_namespace.as_deref() != Some(XS_NAMESPACE) {
             false
         } else if let Some(name) = self.name.as_ref() {
-            // TODO "All ·primitive· datatypes have anyAtomicType as their ·base type·" -> optimize
+            // A type definition has ·xs:anyAtomicType· as its {base type definition} if and only if
+            // it is one of the primitive datatypes. (pt. 1, §3.16.1, paragraph 5)
+            // TODO ↑
             matches!(
                 name.as_str(),
                 "string"

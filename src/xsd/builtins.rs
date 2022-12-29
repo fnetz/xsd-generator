@@ -5,7 +5,9 @@ use super::constraining_facet::{
     ConstrainingFacet, ExplicitTimezone, ExplicitTimezoneValue, FractionDigits, Length, MinMax,
     Pattern, WhiteSpace, WhiteSpaceValue,
 };
-use super::fundamental_facet::{CardinalityValue, FundamentalFacet, OrderedValue};
+use super::fundamental_facet::{
+    CardinalityValue, FundamentalFacet, FundamentalFacetSet, OrderedValue,
+};
 use super::mapping_context::MappingContext;
 use super::model_group::Compositor;
 use super::particle::MaxOccurs;
@@ -135,7 +137,7 @@ fn register_special_types(context: &mut MappingContext) {
             context: None,
             base_type_definition: TypeDefinition::Complex(xs_any_type),
             facets: Set::new(),
-            fundamental_facets: Set::new(),
+            fundamental_facets: FundamentalFacetSet::empty(),
             variety: None,
             primitive_type_definition: None,
             item_type_definition: None,
@@ -157,7 +159,7 @@ fn register_special_types(context: &mut MappingContext) {
             context: None,
             base_type_definition: xs_any_simple_type_def,
             facets: Set::new(),
-            fundamental_facets: Set::new(),
+            fundamental_facets: FundamentalFacetSet::empty(),
             variety: Some(simple_type_def::Variety::Atomic),
             primitive_type_definition: None,
             item_type_definition: None,
@@ -186,7 +188,7 @@ fn register_xs_error(context: &mut MappingContext) {
         context: None,
         base_type_definition: xs_any_simple_type_def,
         facets: Set::new(),
-        fundamental_facets: Set::new(),
+        fundamental_facets: FundamentalFacetSet::empty(),
         variety: Some(simple_type_def::Variety::Union),
         primitive_type_definition: None,
         item_type_definition: None,
@@ -269,6 +271,7 @@ fn register_builtin_primitive_types(context: &mut MappingContext) {
         ]
         .into_iter()
         .collect();
+        let fundamental_facets = FundamentalFacetSet::new(fundamental_facets);
 
         // Constraining facets (whiteSpace)
         let (ws_value, ws_fixed) = match name {
@@ -831,7 +834,7 @@ fn register_builtin_ordinary_types(context: &mut MappingContext) {
                     context: Some(simple_type_def::Context::SimpleType(simple_type_ref)),
                     base_type_definition: xs_any_simple_type,
                     facets: Set::new(),
-                    fundamental_facets: Set::new(),
+                    fundamental_facets: FundamentalFacetSet::empty(),
                     variety: Some(simple_type_def::Variety::List),
                     primitive_type_definition: None,
                     item_type_definition: Some(item_type),
@@ -848,6 +851,7 @@ fn register_builtin_ordinary_types(context: &mut MappingContext) {
         ]
         .into_iter()
         .collect();
+        let fundamental_facets = FundamentalFacetSet::new(fundamental_facets);
 
         let (variety, item_type) = match variety {
             OrdinaryVariety::Atomic => (simple_type_def::Variety::Atomic, None),
@@ -939,7 +943,7 @@ fn register_builtin_attribute_decls(context: &mut MappingContext) {
         annotations: Sequence::new(),
         final_: Set::new(),
         context: Some(simple_type_def::Context::Attribute(xsi_schema_location)),
-        fundamental_facets: Set::new(),
+        fundamental_facets: FundamentalFacetSet::empty(),
         primitive_type_definition: None,
         member_type_definitions: None,
     });
