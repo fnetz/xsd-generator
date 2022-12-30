@@ -32,7 +32,8 @@ pub struct SimpleTypeDefinition {
     pub base_type_definition: TypeDefinition,
     pub facets: Set<Ref<ConstrainingFacet>>,
     pub fundamental_facets: FundamentalFacetSet,
-    /// Required for all Simple Type Definitions except `anySimpleType`, in which it is `None`.
+    /// One of {atomic, list, union}.
+    /// Required for all Simple Type Definitions except `xs:anySimpleType`, in which it is `absent`.
     pub variety: Option<Variety>,
     /// With one exception, required if `variety` is atomic, otherwise must be `None`. The exception
     /// is `anyAtomicType`, whose `primitive_type_definition` is `None`. If not `None`, must be a
