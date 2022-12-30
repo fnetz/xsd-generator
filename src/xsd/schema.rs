@@ -49,7 +49,7 @@ impl Schema {
             let namespace = import.attribute("namespace");
             match namespace {
                 Some("http://www.w3.org/XML/1998/namespace") => {
-                    let xsd = std::fs::read_to_string("xml.xsd").unwrap();
+                    let xsd = std::fs::read_to_string("schemas/xml.xsd").unwrap();
                     let xsd = roxmltree::Document::parse(&xsd).unwrap();
                     let child_schema = xsd.root_element();
                     let mut child_context = context.create_subcontext(child_schema);
