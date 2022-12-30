@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use naming::{CamelCase, PascalCase, SnakeCase};
 
-use syn::{Field, Ident, Item, ItemEnum, Type, __private::Span, parse_quote};
+use syn::{Field, Ident, Item, ItemEnum, Type, __private::Span, parse_quote, Fields, Variant};
 
 use crate::xsd::complex_type_def::Context as ComplexContext;
 use crate::xsd::simple_type_def::Context as SimpleContext;
@@ -207,6 +207,23 @@ fn get_simple_type_name(ctx: &mut GeneratorContext, simple_type: &SimpleTypeDefi
         .unwrap_or_else(|| "UnnamedType".into()) // TODO can name be none here?
 }
 
+fn visit_simple_type_inline(
+    ctx: &mut GeneratorContext,
+    simple_type_ref: Ref<SimpleTypeDefinition>,
+) -> Type {
+    let simple_type = simple_type_ref.get(ctx.table);
+
+    if let Some(ref name) = simple_type.name {
+        // Named type => has a named struct
+        let name = Ident::new(name, Span::call_site());
+        parse_quote!(#name)
+    } else {
+        // Unnamed type => create inline type
+        let _variety = simple_type.variety.unwrap(); // TODO
+        todo!()
+    }
+}
+
 fn visit_simple_type(ctx: &mut GeneratorContext, simple_type_ref: Ref<SimpleTypeDefinition>) {
     if !ctx.visited_simple_types.insert(simple_type_ref) {
         return;
@@ -240,13 +257,33 @@ fn visit_simple_type(ctx: &mut GeneratorContext, simple_type_ref: Ref<SimpleType
             let item_name = Ident::new(&item_name, Span::call_site());
 
             parse_quote! {
-                pub type #name = Vec<#item_name>;
+                pub struct #name(Vec<#item_name>);
             }
         }
         Some(SimpleVariety::Union) => {
-            // TODO
+            let member_types = simple_type.member_type_definitions.as_ref().unwrap();
+
+            let mut variants = Vec::new();
+            for member in member_types {
+                let content = visit_simple_type_inline(ctx, *member);
+                let variant_name = if let Some(ref name) = member.get(ctx.table).name {
+                    name.as_str()
+                } else {
+                    "Unnamed"
+                };
+                let variant_name = Ident::new(variant_name, Span::call_site());
+                variants.push(Variant {
+                    ident: variant_name,
+                    fields: Fields::Unnamed(parse_quote! { (#content) }),
+                    attrs: Vec::new(),
+                    discriminant: None,
+                });
+            }
+
             parse_quote! {
-                pub enum #name {}
+                pub enum #name {
+                    #(#variants),*
+                }
             }
         }
         None => todo!("anySimpleType"),
