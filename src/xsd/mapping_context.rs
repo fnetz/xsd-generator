@@ -7,7 +7,7 @@ use super::{
         Component, ComponentResolver, ComponentTraits, ConstructionComponentTable, DynamicRef,
         HasArenaContainer, Lookup, LookupTables, RefNamed,
     },
-    xstypes::QName,
+    xstypes::{QName, AnyURI},
     AttributeDeclaration, AttributeGroupDefinition, ComplexTypeDefinition, ElementDeclaration,
     IdentityConstraintDefinition, ModelGroupDefinition, NotationDeclaration, Ref,
     SimpleTypeDefinition,

@@ -13,6 +13,7 @@ pub mod element_decl;
 pub mod error;
 pub mod fundamental_facet;
 pub mod identity_constraint_def;
+pub mod import;
 pub mod model_group;
 pub mod model_group_def;
 pub mod notation_decl;

@@ -5,6 +5,7 @@ use super::{
     components::{Component, ComponentTraits, HasArenaContainer, Lookup, LookupTables, NamedXml},
     element_decl::ElementDeclaration,
     identity_constraint_def::IdentityConstraintDefinition,
+    import::Import,
     mapping_context::{RootContext, TopLevel, TopLevelElements},
     model_group_def::ModelGroupDefinition,
     notation_decl::NotationDeclaration,
@@ -43,10 +44,11 @@ impl Schema {
 
         for import in schema
             .children()
-            .filter(|c| c.tag_name().name() == "import")
+            .filter(|c| c.tag_name().name() == Import::TAG_NAME)
         {
-            let namespace = import.attribute("namespace");
-            match namespace {
+            let import = Import::map_from_xml(import, schema).unwrap();
+
+            match import.namespace.as_deref() {
                 Some("http://www.w3.org/XML/1998/namespace") => {
                     let xsd = std::fs::read_to_string("schemas/xml.xsd").unwrap();
                     let xsd = roxmltree::Document::parse(&xsd).unwrap();
@@ -144,7 +146,9 @@ impl Schema {
                     );
                 }
 
-                Annotation::TAG_NAME | "import" => {}
+                // These tags don't directly contribute top-level components
+                Annotation::TAG_NAME | Import::TAG_NAME => {}
+
                 _ => panic!(
                     "Unknown top level element {}",
                     top_level_element.tag_name().name()
