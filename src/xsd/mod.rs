@@ -50,7 +50,7 @@ pub use type_alternative::TypeAlternative;
 pub use wildcard::Wildcard;
 
 pub use components::{Ref, RefNamed};
-use mapping_context::MappingContext;
+use mapping_context::{MappingContext, RootContext};
 use xstypes::{Sequence, Set};
 
 use crate::cli::{BuiltinOverwriteAction, RegisterBuiltins};
@@ -63,8 +63,14 @@ pub fn read_schema(
     register_builtins: RegisterBuiltins,
 ) -> (Schema, SchemaComponentTable) {
     let schema = schema.root_element();
-    let mut ctx = MappingContext::new(schema, builtin_overwrite, register_builtins);
-    let schema = Schema::map_from_xml(&mut ctx, schema);
-    let components = ctx.take_components().convert_to_schema_table().unwrap();
+    let mut root_context = RootContext::new(builtin_overwrite);
+    if register_builtins == RegisterBuiltins::Yes {
+        builtins::register_builtins(&mut root_context);
+    }
+    let schema = Schema::map_from_xml(&mut root_context, schema);
+    let components = root_context
+        .into_components()
+        .convert_to_schema_table()
+        .unwrap();
     (schema, components)
 }

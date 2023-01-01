@@ -8,7 +8,7 @@ use super::constraining_facet::{
 use super::fundamental_facet::{
     CardinalityValue, FundamentalFacet, FundamentalFacetSet, OrderedValue,
 };
-use super::mapping_context::MappingContext;
+use super::mapping_context::RootContext;
 use super::model_group::Compositor;
 use super::particle::MaxOccurs;
 use super::simple_type_def::{self, SimpleTypeDefinition};
@@ -38,7 +38,7 @@ lazy_static! {
     pub static ref XS_STRING_NAME: QName = QName::with_namespace(XS_NAMESPACE, "string");
 }
 
-pub(super) fn register_builtins(context: &mut MappingContext) {
+pub(super) fn register_builtins(context: &mut RootContext) {
     register_xs_any_type(context);
     register_special_types(context);
     register_xs_error(context);
@@ -49,7 +49,7 @@ pub(super) fn register_builtins(context: &mut MappingContext) {
 }
 
 /// Registers the only built-in complex type, `xs:anyType` (§3.4.7 Built-in Complex Type Definition)
-fn register_xs_any_type(context: &mut MappingContext) {
+fn register_xs_any_type(context: &mut RootContext) {
     // The inner particle of ·xs:anyType· contains a wildcard which matches any element:
     let inner_particle_term = context.create(Wildcard {
         namespace_constraint: NamespaceConstraint {
@@ -122,7 +122,7 @@ fn register_xs_any_type(context: &mut MappingContext) {
 /// Registers the special built-in datatypes, `xs:anySimpleType` and ` xs:anyAtomicType`
 /// (see Specification pt. 2, §3.2 Special Built-in Datatypes; and pt. 2, §4.1.6 Built-in Simple
 /// Type Definitions)
-fn register_special_types(context: &mut MappingContext) {
+fn register_special_types(context: &mut RootContext) {
     let xs_any_type = context.resolve(&XS_ANY_TYPE_NAME);
 
     // anySimpleType (pt. 2, §3.2.1)
@@ -171,7 +171,7 @@ fn register_special_types(context: &mut MappingContext) {
 }
 
 /// Registers the built-in `xs:error` type (see Specification pt. 1, §3.16.7.3)
-fn register_xs_error(context: &mut MappingContext) {
+fn register_xs_error(context: &mut RootContext) {
     let xs_any_simple_type_def = context.resolve(&XS_ANY_SIMPLE_TYPE_NAME);
 
     let xs_error = context.create(SimpleTypeDefinition {
@@ -226,7 +226,7 @@ impl PrimitiveInfo {
 
 /// Registers the 19 builtin primitive types given by the Specification, according to
 /// pt. 1, §3.16.7.4
-fn register_builtin_primitive_types(context: &mut MappingContext) {
+fn register_builtin_primitive_types(context: &mut RootContext) {
     // The list of primitive type names, along with their fundamental facets (from Table F.1):
     // (name, ordered, bounded, cardinality, numeric)
     use CardinalityValue::*;
@@ -399,7 +399,7 @@ struct OrdinaryInfo {
     // TODO annotations
 }
 
-fn register_builtin_ordinary_types(context: &mut MappingContext) {
+fn register_builtin_ordinary_types(context: &mut RootContext) {
     use CardinalityValue::*;
     use FixedValue::*;
     use OrderedValue::*;
@@ -900,7 +900,7 @@ fn register_builtin_ordinary_types(context: &mut MappingContext) {
     }
 }
 
-fn register_builtin_attribute_decls(context: &mut MappingContext) {
+fn register_builtin_attribute_decls(context: &mut RootContext) {
     let qname = context.resolve(&XS_QNAME_NAME);
     let boolean = context.resolve(&XS_BOOLEAN_NAME);
     let any_uri = context.resolve(&XS_ANY_URI_NAME);
@@ -1034,19 +1034,12 @@ pub fn is_builtin_attribute_decl_name(name: &QName) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cli::{BuiltinOverwriteAction, RegisterBuiltins};
+    use crate::cli::BuiltinOverwriteAction;
 
     #[test]
     fn registers_builtins_without_crashing() {
-        let mock_schema = roxmltree::Document::parse("<schema/>").unwrap();
-        let mock_schema = mock_schema.root_element();
+        let mut root_context = RootContext::new(BuiltinOverwriteAction::Deny);
 
-        let mut context = MappingContext::new(
-            mock_schema,
-            BuiltinOverwriteAction::Deny,
-            RegisterBuiltins::No,
-        );
-
-        register_builtins(&mut context);
+        register_builtins(&mut root_context);
     }
 }

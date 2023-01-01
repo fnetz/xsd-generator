@@ -12,7 +12,7 @@ use super::{
     IdentityConstraintDefinition, ModelGroupDefinition, NotationDeclaration, Ref,
     SimpleTypeDefinition,
 };
-use crate::cli::{BuiltinOverwriteAction, RegisterBuiltins};
+use crate::cli::BuiltinOverwriteAction;
 
 #[derive(Default)]
 pub(super) struct TopLevelElements<'a, 'input> {
@@ -87,95 +87,25 @@ where
     );
 }
 
-struct RootContextCore {
+pub struct RootContext {
     components: ConstructionComponentTable,
     resolver: ComponentResolver,
 }
 
-enum ContextCore<'p> {
-    Root(Box<RootContextCore>),
-    Child(&'p mut RootContextCore),
-}
-
-pub(super) struct MappingContext<'a, 'input: 'a, 'p> {
-    core: ContextCore<'p>,
-
-    pub top_level_refs: TopLevelElements<'a, 'input>,
-    in_progress_top_level: HashSet<DynamicRef>,
-
-    schema_node: Node<'a, 'input>,
-}
-
-impl<'a, 'input: 'a, 'p> MappingContext<'a, 'input, 'p> {
-    pub(super) fn new(
-        schema: Node<'a, 'input>,
-        builtin_overwrite: BuiltinOverwriteAction,
-        register_builtins: RegisterBuiltins,
-    ) -> Self {
-        let mut context = MappingContext {
-            core: ContextCore::Root(Box::new(RootContextCore {
-                components: ConstructionComponentTable::new(),
-                resolver: ComponentResolver::new(builtin_overwrite),
-            })),
-            top_level_refs: TopLevelElements::default(),
-            in_progress_top_level: HashSet::new(),
-            schema_node: schema,
-        };
-        if register_builtins == RegisterBuiltins::Yes {
-            super::builtins::register_builtins(&mut context);
-        }
-        context
-    }
-
-    pub(super) fn create_subcontext<'c, 'd: 'c, 'q>(
-        &'q mut self,
-        schema: Node<'c, 'd>,
-    ) -> MappingContext<'c, 'd, 'q> {
-        let core = match &mut self.core {
-            ContextCore::Root(r) => r.as_mut(),
-            ContextCore::Child(c) => c,
-        };
-        MappingContext::<'c, 'd, 'q> {
-            core: ContextCore::Child(core),
-            top_level_refs: TopLevelElements::default(),
-            in_progress_top_level: HashSet::new(),
-            schema_node: schema,
-        }
-    }
-
-    pub(super) fn resolver(&self) -> &ComponentResolver {
-        match &self.core {
-            ContextCore::Root(r) => &r.resolver,
-            ContextCore::Child(c) => &c.resolver,
-        }
-    }
-
-    pub(super) fn resolver_mut(&mut self) -> &mut ComponentResolver {
-        match &mut self.core {
-            ContextCore::Root(r) => &mut r.resolver,
-            ContextCore::Child(c) => &mut c.resolver,
+impl RootContext {
+    pub fn new(builtin_overwrite: BuiltinOverwriteAction) -> Self {
+        Self {
+            components: ConstructionComponentTable::new(),
+            resolver: ComponentResolver::new(builtin_overwrite),
         }
     }
 
     pub(super) fn components(&self) -> &ConstructionComponentTable {
-        match &self.core {
-            ContextCore::Root(r) => &r.components,
-            ContextCore::Child(c) => &c.components,
-        }
+        &self.components
     }
 
-    pub(super) fn components_mut(&mut self) -> &mut ConstructionComponentTable {
-        match &mut self.core {
-            ContextCore::Root(r) => &mut r.components,
-            ContextCore::Child(c) => &mut c.components,
-        }
-    }
-
-    pub(super) fn take_components(self) -> ConstructionComponentTable {
-        match self.core {
-            ContextCore::Root(r) => r.components,
-            ContextCore::Child(_) => panic!("You can't take components from a child!"),
-        }
+    pub fn into_components(self) -> ConstructionComponentTable {
+        self.components
     }
 
     /// Wrapper for [`ComponentResolver::register()`]
@@ -184,12 +114,7 @@ impl<'a, 'input: 'a, 'p> MappingContext<'a, 'input, 'p> {
         R: RefNamed + Copy,
         LookupTables: Lookup<R>,
     {
-        // Need to explicitly get resolver/components, or Rust complains about
-        // double borrow for resolver and components
-        match &mut self.core {
-            ContextCore::Root(r) => r.resolver.register(value, &r.components),
-            ContextCore::Child(c) => c.resolver.register(value, &c.components),
-        }
+        self.resolver.register(value, &self.components)
     }
 
     pub(super) fn reserve<R>(&mut self) -> Ref<R>
@@ -197,7 +122,7 @@ impl<'a, 'input: 'a, 'p> MappingContext<'a, 'input, 'p> {
         R: Component,
         ComponentTraits: HasArenaContainer<R>,
     {
-        self.components_mut().reserve::<R>()
+        self.components.reserve::<R>()
     }
 
     pub(super) fn create<R>(&mut self, value: R) -> Ref<R>
@@ -205,7 +130,7 @@ impl<'a, 'input: 'a, 'p> MappingContext<'a, 'input, 'p> {
         R: Component,
         ComponentTraits: HasArenaContainer<R>,
     {
-        self.components_mut().create(value)
+        self.components.create(value)
     }
 
     pub(super) fn insert<R>(&mut self, ref_: Ref<R>, value: R) -> Ref<R>
@@ -213,15 +138,7 @@ impl<'a, 'input: 'a, 'p> MappingContext<'a, 'input, 'p> {
         R: Component,
         ComponentTraits: HasArenaContainer<R>,
     {
-        self.components_mut().insert(ref_, value)
-    }
-
-    pub(super) fn register_with_name<R>(&mut self, name: QName, value: R)
-    where
-        R: Copy,
-        LookupTables: Lookup<R>,
-    {
-        self.resolver_mut().register_with_name(name, value)
+        self.components.insert(ref_, value)
     }
 
     pub(super) fn resolve<R>(&self, key: &QName) -> R
@@ -229,7 +146,75 @@ impl<'a, 'input: 'a, 'p> MappingContext<'a, 'input, 'p> {
         R: Copy,
         LookupTables: Lookup<R>,
     {
-        self.resolver().resolve(key)
+        self.resolver.resolve(key)
+    }
+}
+
+pub(super) struct MappingContext<'a, 'input: 'a, 'p> {
+    root: &'p mut RootContext,
+
+    schema_node: Node<'a, 'input>,
+
+    pub top_level_refs: TopLevelElements<'a, 'input>,
+    in_progress_top_level: HashSet<DynamicRef>,
+}
+
+impl<'a, 'input: 'a, 'p> MappingContext<'a, 'input, 'p> {
+    pub(super) fn new(root: &'p mut RootContext, schema_node: Node<'a, 'input>) -> Self {
+        Self {
+            root,
+            schema_node,
+            top_level_refs: TopLevelElements::default(),
+            in_progress_top_level: HashSet::new(),
+        }
+    }
+
+    pub(super) fn root_mut(&mut self) -> &mut RootContext {
+        self.root
+    }
+
+    pub(super) fn components(&self) -> &ConstructionComponentTable {
+        &self.root.components
+    }
+
+    pub(super) fn reserve<R>(&mut self) -> Ref<R>
+    where
+        R: Component,
+        ComponentTraits: HasArenaContainer<R>,
+    {
+        self.root.reserve::<R>()
+    }
+
+    pub(super) fn create<R>(&mut self, value: R) -> Ref<R>
+    where
+        R: Component,
+        ComponentTraits: HasArenaContainer<R>,
+    {
+        self.root.create(value)
+    }
+
+    pub(super) fn insert<R>(&mut self, ref_: Ref<R>, value: R) -> Ref<R>
+    where
+        R: Component,
+        ComponentTraits: HasArenaContainer<R>,
+    {
+        self.root.insert(ref_, value)
+    }
+
+    pub(super) fn register_with_name<R>(&mut self, name: QName, value: R)
+    where
+        R: Copy,
+        LookupTables: Lookup<R>,
+    {
+        self.root.resolver.register_with_name(name, value)
+    }
+
+    pub(super) fn resolve<R>(&self, key: &QName) -> R
+    where
+        R: Copy,
+        LookupTables: Lookup<R>,
+    {
+        self.root.resolve(key)
     }
 
     fn ensure_top_level_is_present<C>(&mut self, ref_: Ref<C>, node: Node)
@@ -243,11 +228,11 @@ impl<'a, 'input: 'a, 'p> MappingContext<'a, 'input, 'p> {
             panic!("Invalid circular dependency detected!");
         }
 
-        if !self.components().is_present(ref_) {
+        if !self.root.components.is_present(ref_) {
             self.in_progress_top_level.insert(dynref);
 
             C::map_from_top_level_xml(self, ref_, node, self.schema_node);
-            assert!(self.components().is_present(ref_));
+            assert!(self.root.components.is_present(ref_));
 
             let was_removed = self.in_progress_top_level.remove(&dynref);
             assert!(was_removed);
@@ -264,7 +249,7 @@ impl<'a, 'input: 'a, 'p> MappingContext<'a, 'input, 'p> {
         if let Some(node) = node {
             self.ensure_top_level_is_present(ref_, node);
         }
-        ref_.get(self.components())
+        ref_.get(&self.root.components)
     }
 
     pub(super) fn request_ref_by_node<C>(&mut self, node: Node) -> Ref<C>

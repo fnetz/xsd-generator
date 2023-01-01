@@ -5,7 +5,7 @@ use super::{
     components::{Component, ComponentTraits, HasArenaContainer, Lookup, LookupTables, NamedXml},
     element_decl::ElementDeclaration,
     identity_constraint_def::IdentityConstraintDefinition,
-    mapping_context::{TopLevel, TopLevelElements},
+    mapping_context::{RootContext, TopLevel, TopLevelElements},
     model_group_def::ModelGroupDefinition,
     notation_decl::NotationDeclaration,
     shared::TypeDefinition,
@@ -28,11 +28,10 @@ pub struct Schema {
 }
 
 impl Schema {
-    pub(super) fn map_from_xml<'a, 'input: 'a, 'p>(
-        context: &mut MappingContext<'a, 'input, 'p>,
-        schema: Node<'a, 'input>,
-    ) -> Self {
+    pub(super) fn map_from_xml(root_context: &mut RootContext, schema: Node) -> Self {
         assert_eq!(schema.tag_name().name(), "schema");
+
+        let mut context = MappingContext::new(root_context, schema);
 
         let mut type_definitions = Set::new();
         let mut attribute_declarations = Set::new();
@@ -52,8 +51,7 @@ impl Schema {
                     let xsd = std::fs::read_to_string("schemas/xml.xsd").unwrap();
                     let xsd = roxmltree::Document::parse(&xsd).unwrap();
                     let child_schema = xsd.root_element();
-                    let mut child_context = context.create_subcontext(child_schema);
-                    let mut child_schema = Schema::map_from_xml(&mut child_context, child_schema);
+                    let mut child_schema = Schema::map_from_xml(context.root_mut(), child_schema);
                     type_definitions.append(&mut child_schema.type_definitions);
                     attribute_declarations.append(&mut child_schema.attribute_declarations);
                     element_declarations.append(&mut child_schema.element_declarations);
@@ -102,29 +100,45 @@ impl Schema {
                     context.top_level_refs.insert(top_level_element, ctd_ref);
                 }
                 AttributeDeclaration::TAG_NAME => {
-                    reserve_top_level::<AttributeDeclaration>(context, top_level_element, schema);
+                    reserve_top_level::<AttributeDeclaration>(
+                        &mut context,
+                        top_level_element,
+                        schema,
+                    );
                 }
                 ElementDeclaration::TAG_NAME => {
-                    reserve_top_level::<ElementDeclaration>(context, top_level_element, schema);
+                    reserve_top_level::<ElementDeclaration>(
+                        &mut context,
+                        top_level_element,
+                        schema,
+                    );
                 }
                 AttributeGroupDefinition::TAG_NAME => {
                     reserve_top_level::<AttributeGroupDefinition>(
-                        context,
+                        &mut context,
                         top_level_element,
                         schema,
                     );
                 }
                 ModelGroupDefinition::TAG_NAME => {
-                    reserve_top_level::<ModelGroupDefinition>(context, top_level_element, schema);
+                    reserve_top_level::<ModelGroupDefinition>(
+                        &mut context,
+                        top_level_element,
+                        schema,
+                    );
                 }
                 NotationDeclaration::TAG_NAME => {
-                    reserve_top_level::<NotationDeclaration>(context, top_level_element, schema);
+                    reserve_top_level::<NotationDeclaration>(
+                        &mut context,
+                        top_level_element,
+                        schema,
+                    );
                 }
                 IdentityConstraintDefinition::KEY_TAG_NAME
                 | IdentityConstraintDefinition::KEYREF_TAG_NAME
                 | IdentityConstraintDefinition::UNIQUE_TAG_NAME => {
                     reserve_top_level::<IdentityConstraintDefinition>(
-                        context,
+                        &mut context,
                         top_level_element,
                         schema,
                     );
@@ -245,7 +259,8 @@ impl Schema {
                 .contains(&e.tag_name().name())
             })
             .for_each(|e| annot_elements.push(e));
-        let annotations = Annotation::xml_element_set_annotation_mapping(context, &annot_elements);
+        let annotations =
+            Annotation::xml_element_set_annotation_mapping(&mut context, &annot_elements);
 
         Self {
             annotations,
