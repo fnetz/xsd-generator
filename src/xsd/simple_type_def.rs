@@ -473,13 +473,14 @@ impl SimpleTypeDefinition {
         let fundamental_facets = {
             let base_type_definition = base_type_definition.simple().unwrap();
             ctx.request(base_type_definition);
-            let base_type_definition = base_type_definition.get(ctx.components());
 
             // === ordered ===
             // The appropriate case among the following must be true:
             let ordered = match variety.unwrap() {
                 // 1 If the ·owner's· {variety} is atomic, then the appropriate case among the following must be true:
                 Variety::Atomic => {
+                    let base_type_definition = base_type_definition.get(ctx.components());
+
                     // 1.1 If the ·owner· is ·primitive·, then {value} is as specified in the table
                     //     in Fundamental Facets (§F.1).
                     // -- currently not applicable --
@@ -500,7 +501,7 @@ impl SimpleTypeDefinition {
                     // 3.2 If each member of the ·owner's· {member type definitions} has an ordered
                     //     component in its {fundamental facets} whose {value} is false, then
                     //     {value} is false.
-                    if member_type_definitions.iter().all(|&member| {
+                    if member_type_definitions.iter().copied().all(|member| {
                         let member = ctx.request(member);
                         member.fundamental_facets.ordered() == Some(OrderedValue::False)
                     }) {
@@ -552,15 +553,12 @@ impl SimpleTypeDefinition {
             // Fundamental Facets (§F.1).
             // -- currently not applicable --
 
+            let base_type_definition = base_type_definition.get(ctx.components());
+
             let cardinality = match variety.unwrap() {
                 Variety::Atomic => {
                     // TODO docs
-                    Self::map_cardinality_atomic(
-                        ctx,
-                        &facets,
-                        base_type_definition,
-                        todo!(),
-                    )
+                    Self::map_cardinality_atomic(ctx, &facets, base_type_definition)
                 }
                 Variety::List => todo!(),
                 Variety::Union => todo!(),
@@ -598,7 +596,7 @@ impl SimpleTypeDefinition {
         ctx: &MappingContext,
         facets: &[Ref<ConstrainingFacet>],
         base_type_definition: &SimpleTypeDefinition,
-        primitive_type_definition: &SimpleTypeDefinition,
+        //primitive_type_definition: &SimpleTypeDefinition,
     ) -> CardinalityValue {
         // Otherwise, when the ·owner's· {variety} is atomic, {value} is countably infinite unless
         // any of the following conditions are true, in which case {value} is finite:

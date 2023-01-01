@@ -807,29 +807,30 @@ impl ContentType {
                 // {term} a model group whose {compositor} is all and whose {particles} are the
                 //        {particles} of the {term} of the ·base particle· followed by the
                 //        {particles} of the {term} of the ·effective content·.
+                let particles = base_particle_d
+                    .term
+                    .model_group()
+                    .unwrap()
+                    .get(context.components())
+                    .particles
+                    .iter()
+                    .copied()
+                    .chain(
+                        effective_content
+                            .unwrap()
+                            .get(context.components())
+                            .term
+                            .model_group()
+                            .unwrap()
+                            .get(context.components())
+                            .particles
+                            .iter()
+                            .copied(),
+                    )
+                    .collect();
                 let term = context.create(ModelGroup {
                     compositor: Compositor::All,
-                    particles: base_particle_d
-                        .term
-                        .model_group()
-                        .unwrap()
-                        .get(context.components())
-                        .particles
-                        .iter()
-                        .copied()
-                        .chain(
-                            effective_content
-                                .unwrap()
-                                .get(context.components())
-                                .term
-                                .model_group()
-                                .unwrap()
-                                .get(context.components())
-                                .particles
-                                .iter()
-                                .copied(),
-                        )
-                        .collect(),
+                    particles,
                     annotations: Sequence::new(),
                 });
                 Some(
