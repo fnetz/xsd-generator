@@ -10,6 +10,7 @@ use super::{
     model_group_def::ModelGroupDefinition,
     notation_decl::NotationDeclaration,
     shared::TypeDefinition,
+    values::actual_value,
     xstypes::{Sequence, Set},
     ComplexTypeDefinition, MappingContext, Ref, SimpleTypeDefinition,
 };
@@ -26,11 +27,19 @@ pub struct Schema {
     pub model_group_definitions: Set<Ref<ModelGroupDefinition>>,
     pub notation_declarations: Set<Ref<NotationDeclaration>>,
     pub identity_constraint_definitions: Set<Ref<IdentityConstraintDefinition>>,
+
+    /// This property is not required by the XSD specification, but is used to
+    /// store the original target namespace of the schema.
+    pub target_namespace: Option<String>,
 }
 
 impl Schema {
     pub(super) fn map_from_xml(root_context: &mut RootContext, schema: Node) -> Self {
         assert_eq!(schema.tag_name().name(), "schema");
+
+        let target_namespace = schema
+            .attribute("targetNamespace")
+            .map(|s| actual_value(s, schema));
 
         let mut context = MappingContext::new(root_context, schema);
 
@@ -275,6 +284,8 @@ impl Schema {
             model_group_definitions,
             notation_declarations,
             identity_constraint_definitions,
+
+            target_namespace,
         }
     }
 }
