@@ -78,16 +78,15 @@ pub type ValueConstraint = shared::ValueConstraint;
 
 impl NamedXml for ElementDeclaration {
     fn get_name_from_xml(element: Node, schema: Node) -> QName {
-        // {name}
-        //   The ·actual value· of the name [attribute].
+        // {name} The ·actual value· of the name [attribute].
         let name = element
             .attribute("name")
             .map(|v| actual_value::<String>(v, element))
             .unwrap();
 
         // {target namespace}
-        //   The ·actual value· of the targetNamespace [attribute] of the parent
-        //   <schema> element information item, or ·absent· if there is none.
+        //   The ·actual value· of the targetNamespace [attribute] of the parent <schema> element
+        //   information item, or ·absent· if there is none.
         let target_namespace = schema
             .attribute("targetNamespace")
             .map(|v| actual_value::<String>(v, element));
@@ -108,8 +107,7 @@ impl ElementDeclaration {
         // NOTE: For now, get_name_from_xml() can't be used as the common case doesn't handle the
         //       target namespace
 
-        // {name}
-        //   The ·actual value· of the name [attribute].
+        // {name} The ·actual value· of the name [attribute].
         let name = element
             .attribute("name")
             .map(|v| actual_value::<String>(v, element))
@@ -170,8 +168,8 @@ impl ElementDeclaration {
             .unwrap_or_else(|| context.resolve(&XS_ANY_TYPE_NAME));
 
         // {type table}
-        //   A Type Table corresponding to the <alternative> element information
-        //   items among the [children], if any, as follows, otherwise ·absent·.
+        //   A Type Table corresponding to the <alternative> element information items among the
+        //   [children], if any, as follows, otherwise ·absent·.
         let alternative_elements = element
             .children()
             .filter(|c| c.tag_name().name() == "alternative")
@@ -179,8 +177,8 @@ impl ElementDeclaration {
 
         let type_table = if !alternative_elements.is_empty() {
             // {alternatives}
-            //   A sequence of Type Alternatives, each corresponding, in order, to
-            //   one of the <alternative> elements which have a test [attribute].
+            //   A sequence of Type Alternatives, each corresponding, in order, to one of the
+            //   <alternative> elements which have a test [attribute].
             let alternatives = alternative_elements
                 .iter()
                 .filter(|a| a.has_attribute("test"))
@@ -188,30 +186,25 @@ impl ElementDeclaration {
                 .collect::<Sequence<_>>();
 
             // {default type definition}
-            //   Depends upon the final <alternative> element among the
-            //   [children].
+            //   Depends upon the final <alternative> element among the [children].
             let final_alternative = *alternative_elements.last().unwrap();
 
-            //   If it has no test [attribute], the final <alternative> maps to
-            //   the {default type definition}; if it does have a test
-            //   attribute, it is covered by the rule for {alternatives} and the
-            //   {default type definition} is taken from the declared type of
-            //   the Element Declaration. So the value of the {default type
-            //   definition} is given by the appropriate case among the
-            //   following:
+            //   If it has no test [attribute], the final <alternative> maps to the {default type
+            //   definition}; if it does have a test attribute, it is covered by the rule for
+            //   {alternatives} and the {default type definition} is taken from the declared type
+            //   of the Element Declaration. So the value of the {default type definition} is given
+            //   by the appropriate case among the following:
             let default_type_definition = if !final_alternative.has_attribute("test") {
-                // 1 If the <alternative> has no test [attribute], then a Type
-                //   Alternative corresponding to the <alternative>.
+                // 1 If the <alternative> has no test [attribute], then a Type Alternative
+                //   corresponding to the <alternative>.
                 TypeAlternative::map_from_xml(final_alternative, schema)
             } else {
-                // 2 otherwise (the <alternative> has a test) a Type Alternative
-                //   with the following properties:
-                //   {test}
-                //     ·absent·.
-                //   {type definition}
-                //     the {type definition} property of the parent Element Declaration.
-                //   {annotations}
-                //     the empty sequence.
+                // 2 otherwise (the <alternative> has a test) a Type Alternative with the following
+                //   properties:
+                //   {test}             ·absent·.
+                //   {type definition}  the {type definition} property of the parent Element
+                //                      Declaration.
+                //   {annotations}      the empty sequence.
                 context.create(TypeAlternative {
                     test: None,
                     type_definition,
@@ -228,8 +221,7 @@ impl ElementDeclaration {
         };
 
         // {nillable}
-        //   The ·actual value· of the nillable [attribute], if present,
-        //   otherwise false.
+        //   The ·actual value· of the nillable [attribute], if present, otherwise false.
         let nillable = element
             .attribute("nillable")
             .map(|v| actual_value::<bool>(v, element))
@@ -276,10 +268,9 @@ impl ElementDeclaration {
         };
 
         // {identity-constraint definitions}
-        //   A set consisting of the identity-constraint-definitions
-        //   corresponding to all the <key>, <unique> and <keyref> element
-        //   information items in the [children], if any, otherwise the empty
-        //   set.
+        //   A set consisting of the identity-constraint-definitions corresponding to all the
+        //   <key>, <unique> and <keyref> element information items in the [children], if any,
+        //   otherwise the empty set.
         let identity_constraint_definitions = element
             .children()
             .filter(|c| {
@@ -294,9 +285,8 @@ impl ElementDeclaration {
             .collect();
 
         // {substitution group affiliations}
-        //   A set of the element declarations ·resolved· to by the items in the
-        //   ·actual value· of the substitutionGroup [attribute], if present,
-        //   otherwise the empty set.
+        //   A set of the element declarations ·resolved· to by the items in the ·actual value· of
+        //   the substitutionGroup [attribute], if present, otherwise the empty set.
         let substitution_group_affiliations = element
             .attribute("substitutionGroup")
             .map(|v| actual_value::<Vec<QName>>(v, element))
@@ -331,18 +321,16 @@ impl ElementDeclaration {
         );
 
         // {abstract}
-        //   The ·actual value· of the abstract [attribute], if present,
-        //   otherwise false.
+        //   The ·actual value· of the abstract [attribute], if present, otherwise false.
         let abstract_ = element
             .attribute("abstract")
             .map(|v| actual_value::<bool>(v, element))
             .unwrap_or(false);
 
         // {annotations}
-        //   The ·annotation mapping· of the <element> element and any of its
-        //   <unique>, <key> and <keyref> [children] with a ref [attribute], as
-        //   defined in XML Representation of Annotation Schema Components
-        //   (§3.15.2).
+        //   The ·annotation mapping· of the <element> element and any of its <unique>, <key> and
+        //   <keyref> [children] with a ref [attribute], as defined in XML Representation of
+        //   Annotation Schema Components (§3.15.2).
         let mut annot_elements = vec![element];
         element
             .children()
@@ -378,8 +366,7 @@ impl ElementDeclaration {
     ) -> Ref<Self> {
         let self_ref = context.reserve();
 
-        // {target namespace}
-        //   The appropriate case among the following:
+        // {target namespace} The appropriate case among the following:
         let target_namespace = if let Some(target_namespace) = schema.attribute("targetNamespace") {
             // 1 If targetNamespace is present , then its ·actual value·.
             Some(actual_value::<String>(target_namespace, element))
@@ -404,11 +391,10 @@ impl ElementDeclaration {
 
         // {scope} A Scope as follows:
         //    {variety} local
-        //    {parent}  If the <element> element information item has <complexType> as an
-        //              ancestor, the Complex Type Definition corresponding to that item,
-        //              otherwise (the <element> element information item is within a named
-        //              <group> element information item), the Model Group Definition
-        //              corresponding to that item.
+        //    {parent}  If the <element> element information item has <complexType> as an ancestor,
+        //              the Complex Type Definition corresponding to that item, otherwise (the
+        //              <element> element information item is within a named <group> element
+        //              information item), the Model Group Definition corresponding to that item.
         let scope = Scope::new_local(parent);
 
         let common = Self::map_from_xml_common(context, self_ref, element, schema);
@@ -485,16 +471,15 @@ impl TopLevelMappable for ElementDeclaration {
         schema: Node,
     ) {
         // {target namespace}
-        //   The ·actual value· of the targetNamespace [attribute] of the parent
-        //   <schema> element information item, or ·absent· if there is none.
+        //   The ·actual value· of the targetNamespace [attribute] of the parent <schema> element
+        //   information item, or ·absent· if there is none.
         let target_namespace = schema
             .attribute("targetNamespace")
             .map(|v| actual_value::<String>(v, element));
 
-        // {scope}
-        //   A Scope as follows:
-        //     {variety} global
-        //     {parent}  ·absent·
+        // {scope} A Scope as follows:
+        //   {variety} global
+        //   {parent}  ·absent·
         let scope = Scope::new_global();
 
         let common = Self::map_from_xml_common(context, self_ref, element, schema);

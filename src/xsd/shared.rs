@@ -169,8 +169,8 @@ impl Term {
 }
 
 /// Iterator over the ancestors of a Type Definition.
-/// > The ancestors of a ·type definition· are its {base type definition} and the ·ancestors· of its
-/// > {base type definition}. (pt. 1, §3.16.2.2)
+/// > The ancestors of a ·type definition· are its {base type definition} and the ·ancestors· of
+/// > its {base type definition}. (pt. 1, §3.16.2.2)
 ///
 /// Note that, since the "root" type `xs:anyType`'s base type is itself, this iterator is infinite.
 /// In other words, once the anyType is reached, `next()` will forever return `Some(<xs:anyType>)`.

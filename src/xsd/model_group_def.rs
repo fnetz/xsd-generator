@@ -20,8 +20,7 @@ pub struct ModelGroupDefinition {
 
 impl NamedXml for ModelGroupDefinition {
     fn get_name_from_xml(group: Node, schema: Node) -> QName {
-        // {name}
-        //   The ·actual value· of the name [attribute]
+        // {name} The ·actual value· of the name [attribute]
         let name = group
             .attribute("name")
             .map(|n| actual_value::<NCName>(n, group))

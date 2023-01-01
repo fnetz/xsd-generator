@@ -296,8 +296,8 @@ impl ConstructionComponentTable {
 /// Components for which a [`Ref`] exists will always be present in this table.
 ///
 /// Since this table is meant to be read-only, the components are stored in boxed slices, which
-/// halves the struct's size compared to the `Vec`-storage used in the
-/// [`ConstructionComponentTable`].
+/// reduces the struct's size by one pointer per component type compared to the `Vec`-storage used
+/// in the [`ConstructionComponentTable`].
 pub struct SchemaComponentTable {
     annotations: Box<[Annotation]>,
     assertions: Box<[Assertion]>,
@@ -399,7 +399,7 @@ where
 }
 
 /// Trait that allows components to be looked up by their [qualified name](QName).
-/// `V` is the value type (usually Ref<Component> or a wrapper like [`TypeDefinition`]).
+/// `V` is the value type (usually `Ref<Component>` or a wrapper like [`TypeDefinition`]).
 pub(super) trait Lookup<V: Copy> {
     /// Registers a value for lookup in its respective symbol space.
     /// Returns `true` if the name given by the `key` parameter was already associated with a value.

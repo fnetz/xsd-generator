@@ -194,8 +194,7 @@ impl SimpleTypeDefinition {
             .or_else(|| schema.attribute("finalDefault"))
             .map(|v| actual_value::<String>(v, simple_type))
             .unwrap_or_default();
-        // Then the property value is the appropriate case
-        //   among the following:
+        // Then the property value is the appropriate case among the following:
         //   1 If ·FS· is the empty string, then the empty set;
         //   2 If ·FS· is "#all", then {restriction, extension, list, union};
         //   3 otherwise Consider ·FS· as a space-separated list, and include restriction if
@@ -234,10 +233,10 @@ impl SimpleTypeDefinition {
             //   Restriction (Facets) (§3.16.6.4).
             // 2 If the <restriction> alternative is chosen and the children of the <restriction>
             //   element include at least one element of which the processor has no prior knowledge
-            //   (i.e. not a <simpleType> element, an <annotation> element, or an element denoting a
-            //   constraining facet known to and supported by the processor), then the <simpleType>
-            //   element maps to no component at all (but is not in error solely on account of the
-            //   presence of the unknown element).
+            //   (i.e. not a <simpleType> element, an <annotation> element, or an element denoting
+            //   a constraining facet known to and supported by the processor), then the
+            //   <simpleType> element maps to no component at all (but is not in error solely on
+            //   account of the presence of the unknown element).
             ChildType::Restriction => {
                 if target_namespace == XS_ANY_SIMPLE_TYPE_NAME.namespace_name
                     && name.as_ref() == Some(&XS_ANY_SIMPLE_TYPE_NAME.local_name)
@@ -382,12 +381,12 @@ impl SimpleTypeDefinition {
                     if base_type_definition.name(ctx.components()).as_ref()
                         == Some(&XS_ANY_SIMPLE_TYPE_NAME)
                     {
-                        // 1 If the {base type definition} is ·xs:anySimpleType·, then the
-                        //   Simple Type Definition
+                        // 1 If the {base type definition} is ·xs:anySimpleType·, then the Simple
+                        //   Type Definition
                         //   (a) ·resolved· to by the ·actual value· of the itemType [attribute] of
                         //       <list>, or
-                        //   (b), corresponding to the <simpleType> among the [children] of <list>,
-                        //   whichever is present.
+                        //   (b) corresponding to the <simpleType> among the [children] of <list>,
+                        //       whichever is present.
                         list.attribute("itemType")
                             .map(|item_type| actual_value::<QName>(item_type, list))
                             .map(|item_type| ctx.resolve(&item_type))
@@ -407,8 +406,8 @@ impl SimpleTypeDefinition {
                             .unwrap()
                     } else {
                         // 2 otherwise (that is, the {base type definition} is not
-                        //   ·xs:anySimpleType·), the {item type definition} of the
-                        //   {base type definition}.
+                        //   ·xs:anySimpleType·), the {item type definition} of the {base type
+                        //   definition}.
                         ctx.request(base_type_definition.simple().unwrap())
                             .item_type_definition
                             .unwrap() // TODO unwrap allowed?
@@ -422,12 +421,12 @@ impl SimpleTypeDefinition {
                 let base_type_definition = ctx.request(base_type_definition.simple().unwrap());
                 member_type_definitions = Some(
                     if base_type_definition.name().as_ref() == Some(&XS_ANY_SIMPLE_TYPE_NAME) {
-                        // 1 If the {base type definition} is ·xs:anySimpleType·, then the sequence of
-                        //   Simple Type Definitions
-                        //   (a) ·resolved· to by the items in the ·actual value· of the memberTypes
-                        //       [attribute] of <union>, if any, and
-                        //   (b) corresponding to the <simpleType>s among the [children] of <union>,
-                        //       if any, in order.
+                        // 1 If the {base type definition} is ·xs:anySimpleType·, then the sequence
+                        //   of Simple Type Definitions
+                        //   (a) ·resolved· to by the items in the ·actual value· of the
+                        //       memberTypes [attribute] of <union>, if any, and
+                        //   (b) corresponding to the <simpleType>s among the [children] of
+                        //       <union>, if any, in order.
                         let mut member_types = union_
                             .attribute("memberTypes")
                             .map(|member_types| actual_value::<Vec<QName>>(member_types, union_))
@@ -458,8 +457,9 @@ impl SimpleTypeDefinition {
 
                         member_types
                     } else {
-                        // 2 otherwise (that is, the {base type definition} is not ·xs:anySimpleType·),
-                        //   the {member type definitions} of the {base type definition}.
+                        // 2 otherwise (that is, the {base type definition} is not
+                        //   ·xs:anySimpleType·), the {member type definitions} of the {base type
+                        //   definition}.
                         base_type_definition
                             .member_type_definitions
                             .clone()
@@ -484,7 +484,8 @@ impl SimpleTypeDefinition {
                     // 1.1 If the ·owner· is ·primitive·, then {value} is as specified in the table
                     //     in Fundamental Facets (§F.1).
                     // -- currently not applicable --
-                    // 1.2 otherwise {value} is the ·owner's· {base type definition}'s ordered {value}.
+                    // 1.2 otherwise {value} is the ·owner's· {base type definition}'s ordered
+                    //     {value}.
                     base_type_definition.fundamental_facets.ordered().unwrap()
                 }
                 // 2 If the ·owner's· {variety} is list, then {value} is false.
@@ -493,9 +494,9 @@ impl SimpleTypeDefinition {
                 Variety::Union => {
                     let member_type_definitions = member_type_definitions.as_ref().unwrap();
                     // 3.1 If every ·basic member· of the ·owner· has {variety} atomic and has the
-                    //     same {primitive type definition}, then {value} is the same as the ordered
-                    //     component's {value} in that primitive type definition's {fundamental
-                    //     facets}.
+                    //     same {primitive type definition}, then {value} is the same as the
+                    //     ordered component's {value} in that primitive type definition's
+                    //     {fundamental facets}.
                     // TODO
 
                     // 3.2 If each member of the ·owner's· {member type definitions} has an ordered
@@ -514,16 +515,15 @@ impl SimpleTypeDefinition {
             };
 
             // === bounded ===
-            // When the ·owner· is ·primitive·, {value} is as specified in the table in
-            // Fundamental Facets (§F.1).
+            // When the ·owner· is ·primitive·, {value} is as specified in the table in Fundamental
+            // Facets (§F.1).
             // -- currently not applicable --
 
             let bounded = match variety.unwrap() {
                 Variety::Atomic => {
-                    // Otherwise, when the ·owner's· {variety} is atomic, if one of minInclusive
-                    // or minExclusive and one of maxInclusive or maxExclusive are members of
-                    // the ·owner's· {facets} set, then {value} is true; otherwise {value} is
-                    // false.
+                    // Otherwise, when the ·owner's· {variety} is atomic, if one of minInclusive or
+                    // minExclusive and one of maxInclusive or maxExclusive are members of the
+                    // ·owner's· {facets} set, then {value} is true; otherwise {value} is false.
                     facets.iter().any(|facet| {
                         matches!(
                             facet.get(ctx.components()),
@@ -539,8 +539,8 @@ impl SimpleTypeDefinition {
                 // When the ·owner's· {variety} is list, {value} is false.
                 Variety::List => false,
                 Variety::Union => {
-                    // When the ·owner's· {variety} is union, if {value} is true for every member of
-                    // the ·owner's· {member type definitions} set and all of the ·owner's·
+                    // When the ·owner's· {variety} is union, if {value} is true for every member
+                    // of the ·owner's· {member type definitions} set and all of the ·owner's·
                     // ·basic members· have the same {primitive type definition}, then {value} is
                     // true; otherwise {value} is false.
                     // TODO
@@ -549,8 +549,8 @@ impl SimpleTypeDefinition {
             };
 
             // === cardinality ===
-            // When the ·owner· is ·primitive·, {value} is as specified in the table in
-            // Fundamental Facets (§F.1).
+            // When the ·owner· is ·primitive·, {value} is as specified in the table in Fundamental
+            // Facets (§F.1).
             // -- currently not applicable --
 
             let cardinality = match variety.unwrap() {
@@ -614,8 +614,8 @@ impl SimpleTypeDefinition {
             };
 
             // === numeric ===
-            // When the ·owner· is ·primitive·, {value} is as specified in the table in
-            // Fundamental Facets (§F.1).
+            // When the ·owner· is ·primitive·, {value} is as specified in the table in Fundamental
+            // Facets (§F.1).
             // -- currently not applicable --
 
             let numeric = match variety.unwrap() {
@@ -731,8 +731,8 @@ impl SimpleTypeDefinition {
         if self.target_namespace.as_deref() != Some(XS_NAMESPACE) {
             false
         } else if let Some(name) = self.name.as_ref() {
-            // A type definition has ·xs:anyAtomicType· as its {base type definition} if and only if
-            // it is one of the primitive datatypes. (pt. 1, §3.16.1, paragraph 5)
+            // A type definition has ·xs:anyAtomicType· as its {base type definition} if and only
+            // if it is one of the primitive datatypes. (pt. 1, §3.16.1, paragraph 5)
             // TODO ↑
             matches!(
                 name.as_str(),

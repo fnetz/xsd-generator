@@ -84,8 +84,8 @@ impl Wildcard {
                 Set::new()
             } else if any.attribute("namespace") == Some("##other") {
                 // 3 If namespace = "##other", then a set consisting of ·absent· and, if the
-                //   targetNamespace [attribute] of the <schema> ancestor element information
-                //   item is present, its ·actual value·;
+                //   targetNamespace [attribute] of the <schema> ancestor element information item
+                //   is present, its ·actual value·;
                 let mut namespaces = vec![None];
                 if let Some(target_namespace) = schema.attribute("targetNamespace") {
                     namespaces.push(Some(actual_value::<AnyURI>(target_namespace, schema)));
@@ -93,12 +93,12 @@ impl Wildcard {
                 namespaces
             } else {
                 // 4 otherwise a set whose members are namespace names corresponding to the
-                // space-delimited substrings of the ·actual value· of the namespace or
-                // notNamespace [attribute] (whichever is present), except
-                // 4.1 if one such substring is ##targetNamespace, the corresponding member is
+                //   space-delimited substrings of the ·actual value· of the namespace or
+                //   notNamespace [attribute] (whichever is present), except
+                //   4.1 if one such substring is ##targetNamespace, the corresponding member is
                 //     the ·actual value· of the targetNamespace [attribute] of the <schema>
                 //     ancestor element information item if present, otherwise ·absent·;
-                // 4.2 if one such substring is ##local, the corresponding member is ·absent·.
+                //   4.2 if one such substring is ##local, the corresponding member is ·absent·.
                 let namespaces = any
                     .attribute("namespace")
                     .or_else(|| any.attribute("notNamespace"))

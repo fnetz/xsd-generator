@@ -78,9 +78,9 @@ impl AttributeDeclaration {
         } = Self::get_name_from_xml(attribute, schema);
 
         // {type definition}
-        //   The simple type definition corresponding to the <simpleType> element information item in
-        //   the [children], if present, otherwise the simple type definition ·resolved· to by the
-        //   ·actual value· of the type [attribute], if present, otherwise ·xs:anySimpleType·.
+        //   The simple type definition corresponding to the <simpleType> element information item
+        //   in the [children], if present, otherwise the simple type definition ·resolved· to by
+        //   the ·actual value· of the type [attribute], if present, otherwise ·xs:anySimpleType·.
         let simple_type_def = attribute
             .children()
             .find(|c| c.tag_name().name() == SimpleTypeDefinition::TAG_NAME)
@@ -144,8 +144,8 @@ impl AttributeDeclaration {
             .unwrap_or(false);
 
         // {annotations}
-        //   The ·annotation mapping· of the <attribute> element, as defined in XML Representation of
-        //   Annotation Schema Components (§3.15.2).
+        //   The ·annotation mapping· of the <attribute> element, as defined in XML Representation
+        //   of Annotation Schema Components (§3.15.2).
         let annotations = Annotation::xml_element_annotation_mapping(context, attribute);
 
         context.insert(
@@ -181,8 +181,8 @@ impl AttributeDeclaration {
         let required = attribute.attribute("use") == Some("required");
 
         // {annotations}
-        //   The ·annotation mapping· of the <attribute> element, as defined in XML Representation of
-        //   Annotation Schema Components (§3.15.2).
+        //   The ·annotation mapping· of the <attribute> element, as defined in XML Representation
+        //   of Annotation Schema Components (§3.15.2).
         let annotations = Annotation::xml_element_annotation_mapping(context, attribute);
 
         // Decide whether the attribute is a reference to a top-level attribute declaration (if ref
@@ -192,8 +192,8 @@ impl AttributeDeclaration {
             // ===== Attribute Use =====
 
             // {attribute declaration}
-            //   The (top-level) attribute declaration ·resolved· to by the ·actual value· of the ref
-            //   [attribute]
+            //   The (top-level) attribute declaration ·resolved· to by the ·actual value· of the
+            //   ref [attribute]
             let ref_ = actual_value::<QName>(ref_, attribute);
             let attribute_declaration: Ref<AttributeDeclaration> = context.resolve(&ref_);
 
@@ -226,8 +226,8 @@ impl AttributeDeclaration {
             };
 
             // {inheritable}
-            //   The ·actual value· of the inheritable [attribute], if present, otherwise {attribute
-            //   declaration}.{inheritable}.
+            //   The ·actual value· of the inheritable [attribute], if present, otherwise
+            //   {attribute declaration}.{inheritable}.
             let inheritable = attribute
                 .attribute("inheritable")
                 .map(|v| actual_value::<bool>(v, attribute))
@@ -258,9 +258,9 @@ impl AttributeDeclaration {
             //   1 If targetNamespace is present, then its ·actual value·.
             //   2 If targetNamespace is not present and one of the following is true
             //     2.1 form = qualified
-            //     2.2 form is absent and the <schema> ancestor has attributeFormDefault = qualified
-            //     then the ·actual value· of the targetNamespace [attribute] of the ancestor <schema>
-            //     element information item, or ·absent· if there is none.
+            //     2.2 form is absent and the <schema> ancestor has attributeFormDefault =
+            //       qualified then the ·actual value· of the targetNamespace [attribute] of the
+            //       ancestor <schema> element information item, or ·absent· if there is none.
             //   3 otherwise ·absent·.
             let target_namespace =
                 if let Some(target_namespace) = attribute.attribute("targetNamespace") {

@@ -77,7 +77,7 @@ impl Particle {
         })
     }
 
-    /// Mapper for Model groups <all>, <sequence>, and <choice>, see XML Representation of Model
+    /// Mapper for Model groups `<all>`, `<sequence>`, and `<choice>`, see XML Representation of Model
     /// Group Schema Components (§3.8.2)
     pub(super) fn map_from_xml_model_group(
         context: &mut MappingContext,
@@ -112,9 +112,8 @@ impl Particle {
             .unwrap_or(MaxOccurs::Count(1));
 
         // {annotations}
-        //   The ·annotation mapping· of the <all>, <choice>, or <sequence> element, whichever
-        //   is present, as defined in XML Representation of Annotation Schema Components
-        //   (§3.15.2).
+        //   The ·annotation mapping· of the <all>, <choice>, or <sequence> element, whichever is
+        //   present, as defined in XML Representation of Annotation Schema Components (§3.15.2).
         let annotations = Annotation::xml_element_annotation_mapping(context, particle);
 
         // {term} A model group as given below.
@@ -170,7 +169,7 @@ impl Particle {
         })
     }
 
-    /// Mapper for Group references <group>, see XML Representation of Model Group Definition
+    /// Mapper for Group references `<group>`, see XML Representation of Model Group Definition
     /// Schema Components (§3.7.2)
     pub(super) fn map_from_xml_group_reference(
         _context: &mut MappingContext,
@@ -182,7 +181,7 @@ impl Particle {
 
     // TODO anyAttribute
 
-    /// Mapper for Wildcard <any>, see XML Representation of Wildcard Schema Components (§3.10.2)
+    /// Mapper for Wildcard `<any>`, see XML Representation of Wildcard Schema Components (§3.10.2)
     pub(super) fn map_from_xml_wildcard_any(
         context: &mut MappingContext,
         any: Node,

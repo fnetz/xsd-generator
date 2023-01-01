@@ -58,10 +58,10 @@ impl QName {
     }
 
     pub fn unqualified(local_name: impl Into<String>, context: roxmltree::Node) -> Self {
-        // If there is a default namespace declaration in scope, the expanded name corresponding
-        // to an unprefixed element name has the URI of the default namespace as its namespace
-        // name. If there is no default namespace declaration in scope, the namespace name has
-        // no value. (Namespaces in XML 1.0, §6.2)
+        // If there is a default namespace declaration in scope, the expanded name corresponding to
+        // an unprefixed element name has the URI of the default namespace as its namespace name.
+        // If there is no default namespace declaration in scope, the namespace name has no value.
+        // (Namespaces in XML 1.0, §6.2)
         let namespace_name = context.lookup_namespace_uri(None);
         QName::with_optional_namespace(namespace_name, local_name)
     }

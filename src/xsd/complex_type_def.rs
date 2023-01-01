@@ -510,7 +510,8 @@ impl ContentType {
             // 3.2 otherwise the ·explicit content·.
             Some(explicit_content)
         } else {
-            // 3.1 If the ·explicit content· is empty , then the appropriate case among the following:
+            // 3.1 If the ·explicit content· is empty, then the appropriate case among the
+            //   following:
             if effective_mixed {
                 // 3.1.1 If the ·effective mixed· is true, then a particle whose properties are as
                 //   follows:
@@ -551,9 +552,10 @@ impl ContentType {
             .children()
             .find(|c| c.tag_name().name() == "openContent")
         {
-            // 5.1 If the <openContent> [child] is present , then the <openContent> [child].
+            // 5.1 If the <openContent> [child] is present, then the <openContent> [child].
             Some(open_content)
-            // 5.2 If the <openContent> [child] is not present, the <schema> ancestor has a <defaultOpenContent> [child], and one of the following is true
+            // 5.2 If the <openContent> [child] is not present, the <schema> ancestor has a
+            //   <defaultOpenContent> [child], and one of the following is true
         } else if let Some(default_open_content) = schema
             .children()
             .find(|c| c.tag_name().name() == "defaultOpenContent")
@@ -588,23 +590,26 @@ impl ContentType {
             })
             .unwrap_or(true)
         {
-            // 6.1 If the ·wildcard element· is ·absent· or is present and has mode = 'none' , then the ·explicit content type·.
+            // 6.1 If the ·wildcard element· is ·absent· or is present and has mode = 'none', then
+            //   the ·explicit content type·.
             explicit_content_type
         } else {
             // The wildcard element must be present
             let wildcard_element = wildcard_element.unwrap();
 
             // 6.2 otherwise
-            //   {variety}    The {variety} of the ·explicit content type· if it's not empty;
-            //                otherwise element-only.
+            //   {variety}
+            //     The {variety} of the ·explicit content type· if it's not empty; otherwise
+            //     element-only.
             let variety = if explicit_content_type.variety != ContentTypeVariety::Empty {
                 explicit_content_type.variety
             } else {
                 ContentTypeVariety::ElementOnly
             };
 
-            //   {particle}  The {particle} of the ·explicit content type· if the {variety} of the
-            //               ·explicit content type· is not empty; otherwise a Particle as follows:
+            //   {particle}
+            //     The {particle} of the ·explicit content type· if the {variety} of the ·explicit
+            //     content type· is not empty; otherwise a Particle as follows:
             let particle = if explicit_content_type.variety != ContentTypeVariety::Empty {
                 explicit_content_type.particle
             } else {
@@ -627,8 +632,9 @@ impl ContentType {
 
             //  {open content} An Open Content as follows:
             let open_content = {
-                // {mode} The ·actual value· of the mode [attribute] of the ·wildcard element·, if
-                //        present, otherwise interleave.
+                // {mode}
+                //   The ·actual value· of the mode [attribute] of the ·wildcard element·, if
+                //   present, otherwise interleave.
                 let mode = wildcard_element
                     .attribute("mode")
                     .and_then(|v| match v {
@@ -638,13 +644,13 @@ impl ContentType {
                     })
                     .unwrap_or(OpenContentMode::Interleave);
 
-                // {wildcard} Let W be the wildcard corresponding to the <any> [child] of the
-                //            ·wildcard element·. If the {open content} of the ·explicit content
-                //            type· is ·absent·, then W; otherwise a wildcard whose {process
-                //            contents} and {annotations} are those of W, and whose {namespace
-                //            constraint} is the wildcard union of the {namespace constraint} of W
-                //            and of {open content}.{wildcard} of the ·explicit content type·, as
-                //            defined in Attribute Wildcard Union (§3.10.6.3).
+                // {wildcard}
+                //   Let W be the wildcard corresponding to the <any> [child] of the ·wildcard
+                //   element·. If the {open content} of the ·explicit content type· is ·absent·,
+                //   then W; otherwise a wildcard whose {process contents} and {annotations} are
+                //   those of W, and whose {namespace constraint} is the wildcard union of the
+                //   {namespace constraint} of W and of {open content}.{wildcard} of the ·explicit
+                //   content type·, as defined in Attribute Wildcard Union (§3.10.6.3).
                 // TODO
                 let _w = wildcard_element
                     .children()
@@ -726,7 +732,8 @@ impl ContentType {
             //   following:
             Self::explicit_content_type_shared(effective_content, effective_mixed)
         } else {
-            // 4.2 If {derivation method} = extension, then the appropriate case among the following:
+            // 4.2 If {derivation method} = extension, then the appropriate case among the
+            //   following:
 
             // 4.2.1 If the {base type definition} is a simple type definition or is a complex type
             //   definition whose {content type}.{variety} = empty or simple, then a Content Type
@@ -767,12 +774,13 @@ impl ContentType {
                 ContentTypeVariety::ElementOnly
             };
 
-            // {open content} the {open content} of the {content type} of the {base type definition}.
+            // {open content}
+            //   the {open content} of the {content type} of the {base type definition}.
             let open_content = base_type_definition.content_type.open_content.clone();
 
             // {particle}
-            //   Let the base particle be the particle of the {content type} of the
-            //   {base type definition}.
+            //   Let the base particle be the particle of the {content type} of the {base type
+            //   definition}.
             // TODO None particle?
             let base_particle = base_type_definition.content_type.particle.unwrap();
             let base_particle_d = base_particle.get(context.components());
@@ -787,7 +795,7 @@ impl ContentType {
             // TODO Non-modelgroup term?
             let particle = if base_has_compositor_all && explicit_content.is_none() {
                 // 4.2.3.1 If the {term} of the ·base particle· has {compositor} all and the
-                //         ·explicit content· is empty, then the ·base particle·.
+                //   ·explicit content· is empty, then the ·base particle·.
                 Some(base_particle)
             } else if base_has_compositor_all
                 && effective_content
@@ -801,12 +809,13 @@ impl ContentType {
                     .unwrap_or(false)
             {
                 // 4.2.3.2 If the {term} of the ·base particle· has {compositor} all and the {term}
-                //         of the ·effective content· also has {compositor} all, then a Particle
-                //         whose properties are as follows:
+                //   of the ·effective content· also has {compositor} all, then a Particle whose
+                //   properties are as follows:
 
-                // {term} a model group whose {compositor} is all and whose {particles} are the
-                //        {particles} of the {term} of the ·base particle· followed by the
-                //        {particles} of the {term} of the ·effective content·.
+                // {term}
+                //   a model group whose {compositor} is all and whose {particles} are the
+                //   {particles} of the {term} of the ·base particle· followed by the {particles}
+                //   of the {term} of the ·effective content·.
                 let particles = base_particle_d
                     .term
                     .model_group()

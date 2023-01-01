@@ -357,8 +357,8 @@ impl ConstrainingFacet {
         // {value} The actual value of the value [attribute]
         let value = actual_value::<V>(facet.attribute("value").unwrap(), facet);
 
-        // {fixed} The actual value of the fixed [attribute], if present,
-        //         otherwise false
+        // {fixed}
+        //   The actual value of the fixed [attribute], if present, otherwise false
         let fixed = facet
             .attribute("fixed")
             .map(|v| actual_value::<bool>(v, facet))

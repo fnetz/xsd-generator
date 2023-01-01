@@ -20,8 +20,7 @@ pub struct NotationDeclaration {
 
 impl NamedXml for NotationDeclaration {
     fn get_name_from_xml(notation: Node, schema: Node) -> QName {
-        // {name}
-        //   The ·actual value· of the name [attribute]
+        // {name} The ·actual value· of the name [attribute]
         let name = notation
             .attribute("name")
             .map(|v| actual_value::<NCName>(v, notation))

@@ -1,6 +1,5 @@
 // TODO pre-processing
 // TODO case sensitivity?
-// TODO (low prio) re-gq comments
 // TODO (low prio) restrict visibility
 
 pub mod annotation;

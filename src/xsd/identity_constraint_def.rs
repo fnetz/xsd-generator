@@ -40,8 +40,7 @@ impl Named for IdentityConstraintDefinition {
 
 impl NamedXml for IdentityConstraintDefinition {
     fn get_name_from_xml(icd: Node, schema: Node) -> QName {
-        // {name}
-        //   The ·actual value· of the name [attribute]
+        // {name} The ·actual value· of the name [attribute]
         let name = icd
             .attribute("name")
             .map(|v| actual_value::<String>(v, icd))
@@ -84,7 +83,7 @@ impl IdentityConstraintDefinition {
         } = Self::get_name_from_xml(icd, schema);
 
         // {identity-constraint category}
-        // One of key, keyref or unique, depending on the item.
+        //   One of key, keyref or unique, depending on the item.
         let identity_constraint_category = match icd.tag_name().name() {
             "key" => IdentityConstraintCategory::Key,
             "keyref" => IdentityConstraintCategory::KeyRef,
