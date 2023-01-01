@@ -469,7 +469,7 @@ impl SimpleTypeDefinition {
             }
         }
 
-        // TODO
+        // TODO make fundamental facets non-optional
         let fundamental_facets = {
             let base_type_definition = base_type_definition.simple().unwrap();
             ctx.request(base_type_definition);
@@ -553,21 +553,101 @@ impl SimpleTypeDefinition {
             // Fundamental Facets (§F.1).
             // -- currently not applicable --
 
-            let base_type_definition = base_type_definition.get(ctx.components());
-
             let cardinality = match variety.unwrap() {
                 Variety::Atomic => {
                     // TODO docs
+                    let base_type_definition = base_type_definition.get(ctx.components());
                     Self::map_cardinality_atomic(ctx, &facets, base_type_definition)
                 }
-                Variety::List => todo!(),
-                Variety::Union => todo!(),
+                Variety::List => {
+                    macro_rules! get_facet {
+                        ($facet:ident) => {
+                            facets
+                                .iter()
+                                .find_map(|facet| match facet.get(ctx.components()) {
+                                    ConstrainingFacet::$facet(facet) => Some(facet),
+                                    _ => None,
+                                })
+                        };
+                    }
+                    macro_rules! has_facet {
+                        ($facet:ident) => {
+                            get_facet!($facet).is_some()
+                        };
+                    }
+
+                    // When the ·owner's· {variety} is list, if length or both minLength and
+                    // maxLength are members of the ·owner's· {facets} set and the ·owner's· {item
+                    // type definition}'s cardinality {value} is finite then {value} is finite;
+                    // otherwise {value} is countably infinite.
+                    if has_facet!(Length) || (has_facet!(MinLength) && has_facet!(MaxLength)) {
+                        let item_type_definition = item_type_definition.unwrap();
+                        let item_type_definition = ctx.request(item_type_definition);
+
+                        let cardinality = item_type_definition.fundamental_facets.cardinality();
+                        if cardinality == Some(CardinalityValue::Finite) {
+                            CardinalityValue::Finite
+                        } else {
+                            CardinalityValue::CountablyInfinite
+                        }
+                    } else {
+                        CardinalityValue::CountablyInfinite
+                    }
+                }
+                Variety::Union => {
+                    // When the ·owner's· {variety} is union, if cardinality's {value} is finite
+                    // for every member of the ·owner's· {member type definitions} set then {value}
+                    // is finite, otherwise {value} is countably infinite.
+                    if member_type_definitions
+                        .as_ref()
+                        .unwrap()
+                        .iter()
+                        .copied()
+                        .map(|member| ctx.request(member).fundamental_facets.cardinality())
+                        .all(|cardinality| cardinality == Some(CardinalityValue::Finite))
+                    {
+                        CardinalityValue::Finite
+                    } else {
+                        CardinalityValue::CountablyInfinite
+                    }
+                }
+            };
+
+            // === numeric ===
+            // When the ·owner· is ·primitive·, {value} is as specified in the table in
+            // Fundamental Facets (§F.1).
+            // -- currently not applicable --
+
+            let numeric = match variety.unwrap() {
+                Variety::Atomic => {
+                    // Otherwise, when the ·owner's· {variety} is atomic, {value} is inherited from
+                    // the ·owner's· {base type definition}'s numeric {value}.
+                    let base_type_definition = base_type_definition.get(ctx.components());
+                    base_type_definition.fundamental_facets.numeric().unwrap()
+                }
+                Variety::List => {
+                    // When the ·owner's· {variety} is list, {value} is false.
+                    false
+                }
+                Variety::Union => {
+                    // When the ·owner's· {variety} is union, if numeric's {value} is true for
+                    // every member of the ·owner's· {member type definitions} set then {value} is
+                    // true, otherwise {value} is false.
+                    member_type_definitions
+                        .as_ref()
+                        .unwrap()
+                        .iter()
+                        .copied()
+                        .map(|member| ctx.request(member).fundamental_facets.numeric())
+                        .all(|numeric| numeric == Some(true))
+                }
             };
 
             FundamentalFacetSet::new(vec![
                 FundamentalFacet::Ordered(ordered),
                 FundamentalFacet::Bounded(bounded),
                 FundamentalFacet::Cardinality(cardinality),
+                FundamentalFacet::Numeric(numeric),
             ])
         };
 
