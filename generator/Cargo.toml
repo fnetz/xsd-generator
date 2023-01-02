@@ -6,7 +6,7 @@ description = "Generates XML binding code from XSD schema files"
 
 [dependencies]
 dt-xsd = { path = "../xsd" }
-clap = { version = "3.2", features = ["derive"] }
+clap = { version = "4.0", features = ["derive", "wrap_help"] }
 reqwest = { version = "0.11", features = ["blocking"] }
 roxmltree = "0.16.0"
 prettyplease = "0.1"
