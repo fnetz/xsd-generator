@@ -9,8 +9,8 @@ use crate::xsd::simple_type_def::Context as SimpleContext;
 use crate::xsd::simple_type_def::Variety as SimpleVariety;
 use crate::xsd::{
     attribute_decl::ScopeVariety, complex_type_def::ContentTypeVariety, model_group::Compositor,
-    particle::MaxOccurs, ComplexTypeDefinition, ElementDeclaration, Particle, Ref, RefNamed,
-    Schema, SchemaComponentTable, SimpleTypeDefinition, Term, TypeDefinition,
+    particle::MaxOccurs, AttributeUse, ComplexTypeDefinition, ElementDeclaration, Particle, Ref,
+    RefNamed, Schema, SchemaComponentTable, SimpleTypeDefinition, Term, TypeDefinition,
 };
 
 struct GeneratorContext<'a> {
@@ -84,6 +84,35 @@ fn visit_particle(ctx: &mut GeneratorContext, particle: &Particle) -> (Type, Str
     (type_, name)
 }
 
+fn generate_fields_for_attribute_uses(
+    ctx: &mut GeneratorContext,
+    attribute_uses: &[Ref<AttributeUse>],
+) -> Vec<Field> {
+    let mut fields = Vec::with_capacity(attribute_uses.len());
+    for attribute_use in attribute_uses.iter().copied() {
+        let attribute_use = attribute_use.get(ctx.table);
+        let attribute_decl = attribute_use.attribute_declaration.get(ctx.table);
+
+        let name = naming::convert::<CamelCase, SnakeCase>(&attribute_decl.name);
+
+        // TODO: visit simple type
+        let type_def = attribute_decl.type_definition.get(ctx.table);
+        let type_name = get_simple_type_name(ctx, type_def);
+        let type_name = Ident::new(&type_name, Span::call_site());
+
+        let field: Field = Field {
+            attrs: vec![],
+            vis: parse_quote!(pub),
+            ident: Some(Ident::new(&name, Span::call_site())),
+            colon_token: None,
+            ty: parse_quote!(#type_name),
+        };
+        // TODO: required, value_constraint
+        fields.push(field);
+    }
+    fields
+}
+
 fn visit_complex_type(ctx: &mut GeneratorContext, complex_type: Ref<ComplexTypeDefinition>) {
     if !ctx.visited_complex_types.insert(complex_type) {
         return;
@@ -109,9 +138,18 @@ fn visit_complex_type(ctx: &mut GeneratorContext, complex_type: Ref<ComplexTypeD
     let name = Ident::new(&name, Span::call_site());
 
     if complex_type.content_type.variety == ContentTypeVariety::Empty {
-        ctx.output_items.push(parse_quote! {
-            pub type #name = ();
-        });
+        if !complex_type.attribute_uses.is_empty() {
+            let fields = generate_fields_for_attribute_uses(ctx, &complex_type.attribute_uses);
+            ctx.output_items.push(parse_quote! {
+                pub struct #name {
+                    #(#fields),*
+                }
+            });
+        } else {
+            ctx.output_items.push(parse_quote! {
+                pub type #name = ();
+            });
+        }
         return;
     }
 
@@ -125,10 +163,11 @@ fn visit_complex_type(ctx: &mut GeneratorContext, complex_type: Ref<ComplexTypeD
                     pub struct #name(#content)
                 }
             } else {
-                // TODO attributes
+                let fields = generate_fields_for_attribute_uses(ctx, &complex_type.attribute_uses);
                 parse_quote! {
                     pub struct #name {
-                        inner: #content
+                        inner: #content,
+                        #(#fields),*
                     }
                 }
             }
@@ -150,6 +189,10 @@ fn visit_complex_type(ctx: &mut GeneratorContext, complex_type: Ref<ComplexTypeD
                         };
                         fields.push(field);
                     }
+                    fields.extend(generate_fields_for_attribute_uses(
+                        ctx,
+                        &complex_type.attribute_uses,
+                    ));
                     parse_quote! {
                         pub struct #name {
                             #(#fields),*
@@ -171,9 +214,13 @@ fn visit_complex_type(ctx: &mut GeneratorContext, complex_type: Ref<ComplexTypeD
                             }
                         };
                         ctx.output_items.push(inner_enum.into());
+
+                        let fields =
+                            generate_fields_for_attribute_uses(ctx, &complex_type.attribute_uses);
                         parse_quote! {
                             pub struct #name {
                                 inner: #inner_name,
+                                #(#fields),*
                             }
                         }
                     }
