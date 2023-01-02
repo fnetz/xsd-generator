@@ -7,30 +7,41 @@ use clap::Parser;
 use dt_xsd as xsd;
 use xsd::import::{Import, ImportError, ImportResolver};
 
-struct TempImportResolver;
+struct HttpImportResolver;
 
-impl ImportResolver for TempImportResolver {
+impl ImportResolver for HttpImportResolver {
     fn resolve_import(
         &self,
         context: &mut xsd::RootContext,
         import: &Import,
     ) -> Result<xsd::Schema, ImportError> {
-        if import.namespace.as_deref() == Some("http://www.w3.org/XML/1998/namespace") {
-            let xsd = std::fs::read_to_string("schemas/xml.xsd").unwrap();
-            let xsd = roxmltree::Document::parse(&xsd).unwrap();
-            let child_schema = xsd.root_element();
-            let child_schema = xsd::Schema::map_from_xml(context, child_schema);
-            Ok(child_schema)
-        } else {
-            Err(ImportError::UnsupportedImport)
+        let Some(schema_location) = import.schema_location.as_ref() else {
+            return Err(ImportError::UnsupportedImport);
+        };
+
+        if !schema_location.starts_with("http://") && !schema_location.starts_with("https://") {
+            return Err(ImportError::UnsupportedImport);
         }
+
+        eprintln!(
+            "Loading import from {} (target namespace: {:?})",
+            schema_location, import.namespace
+        );
+        let text = reqwest::blocking::get(schema_location)
+            .unwrap()
+            .text()
+            .unwrap();
+        let xsd = roxmltree::Document::parse(&text).unwrap();
+        let schema = xsd.root_element();
+        let schema = xsd::Schema::map_from_xml(context, schema);
+        Ok(schema)
     }
 }
 
 fn main() {
     let cli = cli::Cli::parse();
 
-    let import_resolvers = [Box::new(TempImportResolver) as Box<dyn ImportResolver>];
+    let import_resolvers = [Box::new(HttpImportResolver) as Box<dyn ImportResolver>];
     let xsd = std::fs::read_to_string(cli.input).unwrap();
     let options = roxmltree::ParsingOptions {
         allow_dtd: cli.allow_dtd,
