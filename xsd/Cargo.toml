@@ -1,0 +1,11 @@
+[package]
+name = "dt-xsd"
+version = "0.1.0"
+edition = "2021"
+authors = ["Felix Solcher <felix.solcher@gmail.com>"]
+description = "Model and parser for XSD schemas"
+
+[dependencies]
+lazy_static = "1.4"
+roxmltree = "0.15.0"
+thiserror = "1.0"

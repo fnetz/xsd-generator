@@ -5,7 +5,7 @@ use std::hash::Hash;
 use std::marker::PhantomData;
 use std::num::{NonZeroU32, NonZeroUsize};
 
-use crate::cli::BuiltinOverwriteAction;
+use crate::BuiltinOverwriteAction;
 
 use roxmltree::Node;
 

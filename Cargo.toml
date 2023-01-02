@@ -1,17 +1,5 @@
-[package]
-name = "xsd-generator"
-version = "0.1.0"
-edition = "2021"
-description = "Generates XML binding code from XSD schema files"
-
-[dependencies]
-clap = { version = "3.2", features = ["derive"] }
-lazy_static = "1.4"
-reqwest = { version = "0.11", features = ["blocking"] }
-roxmltree = "0.15"
-prettyplease = "0.1"
-# needs parsing and printing for the parse_quote! macro
-# TODO remove extra-traits when done
-syn = { version = "1", default-features = false, features = ["full", "parsing", "printing", "extra-traits"] }
-quote = "1"
-thiserror = "1.0.38"
+[workspace]
+members = [
+    "xsd",
+    "generator",
+]

@@ -1,9 +1,10 @@
 mod cli;
 mod generator;
-mod xsd;
+mod naming;
 
 use clap::Parser;
 
+use dt_xsd as xsd;
 use xsd::import::{Import, ImportError, ImportResolver};
 
 struct TempImportResolver;
@@ -37,8 +38,15 @@ fn main() {
     let xsd = roxmltree::Document::parse_with_options(&xsd, options).unwrap();
     let (schema, components) = xsd::read_schema(
         xsd,
-        cli.builtin_overwrite,
-        cli.register_builtins,
+        match cli.builtin_overwrite {
+            cli::BuiltinOverwriteAction::Deny => xsd::BuiltinOverwriteAction::Deny,
+            cli::BuiltinOverwriteAction::Warn => xsd::BuiltinOverwriteAction::Warn,
+            cli::BuiltinOverwriteAction::Allow => xsd::BuiltinOverwriteAction::Allow,
+        },
+        match cli.register_builtins {
+            cli::RegisterBuiltins::Yes => xsd::RegisterBuiltins::Yes,
+            cli::RegisterBuiltins::No => xsd::RegisterBuiltins::No,
+        },
         &import_resolvers,
     );
     let rst = generator::generate_rust(&schema, &components);

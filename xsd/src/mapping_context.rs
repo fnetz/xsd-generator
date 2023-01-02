@@ -13,7 +13,7 @@ use super::{
     IdentityConstraintDefinition, ModelGroupDefinition, NotationDeclaration, Ref,
     SimpleTypeDefinition, Schema,
 };
-use crate::cli::BuiltinOverwriteAction;
+use crate::BuiltinOverwriteAction;
 
 #[derive(Default)]
 pub(super) struct TopLevelElements<'a, 'input> {

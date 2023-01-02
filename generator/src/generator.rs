@@ -1,8 +1,6 @@
-mod naming;
-
 use std::collections::HashSet;
 
-use naming::{CamelCase, PascalCase, SnakeCase};
+use crate::naming::{self, CamelCase, PascalCase, SnakeCase};
 
 use syn::{Field, Ident, Item, ItemEnum, Type, __private::Span, parse_quote, Fields, Variant};
 

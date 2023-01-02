@@ -56,7 +56,18 @@ use mapping_context::MappingContext;
 use xstypes::{Sequence, Set};
 use import::ImportResolver;
 
-use crate::cli::{BuiltinOverwriteAction, RegisterBuiltins};
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum BuiltinOverwriteAction {
+    Deny,
+    Warn,
+    Allow,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum RegisterBuiltins {
+    Yes,
+    No,
+}
 
 pub use components::SchemaComponentTable;
 

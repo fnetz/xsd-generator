@@ -1,5 +1,3 @@
-use crate::xsd::fundamental_facet::{CardinalityValue, OrderedValue};
-
 use super::{
     annotation::Annotation,
     attribute_decl::AttributeDeclaration,
@@ -8,7 +6,7 @@ use super::{
     components::{Component, Named, RefNamed},
     constraining_facet::{ConstrainingFacet, WhiteSpace, WhiteSpaceValue},
     element_decl::ElementDeclaration,
-    fundamental_facet::{FundamentalFacet, FundamentalFacetSet},
+    fundamental_facet::{FundamentalFacet, FundamentalFacetSet, CardinalityValue, OrderedValue},
     mapping_context::{MappingContext, TopLevelMappable},
     shared::TypeDefinition,
     values::actual_value,

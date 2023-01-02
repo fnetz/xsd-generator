@@ -1034,7 +1034,7 @@ pub fn is_builtin_attribute_decl_name(name: &QName) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cli::BuiltinOverwriteAction;
+    use crate::BuiltinOverwriteAction;
 
     #[test]
     fn registers_builtins_without_crashing() {
