@@ -34,6 +34,7 @@ fn main() {
     let xsd = std::fs::read_to_string(cli.input).unwrap();
     let options = roxmltree::ParsingOptions {
         allow_dtd: cli.allow_dtd,
+        ..Default::default()
     };
     let xsd = roxmltree::Document::parse_with_options(&xsd, options).unwrap();
     let (schema, components) = xsd::read_schema(

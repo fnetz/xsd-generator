@@ -17,8 +17,29 @@ pub struct Annotation {
 impl Annotation {
     pub const TAG_NAME: &'static str = "annotation";
 
-    fn source_string(node: Node) -> String {
-        node.document().input_text()[node.range()].to_string()
+    /// Generate a textual representation of the content of an annotation.
+    /// This is not meant to be the exact source or event efficient; it should however be able to
+    /// parse back into similar XML.
+    fn content_to_text(node: Node) -> String {
+        use std::fmt::Write;
+
+        let mut text = String::new();
+        for child in node.children() {
+            match child.node_type() {
+                roxmltree::NodeType::Text => text.push_str(child.text().unwrap()),
+                roxmltree::NodeType::Element => {
+                    let tag_name = child.tag_name().name();
+                    write!(
+                        text,
+                        "<{tag_name}>{}</{tag_name}>",
+                        Self::content_to_text(child)
+                    )
+                    .unwrap();
+                }
+                _ => {}
+            }
+        }
+        text
     }
 
     pub(super) fn map_from_xml(context: &mut MappingContext, annotation: Node) -> Ref<Self> {
@@ -30,7 +51,7 @@ impl Annotation {
         let application_information = annotation
             .children()
             .filter(|child| child.tag_name().name() == "appinfo")
-            .map(Self::source_string)
+            .map(Self::content_to_text)
             .collect();
 
         // {user information}
@@ -39,7 +60,7 @@ impl Annotation {
         let user_information = annotation
             .children()
             .filter(|child| child.tag_name().name() == "documentation")
-            .map(Self::source_string)
+            .map(Self::content_to_text)
             .collect();
 
         // {attributes}
