@@ -56,14 +56,6 @@ impl<P> Scope<P> {
             Self::Local(p) => Some(p),
         }
     }
-
-    /// Same as [`parent()`](Self::parent()) but mutable
-    pub(super) fn parent_mut(&mut self) -> Option<&mut P> {
-        match self {
-            Self::Global => None,
-            Self::Local(p) => Some(p),
-        }
-    }
 }
 
 #[derive(Clone, Debug)]

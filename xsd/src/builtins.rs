@@ -22,7 +22,6 @@ use super::{
 // Namespaces used by the specification (pt. 1, §1.3.1)
 pub const XS_NAMESPACE: &str = "http://www.w3.org/2001/XMLSchema";
 pub const XSI_NAMESPACE: &str = "http://www.w3.org/2001/XMLSchema-instance";
-pub const VC_NAMESPACE: &str = " http://www.w3.org/2007/XMLSchema-versioning";
 
 lazy_static! {
     /// The `xs:anyType` qualified name
