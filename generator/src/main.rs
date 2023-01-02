@@ -4,17 +4,17 @@ mod naming;
 
 use clap::Parser;
 
-use dt_xsd as xsd;
-use xsd::import::{Import, ImportError, ImportResolver};
+use dt_xsd::import::{Import, ImportError, ImportResolver};
+use dt_xsd::{RootContext, Schema};
 
 struct HttpImportResolver;
 
 impl ImportResolver for HttpImportResolver {
     fn resolve_import(
         &self,
-        context: &mut xsd::RootContext,
+        context: &mut RootContext,
         import: &Import,
-    ) -> Result<xsd::Schema, ImportError> {
+    ) -> Result<Schema, ImportError> {
         let Some(schema_location) = import.schema_location.as_ref() else {
             return Err(ImportError::UnsupportedImport);
         };
@@ -33,7 +33,7 @@ impl ImportResolver for HttpImportResolver {
             .unwrap();
         let xsd = roxmltree::Document::parse(&text).unwrap();
         let schema = xsd.root_element();
-        let schema = xsd::Schema::map_from_xml(context, schema);
+        let schema = Schema::map_from_xml(context, schema);
         Ok(schema)
     }
 }
@@ -48,16 +48,16 @@ fn main() {
         ..Default::default()
     };
     let xsd = roxmltree::Document::parse_with_options(&xsd, options).unwrap();
-    let (schema, components) = xsd::read_schema(
+    let (schema, components) = dt_xsd::read_schema(
         xsd,
         match cli.builtin_overwrite {
-            cli::BuiltinOverwriteAction::Deny => xsd::BuiltinOverwriteAction::Deny,
-            cli::BuiltinOverwriteAction::Warn => xsd::BuiltinOverwriteAction::Warn,
-            cli::BuiltinOverwriteAction::Allow => xsd::BuiltinOverwriteAction::Allow,
+            cli::BuiltinOverwriteAction::Deny => dt_xsd::BuiltinOverwriteAction::Deny,
+            cli::BuiltinOverwriteAction::Warn => dt_xsd::BuiltinOverwriteAction::Warn,
+            cli::BuiltinOverwriteAction::Allow => dt_xsd::BuiltinOverwriteAction::Allow,
         },
         match cli.register_builtins {
-            cli::RegisterBuiltins::Yes => xsd::RegisterBuiltins::Yes,
-            cli::RegisterBuiltins::No => xsd::RegisterBuiltins::No,
+            cli::RegisterBuiltins::Yes => dt_xsd::RegisterBuiltins::Yes,
+            cli::RegisterBuiltins::No => dt_xsd::RegisterBuiltins::No,
         },
         &import_resolvers,
     );

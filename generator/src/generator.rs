@@ -4,10 +4,10 @@ use crate::naming::{self, CamelCase, PascalCase, SnakeCase};
 
 use syn::{Field, Ident, Item, ItemEnum, Type, __private::Span, parse_quote, Fields, Variant};
 
-use crate::xsd::complex_type_def::Context as ComplexContext;
-use crate::xsd::simple_type_def::Context as SimpleContext;
-use crate::xsd::simple_type_def::Variety as SimpleVariety;
-use crate::xsd::{
+use dt_xsd::complex_type_def::Context as ComplexContext;
+use dt_xsd::simple_type_def::Context as SimpleContext;
+use dt_xsd::simple_type_def::Variety as SimpleVariety;
+use dt_xsd::{
     attribute_decl::ScopeVariety, complex_type_def::ContentTypeVariety, model_group::Compositor,
     particle::MaxOccurs, AttributeUse, ComplexTypeDefinition, ElementDeclaration, Particle, Ref,
     RefNamed, Schema, SchemaComponentTable, SimpleTypeDefinition, Term, TypeDefinition,
@@ -33,7 +33,7 @@ impl<'a> GeneratorContext<'a> {
 
 fn visit_particle(ctx: &mut GeneratorContext, particle: &Particle) -> (Type, String) {
     let (name, type_) = match particle.term {
-        crate::xsd::Term::ElementDeclaration(element) => {
+        Term::ElementDeclaration(element) => {
             let element = element.get(ctx.table);
             if element.scope.variety() == ScopeVariety::Local {
                 visit_element_decl(ctx, element);
@@ -50,7 +50,7 @@ fn visit_particle(ctx: &mut GeneratorContext, particle: &Particle) -> (Type, Str
             let type_ = parse_quote!(#type_);
             (name, type_)
         }
-        crate::xsd::Term::ModelGroup(model_group) => {
+        Term::ModelGroup(model_group) => {
             let model_group = model_group.get(ctx.table);
             let type_ = match model_group.compositor {
                 Compositor::All | Compositor::Sequence => {
@@ -66,7 +66,7 @@ fn visit_particle(ctx: &mut GeneratorContext, particle: &Particle) -> (Type, Str
             };
             ("anon".into(), type_)
         }
-        crate::xsd::Term::Wildcard(_) => ("wildcard".into(), parse_quote! { () }), //todo!(),
+        Term::Wildcard(_) => ("wildcard".into(), parse_quote! { () }), //todo!(),
     };
 
     let type_ = if matches!(particle.max_occurs, MaxOccurs::Count(1)) {

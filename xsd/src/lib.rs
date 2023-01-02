@@ -51,10 +51,10 @@ pub use type_alternative::TypeAlternative;
 pub use wildcard::Wildcard;
 
 pub use components::{Ref, RefNamed};
-pub use mapping_context::RootContext;
-use mapping_context::MappingContext;
-use xstypes::{Sequence, Set};
 use import::ImportResolver;
+use mapping_context::MappingContext;
+pub use mapping_context::RootContext;
+use xstypes::{Sequence, Set};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum BuiltinOverwriteAction {

@@ -7,11 +7,11 @@ use super::{
         Component, ComponentResolver, ComponentTraits, ConstructionComponentTable, DynamicRef,
         HasArenaContainer, Lookup, LookupTables, RefNamed,
     },
-    import::{ImportResolver, Import},
+    import::{Import, ImportResolver},
     xstypes::QName,
     AttributeDeclaration, AttributeGroupDefinition, ComplexTypeDefinition, ElementDeclaration,
-    IdentityConstraintDefinition, ModelGroupDefinition, NotationDeclaration, Ref,
-    SimpleTypeDefinition, Schema,
+    IdentityConstraintDefinition, ModelGroupDefinition, NotationDeclaration, Ref, Schema,
+    SimpleTypeDefinition,
 };
 use crate::BuiltinOverwriteAction;
 

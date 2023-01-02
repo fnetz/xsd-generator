@@ -6,7 +6,7 @@ use super::{
     components::{Component, Named, RefNamed},
     constraining_facet::{ConstrainingFacet, WhiteSpace, WhiteSpaceValue},
     element_decl::ElementDeclaration,
-    fundamental_facet::{FundamentalFacet, FundamentalFacetSet, CardinalityValue, OrderedValue},
+    fundamental_facet::{CardinalityValue, FundamentalFacet, FundamentalFacetSet, OrderedValue},
     mapping_context::{MappingContext, TopLevelMappable},
     shared::TypeDefinition,
     values::actual_value,
