@@ -34,7 +34,7 @@ pub struct Schema {
 }
 
 impl Schema {
-    pub(super) fn map_from_xml(root_context: &mut RootContext, schema: Node) -> Self {
+    pub fn map_from_xml(root_context: &mut RootContext, schema: Node) -> Self {
         assert_eq!(schema.tag_name().name(), "schema");
 
         let target_namespace = schema
@@ -56,29 +56,25 @@ impl Schema {
             .filter(|c| c.tag_name().name() == Import::TAG_NAME)
         {
             let import = Import::map_from_xml(import, schema).unwrap();
+            let child_schema = context.root_mut().resolve_import(&import);
 
-            match import.namespace.as_deref() {
-                Some("http://www.w3.org/XML/1998/namespace") => {
-                    let xsd = std::fs::read_to_string("schemas/xml.xsd").unwrap();
-                    let xsd = roxmltree::Document::parse(&xsd).unwrap();
-                    let child_schema = xsd.root_element();
-                    let mut child_schema = Schema::map_from_xml(context.root_mut(), child_schema);
-                    type_definitions.append(&mut child_schema.type_definitions);
-                    attribute_declarations.append(&mut child_schema.attribute_declarations);
-                    element_declarations.append(&mut child_schema.element_declarations);
-                    attribute_group_definitions
-                        .append(&mut child_schema.attribute_group_definitions);
-                    model_group_definitions.append(&mut child_schema.model_group_definitions);
-                    notation_declarations.append(&mut child_schema.notation_declarations);
-                    identity_constraint_definitions
-                        .append(&mut child_schema.identity_constraint_definitions);
-                }
-                _ => panic!("Unhandled import"),
+            // NOTE: Import failure is not an error, but there should be a way to emit a
+            // notification (and corresponding errors) to the user.
+
+            if let Some(child_schema) = child_schema {
+                type_definitions.extend(child_schema.type_definitions);
+                attribute_declarations.extend(child_schema.attribute_declarations);
+                element_declarations.extend(child_schema.element_declarations);
+                attribute_group_definitions.extend(child_schema.attribute_group_definitions);
+                model_group_definitions.extend(child_schema.model_group_definitions);
+                notation_declarations.extend(child_schema.notation_declarations);
+                identity_constraint_definitions
+                    .extend(child_schema.identity_constraint_definitions);
             }
         }
 
-        fn reserve_top_level<'a, 'input: 'a, 'p, C>(
-            context: &mut MappingContext<'a, 'input, 'p>,
+        fn reserve_top_level<'a, 'input: 'a, C>(
+            context: &mut MappingContext<'a, '_, 'input, '_>,
             node: Node<'a, 'input>,
             schema: Node,
         ) where

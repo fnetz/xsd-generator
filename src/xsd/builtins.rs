@@ -1038,7 +1038,7 @@ mod tests {
 
     #[test]
     fn registers_builtins_without_crashing() {
-        let mut root_context = RootContext::new(BuiltinOverwriteAction::Deny);
+        let mut root_context = RootContext::new(BuiltinOverwriteAction::Deny, &[]);
 
         register_builtins(&mut root_context);
     }

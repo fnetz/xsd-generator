@@ -1,6 +1,7 @@
 use roxmltree::Node;
+use thiserror::Error;
 
-use super::{error::XsdError, values::actual_value};
+use super::{error::XsdError, mapping_context::RootContext, values::actual_value, Schema};
 
 /// This structure represents the `import` element; it is not a schema component.
 ///
@@ -46,4 +47,22 @@ impl Import {
             schema_location,
         })
     }
+}
+
+#[derive(Debug, Error)]
+pub enum ImportError {
+    #[error("the resolver does not support the import")]
+    UnsupportedImport,
+    #[error("the schema failed to parse")]
+    Xsd(XsdError),
+    #[error("an unspecified error occurred while loading the schema")]
+    UnspecifiedLoad(Box<dyn std::error::Error>),
+}
+
+pub trait ImportResolver {
+    fn resolve_import(
+        &self,
+        context: &mut RootContext,
+        import: &Import,
+    ) -> Result<Schema, ImportError>;
 }

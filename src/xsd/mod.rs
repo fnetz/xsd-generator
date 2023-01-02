@@ -51,8 +51,10 @@ pub use type_alternative::TypeAlternative;
 pub use wildcard::Wildcard;
 
 pub use components::{Ref, RefNamed};
-use mapping_context::{MappingContext, RootContext};
+pub use mapping_context::RootContext;
+use mapping_context::MappingContext;
 use xstypes::{Sequence, Set};
+use import::ImportResolver;
 
 use crate::cli::{BuiltinOverwriteAction, RegisterBuiltins};
 
@@ -62,9 +64,10 @@ pub fn read_schema(
     schema: roxmltree::Document,
     builtin_overwrite: BuiltinOverwriteAction,
     register_builtins: RegisterBuiltins,
+    import_resolvers: &[Box<dyn ImportResolver>],
 ) -> (Schema, SchemaComponentTable) {
     let schema = schema.root_element();
-    let mut root_context = RootContext::new(builtin_overwrite);
+    let mut root_context = RootContext::new(builtin_overwrite, import_resolvers);
     if register_builtins == RegisterBuiltins::Yes {
         builtins::register_builtins(&mut root_context);
     }

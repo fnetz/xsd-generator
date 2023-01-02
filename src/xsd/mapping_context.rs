@@ -7,10 +7,11 @@ use super::{
         Component, ComponentResolver, ComponentTraits, ConstructionComponentTable, DynamicRef,
         HasArenaContainer, Lookup, LookupTables, RefNamed,
     },
-    xstypes::{QName, AnyURI},
+    import::{ImportResolver, Import},
+    xstypes::QName,
     AttributeDeclaration, AttributeGroupDefinition, ComplexTypeDefinition, ElementDeclaration,
     IdentityConstraintDefinition, ModelGroupDefinition, NotationDeclaration, Ref,
-    SimpleTypeDefinition,
+    SimpleTypeDefinition, Schema,
 };
 use crate::cli::BuiltinOverwriteAction;
 
@@ -87,16 +88,22 @@ where
     );
 }
 
-pub struct RootContext {
+pub struct RootContext<'a> {
     components: ConstructionComponentTable,
     resolver: ComponentResolver,
+
+    import_resolvers: &'a [Box<dyn ImportResolver>],
 }
 
-impl RootContext {
-    pub fn new(builtin_overwrite: BuiltinOverwriteAction) -> Self {
+impl<'a> RootContext<'a> {
+    pub fn new(
+        builtin_overwrite: BuiltinOverwriteAction,
+        import_resolvers: &'a [Box<dyn ImportResolver>],
+    ) -> Self {
         Self {
             components: ConstructionComponentTable::new(),
             resolver: ComponentResolver::new(builtin_overwrite),
+            import_resolvers,
         }
     }
 
@@ -148,10 +155,22 @@ impl RootContext {
     {
         self.resolver.resolve(key)
     }
+
+    pub(super) fn resolve_import(&mut self, import: &Import) -> Option<Schema> {
+        // TODO handle circular and duplicate imports
+
+        for resolver in self.import_resolvers {
+            if let Ok(schema) = resolver.resolve_import(self, import) {
+                return Some(schema);
+            }
+        }
+
+        None
+    }
 }
 
-pub(super) struct MappingContext<'a, 'input: 'a, 'p> {
-    root: &'p mut RootContext,
+pub(super) struct MappingContext<'a, 'b, 'input: 'a, 'p> {
+    root: &'p mut RootContext<'b>,
 
     schema_node: Node<'a, 'input>,
 
@@ -159,8 +178,8 @@ pub(super) struct MappingContext<'a, 'input: 'a, 'p> {
     in_progress_top_level: HashSet<DynamicRef>,
 }
 
-impl<'a, 'input: 'a, 'p> MappingContext<'a, 'input, 'p> {
-    pub(super) fn new(root: &'p mut RootContext, schema_node: Node<'a, 'input>) -> Self {
+impl<'a, 'b, 'input: 'a, 'p> MappingContext<'a, 'b, 'input, 'p> {
+    pub(super) fn new(root: &'p mut RootContext<'b>, schema_node: Node<'a, 'input>) -> Self {
         Self {
             root,
             schema_node,
@@ -169,7 +188,7 @@ impl<'a, 'input: 'a, 'p> MappingContext<'a, 'input, 'p> {
         }
     }
 
-    pub(super) fn root_mut(&mut self) -> &mut RootContext {
+    pub(super) fn root_mut(&mut self) -> &mut RootContext<'b> {
         self.root
     }
 
