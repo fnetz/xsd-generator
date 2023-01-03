@@ -166,7 +166,7 @@ impl SimpleTypeDefinition {
                 .map(|v| actual_value::<QName>(v, child))
                 .map(|name| ctx.resolve(&name))
                 .unwrap_or_else(|| {
-                    let st = simple_type
+                    let st = child
                         .children()
                         .find(|c| c.tag_name().name() == Self::TAG_NAME)
                         .map(|st| {
