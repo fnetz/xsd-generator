@@ -65,6 +65,6 @@ fn main() {
         },
         &import_resolvers,
     );
-    let rst = generators::rust::generate(&schema, &components);
+    let rst = cli.generator.generate(&schema, &components);
     print!("{rst}");
 }

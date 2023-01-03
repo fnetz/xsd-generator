@@ -1,5 +1,7 @@
 use clap::{Parser, ValueEnum};
 
+use crate::generators::Generator;
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum BuiltinOverwriteAction {
     Deny,
@@ -19,6 +21,10 @@ pub struct Cli {
     /// The source file or URL
     #[clap(value_parser)]
     pub input: String,
+
+    /// Selects for which language the generator will output code
+    #[clap(value_enum)]
+    pub generator: Generator,
 
     /// Allow a XML Document Type Definition (DTD) to occur
     #[clap(long)]

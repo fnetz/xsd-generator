@@ -4,13 +4,25 @@ version = "0.1.0"
 edition = "2021"
 description = "Generates XML binding code from XSD schema files"
 
+[features]
+generator-rust = ["dep:syn", "dep:quote", "dep:prettyplease"]
+generator-typescript = []
+
+default = ["generator-rust", "generator-typescript"]
+
 [dependencies]
 dt-xsd = { path = "../xsd" }
 clap = { version = "4.0", features = ["derive", "wrap_help"] }
 reqwest = { version = "0.11", features = ["blocking"] }
 roxmltree = "0.16.0"
-prettyplease = "0.1"
+
+prettyplease = { version = "0.1", optional = true }
+quote = { version = "1", optional = true }
+
+[dependencies.syn]
+version = "1"
+optional = true
+default-features = false
 # needs parsing and printing for the parse_quote! macro
 # TODO remove extra-traits when done
-syn = { version = "1", default-features = false, features = ["full", "parsing", "printing", "extra-traits"] }
-quote = "1"
+features = ["full", "parsing", "printing", "extra-traits"]
