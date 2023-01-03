@@ -7,11 +7,12 @@ use super::{
     identity_constraint_def::IdentityConstraintDefinition,
     mapping_context::TopLevelMappable,
     model_group_def::ModelGroupDefinition,
+    particle::MaxOccurs,
     shared::{self, TypeDefinition},
     type_alternative::TypeAlternative,
     values::{actual_value, ActualValue},
     xstypes::{AnyURI, NCName, QName, Sequence, Set},
-    MappingContext, Ref, SimpleTypeDefinition,
+    MappingContext, Particle, Ref, SimpleTypeDefinition, Term,
 };
 
 use roxmltree::Node;
@@ -358,7 +359,8 @@ impl ElementDeclaration {
         }
     }
 
-    pub(super) fn map_from_xml_local(
+    /// Maps the [`ElementDeclaration`] from an `<element>` without a `ref` attribute.
+    fn map_local_element_decl(
         context: &mut MappingContext,
         element: Node,
         schema: Node,
@@ -408,6 +410,61 @@ impl ElementDeclaration {
             },
         );
         self_ref
+    }
+
+    pub(super) fn map_from_xml_local(
+        context: &mut MappingContext,
+        element: Node,
+        schema: Node,
+        parent: ScopeParent,
+    ) -> Ref<Particle> {
+        if let Some(_ref) = element.attribute("ref") {
+            todo!("local element with ref")
+        } else {
+            assert_eq!(element.tag_name().name(), "element");
+
+            // {min occurs}
+            //   The ·actual value· of the minOccurs [attribute], if present, otherwise 1.
+            let min_occurs = element
+                .attribute("minOccurs")
+                .map(|min_occurs| actual_value::<u64>(min_occurs, element))
+                .unwrap_or(1);
+
+            // {max occurs}
+            //   unbounded, if the maxOccurs [attribute] equals unbounded, otherwise the ·actual
+            //   value· of the maxOccurs [attribute], if present, otherwise 1.
+            let max_occurs = element
+                .attribute("maxOccurs")
+                .map(|max_occurs| {
+                    if max_occurs == "unbounded" {
+                        MaxOccurs::Unbounded
+                    } else {
+                        MaxOccurs::Count(actual_value::<u64>(max_occurs, element))
+                    }
+                })
+                .unwrap_or(MaxOccurs::Count(1));
+
+            // {term}
+            //   A (local) element declaration as given below.
+            let term = Self::map_local_element_decl(context, element, schema, parent);
+            let term = Term::ElementDeclaration(term);
+
+            // {annotations}
+            //   The same annotations as the {annotations} of the {term}.
+            let annotations = match term {
+                Term::ElementDeclaration(element) => {
+                    element.get(context.components()).annotations.clone()
+                }
+                _ => unreachable!(),
+            };
+
+            context.create(Particle {
+                min_occurs,
+                max_occurs,
+                term,
+                annotations,
+            })
+        }
     }
 
     fn map_attrib_set_helper<'a, T: ActualValue<'a> + PartialEq + Copy>(

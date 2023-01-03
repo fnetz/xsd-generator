@@ -27,54 +27,12 @@ impl Particle {
         schema: Node,
         element_parent: Ref<ComplexTypeDefinition>,
     ) -> Ref<Self> {
-        assert_eq!(particle.tag_name().name(), "element");
-
-        // {min occurs}
-        //   The ·actual value· of the minOccurs [attribute], if present, otherwise 1.
-        let min_occurs = particle
-            .attribute("minOccurs")
-            .map(|min_occurs| actual_value::<u64>(min_occurs, particle))
-            .unwrap_or(1);
-
-        // {max occurs}
-        //   unbounded, if the maxOccurs [attribute] equals unbounded, otherwise the ·actual value·
-        //   of the maxOccurs [attribute], if present, otherwise 1.
-        let max_occurs = particle
-            .attribute("maxOccurs")
-            .map(|max_occurs| {
-                if max_occurs == "unbounded" {
-                    MaxOccurs::Unbounded
-                } else {
-                    MaxOccurs::Count(actual_value::<u64>(max_occurs, particle))
-                }
-            })
-            .unwrap_or(MaxOccurs::Count(1));
-
-        // {term}
-        //   A (local) element declaration as given below.
-        let element = ElementDeclaration::map_from_xml_local(
+        ElementDeclaration::map_from_xml_local(
             context,
             particle,
             schema,
             element_decl::ScopeParent::ComplexType(element_parent),
-        );
-        let term = Term::ElementDeclaration(element);
-
-        // {annotations}
-        //   The same annotations as the {annotations} of the {term}.
-        let annotations = match term {
-            Term::ElementDeclaration(element) => {
-                element.get(context.components()).annotations.clone()
-            }
-            _ => unreachable!(),
-        };
-
-        context.create(Particle {
-            min_occurs,
-            max_occurs,
-            term,
-            annotations,
-        })
+        )
     }
 
     /// Mapper for Model groups `<all>`, `<sequence>`, and `<choice>`, see XML Representation of Model
