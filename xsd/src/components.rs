@@ -11,7 +11,7 @@ use roxmltree::Node;
 
 use super::xstypes::QName;
 use super::{
-    builtins, Annotation, Assertion, AttributeDeclaration, AttributeGroupDefinition, AttributeUse,
+    Annotation, Assertion, AttributeDeclaration, AttributeGroupDefinition, AttributeUse,
     ComplexTypeDefinition, ConstrainingFacet, ElementDeclaration, IdentityConstraintDefinition,
     ModelGroup, ModelGroupDefinition, NotationDeclaration, Particle, SimpleTypeDefinition,
     TypeAlternative, TypeDefinition, Wildcard,
@@ -20,6 +20,10 @@ use super::{
 /// Trait implemented by all concrete schema components.
 pub trait Component {
     const DISPLAY_NAME: &'static str;
+
+    fn is_builtin(&self) -> bool {
+        false
+    }
 }
 
 /// Type on which internal component traits are implemented.
@@ -398,12 +402,32 @@ where
     }
 }
 
+/// Any type that indirectly can be checked if it is built-in, i.e. where first a [`Ref`] has to be
+/// dereferenced to check.
+/// This is trivially the case for all `Ref<Named>`, and additionally for [`TypeDefinition`].
+pub trait IsBuiltinRef {
+    fn is_builtin(&self, components: &impl ComponentTable) -> bool;
+}
+
+impl<T> IsBuiltinRef for Ref<T>
+where
+    T: Component,
+    ComponentTraits: HasArenaContainer<T>,
+{
+    fn is_builtin(&self, components: &impl ComponentTable) -> bool {
+        Component::is_builtin(self.get(components))
+    }
+}
+
 /// Trait that allows components to be looked up by their [qualified name](QName).
 /// `V` is the value type (usually `Ref<Component>` or a wrapper like [`TypeDefinition`]).
 pub(super) trait Lookup<V: Copy> {
+    type TableItem: IsBuiltinRef;
+
     /// Registers a value for lookup in its respective symbol space.
-    /// Returns `true` if the name given by the `key` parameter was already associated with a value.
-    fn register_value_for_lookup(&mut self, key: QName, value: V) -> bool;
+    /// If the name given by the `key` parameter was already associated with a value, it returns
+    /// that value; otherwise, it returns `None`.
+    fn register_value_for_lookup(&mut self, key: QName, value: V) -> Option<Self::TableItem>;
 
     /// Looks up the value associated with the `key`; returns `None` if there is no such value.
     fn lookup_value(&self, key: &QName) -> Option<V>;
@@ -426,8 +450,14 @@ pub(super) struct LookupTables {
 macro_rules! impl_lookup {
     ($field_name:ident: $value_type:ty) => {
         impl Lookup<$value_type> for LookupTables {
-            fn register_value_for_lookup(&mut self, key: QName, value: $value_type) -> bool {
-                self.$field_name.insert(key, value).is_some()
+            type TableItem = $value_type;
+
+            fn register_value_for_lookup(
+                &mut self,
+                key: QName,
+                value: $value_type,
+            ) -> Option<$value_type> {
+                self.$field_name.insert(key, value)
             }
 
             fn lookup_value(&self, key: &QName) -> Option<$value_type> {
@@ -446,10 +476,15 @@ impl_lookup!(notation_declarations: Ref<NotationDeclaration>);
 impl_lookup!(identity_constraint_definitions: Ref<IdentityConstraintDefinition>);
 
 impl Lookup<Ref<SimpleTypeDefinition>> for LookupTables {
-    fn register_value_for_lookup(&mut self, key: QName, value: Ref<SimpleTypeDefinition>) -> bool {
+    type TableItem = TypeDefinition;
+
+    fn register_value_for_lookup(
+        &mut self,
+        key: QName,
+        value: Ref<SimpleTypeDefinition>,
+    ) -> Option<TypeDefinition> {
         self.type_definitions
             .insert(key, TypeDefinition::Simple(value))
-            .is_some()
     }
 
     fn lookup_value(&self, key: &QName) -> Option<Ref<SimpleTypeDefinition>> {
@@ -460,10 +495,15 @@ impl Lookup<Ref<SimpleTypeDefinition>> for LookupTables {
 }
 
 impl Lookup<Ref<ComplexTypeDefinition>> for LookupTables {
-    fn register_value_for_lookup(&mut self, key: QName, value: Ref<ComplexTypeDefinition>) -> bool {
+    type TableItem = TypeDefinition;
+
+    fn register_value_for_lookup(
+        &mut self,
+        key: QName,
+        value: Ref<ComplexTypeDefinition>,
+    ) -> Option<TypeDefinition> {
         self.type_definitions
             .insert(key, TypeDefinition::Complex(value))
-            .is_some()
     }
 
     fn lookup_value(&self, key: &QName) -> Option<Ref<ComplexTypeDefinition>> {
@@ -496,8 +536,12 @@ impl ComponentResolver {
         self.lookup_tables.lookup_value(key).unwrap()
     }
 
-    pub(super) fn register_with_name<R>(&mut self, name: QName, value: R)
-    where
+    pub(super) fn register_with_name<R>(
+        &mut self,
+        name: QName,
+        value: R,
+        table: &impl ComponentTable,
+    ) where
         R: Copy,
         LookupTables: Lookup<R>,
     {
@@ -505,8 +549,8 @@ impl ComponentResolver {
         let prev = self
             .lookup_tables
             .register_value_for_lookup(name.clone(), value);
-        if prev {
-            if builtins::is_builtin_name(&name) {
+        if let Some(prev) = prev {
+            if prev.is_builtin(table) {
                 match self.builtin_overwrite {
                     BuiltinOverwriteAction::Deny => {
                         panic!("Tried to overwrite built-in component: {name}");
@@ -533,7 +577,7 @@ impl ComponentResolver {
         let name = value
             .name(table)
             .expect("Tried to register unnamed component");
-        self.register_with_name(name, value)
+        self.register_with_name(name, value, table)
     }
 }
 

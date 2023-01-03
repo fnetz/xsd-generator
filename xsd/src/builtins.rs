@@ -113,6 +113,7 @@ fn register_xs_any_type(context: &mut RootContext) {
             assertions: Sequence::new(),
             abstract_: false,
             annotations: Sequence::new(),
+            is_builtin: true,
         },
     );
     context.register(TypeDefinition::Complex(xs_any_type));
@@ -142,6 +143,7 @@ fn register_special_types(context: &mut RootContext) {
             item_type_definition: None,
             member_type_definitions: None,
             annotations: Sequence::new(),
+            is_builtin: true,
         },
     );
     context.register(xs_any_simple_type_def);
@@ -164,6 +166,7 @@ fn register_special_types(context: &mut RootContext) {
             item_type_definition: None,
             member_type_definitions: None,
             annotations: Sequence::new(),
+            is_builtin: true,
         },
     );
     context.register(xs_any_atomic_type_def);
@@ -193,6 +196,7 @@ fn register_xs_error(context: &mut RootContext) {
         item_type_definition: None,
         member_type_definitions: Some(Sequence::new()),
         annotations: Sequence::new(),
+        is_builtin: true,
     });
     context.register(TypeDefinition::Simple(xs_error));
 }
@@ -297,6 +301,7 @@ fn register_builtin_primitive_types(context: &mut RootContext) {
                 item_type_definition: None,
                 member_type_definitions: None,
                 annotations: Sequence::new(),
+                is_builtin: true,
             },
         );
         context.register(simple_type_def);
@@ -838,6 +843,7 @@ fn register_builtin_ordinary_types(context: &mut RootContext) {
                     primitive_type_definition: None,
                     item_type_definition: Some(item_type),
                     member_type_definitions: None,
+                    is_builtin: true,
                 })
             }
         };
@@ -893,6 +899,7 @@ fn register_builtin_ordinary_types(context: &mut RootContext) {
                 },
                 member_type_definitions: None,
                 annotations: Sequence::new(),
+                is_builtin: true,
             },
         );
         context.register(simple_type_ref);
@@ -917,6 +924,7 @@ fn register_builtin_attribute_decls(context: &mut RootContext) {
         value_constraint: None,
         annotations: Sequence::new(),
         inheritable: false,
+        is_builtin: true,
     });
     context.register(xsi_type);
 
@@ -928,6 +936,7 @@ fn register_builtin_attribute_decls(context: &mut RootContext) {
         value_constraint: None,
         annotations: Sequence::new(),
         inheritable: false,
+        is_builtin: true,
     });
     context.register(xsi_nil);
 
@@ -945,6 +954,7 @@ fn register_builtin_attribute_decls(context: &mut RootContext) {
         fundamental_facets: FundamentalFacetSet::empty(),
         primitive_type_definition: None,
         member_type_definitions: None,
+        is_builtin: true,
     });
     context.insert(
         xsi_schema_location,
@@ -956,6 +966,7 @@ fn register_builtin_attribute_decls(context: &mut RootContext) {
             value_constraint: None,
             annotations: Sequence::new(),
             inheritable: false,
+            is_builtin: true,
         },
     );
     context.register(xsi_schema_location);
@@ -968,66 +979,9 @@ fn register_builtin_attribute_decls(context: &mut RootContext) {
         value_constraint: None,
         annotations: Sequence::new(),
         inheritable: false,
+        is_builtin: true,
     });
     context.register(xsi_no_namespace_schema_location);
-}
-
-pub fn is_builtin_name(name: &QName) -> bool {
-    is_builtin_type_name(name) || is_builtin_attribute_decl_name(name)
-}
-
-pub fn is_builtin_type_name(name: &QName) -> bool {
-    if name.namespace_name.as_deref() != Some(XS_NAMESPACE) {
-        return false;
-    }
-
-    const BUILTIN_TYPE_NAMES: [&str; 33] = [
-        "anyType",
-        "anySimpleType",
-        "anyAtomicType",
-        "error",
-        "string",
-        "boolean",
-        "float",
-        "double",
-        "decimal",
-        "dateTime",
-        "duration",
-        "time",
-        "date",
-        "gMonth",
-        "gMonthDay",
-        "gDay",
-        "gYear",
-        "gYearMonth",
-        "hexBinary",
-        "base64Binary",
-        "anyURI",
-        "QName",
-        "NOTATION",
-        "integer",
-        "nonNegativeInteger",
-        "positiveInteger",
-        "normalizedString",
-        "token",
-        "NMTOKEN",
-        "Name",
-        "NCName",
-        "ID",
-        "language",
-    ];
-    BUILTIN_TYPE_NAMES.contains(&name.local_name.as_str())
-}
-
-pub fn is_builtin_attribute_decl_name(name: &QName) -> bool {
-    if name.namespace_name.as_deref() != Some(XSI_NAMESPACE) {
-        return false;
-    }
-
-    const BUILTIN_ATTRIBUTE_NAMES: [&str; 4] =
-        ["type", "nil", "schemaLocation", "noNamespaceSchemaLocation"];
-
-    BUILTIN_ATTRIBUTE_NAMES.contains(&name.local_name.as_str())
 }
 
 #[cfg(test)]

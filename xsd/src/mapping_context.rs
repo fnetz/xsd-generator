@@ -225,7 +225,9 @@ impl<'a, 'b, 'input: 'a, 'p> MappingContext<'a, 'b, 'input, 'p> {
         R: Copy,
         LookupTables: Lookup<R>,
     {
-        self.root.resolver.register_with_name(name, value)
+        self.root
+            .resolver
+            .register_with_name(name, value, &self.root.components)
     }
 
     pub(super) fn resolve<R>(&self, key: &QName) -> R

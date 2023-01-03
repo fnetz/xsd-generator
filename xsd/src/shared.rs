@@ -1,6 +1,6 @@
 use super::{
     complex_type_def::ComplexTypeDefinition,
-    components::{ComponentTable, Named, RefNamed},
+    components::{ComponentTable, IsBuiltinRef, Named, RefNamed},
     element_decl::ElementDeclaration,
     model_group::ModelGroup,
     simple_type_def::SimpleTypeDefinition,
@@ -135,6 +135,15 @@ impl TypeDefinition {
         match self {
             Self::Simple(s) => s.get(components).is_primitive(),
             Self::Complex(_) => false,
+        }
+    }
+}
+
+impl IsBuiltinRef for TypeDefinition {
+    fn is_builtin(&self, components: &impl ComponentTable) -> bool {
+        match self {
+            Self::Simple(s) => s.get(components).is_builtin,
+            Self::Complex(c) => c.get(components).is_builtin,
         }
     }
 }
