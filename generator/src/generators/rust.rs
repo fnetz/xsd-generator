@@ -265,7 +265,8 @@ fn visit_simple_type_inline(
     } else {
         // Unnamed type => create inline type
         let _variety = simple_type.variety.unwrap(); // TODO
-        todo!()
+        let name = Ident::new("Placeholder", Span::call_site());
+        parse_quote!(#name)
     }
 }
 
@@ -348,7 +349,7 @@ fn visit_element_decl(ctx: &mut GeneratorContext, element: &ElementDeclaration) 
     }
 }
 
-pub fn generate_rust(schema: &Schema, components: &SchemaComponentTable) -> String {
+pub fn generate(schema: &Schema, components: &SchemaComponentTable) -> String {
     let mut ctx = GeneratorContext::new(components);
 
     for type_def in schema.type_definitions.iter().copied() {

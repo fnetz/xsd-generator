@@ -1,5 +1,5 @@
 mod cli;
-mod generator;
+mod generators;
 mod naming;
 
 use clap::Parser;
@@ -31,7 +31,11 @@ impl ImportResolver for HttpImportResolver {
             .unwrap()
             .text()
             .unwrap();
-        let xsd = roxmltree::Document::parse(&text).unwrap();
+        let options = roxmltree::ParsingOptions {
+            allow_dtd: true,
+            ..Default::default()
+        };
+        let xsd = roxmltree::Document::parse_with_options(&text, options).unwrap();
         let schema = xsd.root_element();
         let schema = Schema::map_from_xml(context, schema);
         Ok(schema)
@@ -61,6 +65,6 @@ fn main() {
         },
         &import_resolvers,
     );
-    let rst = generator::generate_rust(&schema, &components);
+    let rst = generators::rust::generate(&schema, &components);
     print!("{rst}");
 }
