@@ -418,53 +418,67 @@ impl ElementDeclaration {
         schema: Node,
         parent: ScopeParent,
     ) -> Ref<Particle> {
-        if let Some(_ref) = element.attribute("ref") {
-            todo!("local element with ref")
+        assert_eq!(element.tag_name().name(), "element");
+        // FIXME: minOccurs=maxOccurs=0 shouldn't create anything
+
+        let element_decl = if let Some(ref_) = element.attribute("ref") {
+            // If the <element> element information item has <complexType> or <group> as an
+            // ancestor, and the ref [attribute] is present, and it does not have
+            // minOccurs=maxOccurs=0, then it maps to a Particle as follows.
+
+            // {term}
+            //   The (top-level) element declaration ·resolved· to by the ·actual value· of the ref
+            //   [attribute].
+            let ref_: QName = actual_value(ref_, element);
+            context.resolve(&ref_)
         } else {
-            assert_eq!(element.tag_name().name(), "element");
-
-            // {min occurs}
-            //   The ·actual value· of the minOccurs [attribute], if present, otherwise 1.
-            let min_occurs = element
-                .attribute("minOccurs")
-                .map(|min_occurs| actual_value::<u64>(min_occurs, element))
-                .unwrap_or(1);
-
-            // {max occurs}
-            //   unbounded, if the maxOccurs [attribute] equals unbounded, otherwise the ·actual
-            //   value· of the maxOccurs [attribute], if present, otherwise 1.
-            let max_occurs = element
-                .attribute("maxOccurs")
-                .map(|max_occurs| {
-                    if max_occurs == "unbounded" {
-                        MaxOccurs::Unbounded
-                    } else {
-                        MaxOccurs::Count(actual_value::<u64>(max_occurs, element))
-                    }
-                })
-                .unwrap_or(MaxOccurs::Count(1));
+            // If the <element> element information item has <complexType> or <group> as an
+            // ancestor, and the ref [attribute] is absent, and it does not have
+            // minOccurs=maxOccurs=0, then it maps both to a Particle and to a local Element
+            // Declaration which is the {term} of that Particle.
 
             // {term}
             //   A (local) element declaration as given below.
-            let term = Self::map_local_element_decl(context, element, schema, parent);
-            let term = Term::ElementDeclaration(term);
+            Self::map_local_element_decl(context, element, schema, parent)
+        };
+        let term = Term::ElementDeclaration(element_decl);
 
-            // {annotations}
-            //   The same annotations as the {annotations} of the {term}.
-            let annotations = match term {
-                Term::ElementDeclaration(element) => {
-                    element.get(context.components()).annotations.clone()
+        // These properties are common to both ref and non-ref elements:
+
+        // {min occurs}
+        //   The ·actual value· of the minOccurs [attribute], if present, otherwise 1.
+        let min_occurs = element
+            .attribute("minOccurs")
+            .map(|min_occurs| actual_value::<u64>(min_occurs, element))
+            .unwrap_or(1);
+
+        // {max occurs}
+        //   unbounded, if the maxOccurs [attribute] equals unbounded, otherwise the ·actual
+        //   value· of the maxOccurs [attribute], if present, otherwise 1.
+        let max_occurs = element
+            .attribute("maxOccurs")
+            .map(|max_occurs| {
+                if max_occurs == "unbounded" {
+                    MaxOccurs::Unbounded
+                } else {
+                    MaxOccurs::Count(actual_value::<u64>(max_occurs, element))
                 }
-                _ => unreachable!(),
-            };
-
-            context.create(Particle {
-                min_occurs,
-                max_occurs,
-                term,
-                annotations,
             })
-        }
+            .unwrap_or(MaxOccurs::Count(1));
+
+        // {annotations}
+        //   The same annotations as the {annotations} of the {term}.
+        let annotations = match term {
+            Term::ElementDeclaration(element) => context.request(element).annotations.clone(),
+            _ => unreachable!(),
+        };
+
+        context.create(Particle {
+            min_occurs,
+            max_occurs,
+            term,
+            annotations,
+        })
     }
 
     fn map_attrib_set_helper<'a, T: ActualValue<'a> + PartialEq + Copy>(
