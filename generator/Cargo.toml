@@ -5,7 +5,7 @@ edition = "2021"
 description = "Generates XML binding code from XSD schema files"
 
 [features]
-generator-rust = ["dep:syn", "dep:quote", "dep:prettyplease", "dep:check_keyword"]
+generator-rust = ["dep:syn", "dep:quote", "dep:prettyplease", "dep:check_keyword", "dep:heck"]
 generator-typescript = []
 
 default = ["generator-rust", "generator-typescript"]
@@ -19,6 +19,7 @@ roxmltree = "0.18"
 prettyplease = { version = "0.2", optional = true }
 quote = { version = "1", optional = true }
 check_keyword = { version = "0.2", optional = true }
+heck = { version = "0.4", optional = true }
 
 [dependencies.syn]
 version = "2"

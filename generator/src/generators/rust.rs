@@ -1,5 +1,3 @@
-use crate::naming::{self, CamelCase, PascalCase, SnakeCase};
-
 use syn::{
     Field, Ident, Item, ItemEnum, Type, __private::Span, parse_quote, FieldMutability, Fields,
     Variant,
@@ -17,6 +15,7 @@ use dt_xsd::{
 use super::common::{ComponentVisitor, GeneratorContext};
 
 use check_keyword::CheckKeyword;
+use heck::{ToPascalCase, ToSnakeCase};
 
 struct RustVisitor {
     output_items: Vec<Item>,
@@ -52,12 +51,12 @@ impl RustVisitor {
                     self.visit_element_declaration(ctx, element_ref);
                 }
 
-                let name = naming::convert::<CamelCase, SnakeCase>(&element.name);
+                let name = element.name.to_snake_case();
                 let type_ = if let Some(type_) = element.type_definition.name(ctx.table) {
                     // TODO qualify
-                    naming::convert::<CamelCase, PascalCase>(&type_.local_name)
+                    type_.local_name.to_pascal_case()
                 } else {
-                    naming::convert::<CamelCase, PascalCase>(&element.name)
+                    element.name.to_pascal_case()
                 };
                 let type_ = Self::name_to_ident(&type_);
                 let type_ = parse_quote!(#type_);
@@ -106,7 +105,7 @@ impl RustVisitor {
             let attribute_use = attribute_use.get(ctx.table);
             let attribute_decl = attribute_use.attribute_declaration.get(ctx.table);
 
-            let name = naming::convert::<CamelCase, SnakeCase>(&attribute_decl.name);
+            let name = attribute_decl.name.to_snake_case();
             let name = Self::name_to_ident(&name);
 
             // TODO: visit simple type
@@ -147,7 +146,7 @@ impl RustVisitor {
                     })
             })
             // TODO convert in caller
-            .map(naming::convert::<CamelCase, PascalCase>)
+            .map(ToPascalCase::to_pascal_case)
             .unwrap_or_else(|| "UnnamedType".into()) // TODO can name be none here?
     }
 
@@ -195,7 +194,7 @@ impl ComponentVisitor for RustVisitor {
                         ComplexContext::Element(e) => Some(e.get(ctx.table).name.as_str()),
                     })
             })
-            .map(naming::convert::<CamelCase, PascalCase>)
+            .map(ToPascalCase::to_pascal_case)
             .unwrap_or_else(|| "UnnamedType".into()); // TODO can name be none here?
 
         let name = Self::name_to_ident(&name);

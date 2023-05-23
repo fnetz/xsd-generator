@@ -1,6 +1,5 @@
 mod cli;
 mod generators;
-mod naming;
 
 use clap::Parser;
 
