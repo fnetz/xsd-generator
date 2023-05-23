@@ -1,3 +1,5 @@
+mod common;
+
 #[cfg(feature = "generator-rust")]
 mod rust;
 #[cfg(feature = "generator-typescript")]
