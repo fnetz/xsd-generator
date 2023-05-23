@@ -2,7 +2,10 @@ use std::collections::HashSet;
 
 use crate::naming::{self, CamelCase, PascalCase, SnakeCase};
 
-use syn::{Field, Ident, Item, ItemEnum, Type, __private::Span, parse_quote, Fields, Variant};
+use syn::{
+    Field, Ident, Item, ItemEnum, Type, __private::Span, parse_quote, FieldMutability, Fields,
+    Variant,
+};
 
 use dt_xsd::complex_type_def::Context as ComplexContext;
 use dt_xsd::simple_type_def::Context as SimpleContext;
@@ -106,6 +109,7 @@ fn generate_fields_for_attribute_uses(
             ident: Some(Ident::new(&name, Span::call_site())),
             colon_token: None,
             ty: parse_quote!(#type_name),
+            mutability: FieldMutability::None,
         };
         // TODO: required, value_constraint
         fields.push(field);
@@ -186,6 +190,7 @@ fn visit_complex_type(ctx: &mut GeneratorContext, complex_type: Ref<ComplexTypeD
                             ident: Some(Ident::new(&name, Span::call_site())),
                             colon_token: None,
                             ty: type_,
+                            mutability: FieldMutability::None,
                         };
                         fields.push(field);
                     }

@@ -16,11 +16,11 @@ clap = { version = "4.0", features = ["derive", "wrap_help"] }
 reqwest = { version = "0.11", features = ["blocking"] }
 roxmltree = "0.16.0"
 
-prettyplease = { version = "0.1", optional = true }
+prettyplease = { version = "0.2", optional = true }
 quote = { version = "1", optional = true }
 
 [dependencies.syn]
-version = "1"
+version = "2"
 optional = true
 default-features = false
 # needs parsing and printing for the parse_quote! macro
