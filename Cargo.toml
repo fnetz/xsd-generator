@@ -3,3 +3,6 @@ members = [
     "xsd",
     "generator",
 ]
+
+[workspace.package]
+license = "MIT"
