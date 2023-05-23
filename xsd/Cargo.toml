@@ -7,5 +7,5 @@ description = "Model and parser for XSD schemas"
 
 [dependencies]
 lazy_static = "1.4"
-roxmltree = "0.16.0"
+roxmltree = "0.18"
 thiserror = "1.0"

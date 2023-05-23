@@ -65,7 +65,6 @@ impl XPathExpression {
         //    {namespace} the [namespace name].
         let namespace_bindings = host_element
             .namespaces() // `namespaces()` is equivalent to the [in-scope namespaces]
-            .iter()
             .map(|namespace| {
                 NamespaceBinding {
                     // TODO does None map to the empty namespace?
