@@ -14,8 +14,9 @@ use dt_xsd::{
     RefNamed, Schema, SchemaComponentTable, SimpleTypeDefinition, Term, TypeDefinition,
 };
 
-use super::common::ComponentVisitor;
-use super::common::GeneratorContext;
+use super::common::{ComponentVisitor, GeneratorContext};
+
+use check_keyword::CheckKeyword;
 
 struct RustVisitor {
     output_items: Vec<Item>,
@@ -25,6 +26,17 @@ impl RustVisitor {
     fn new() -> Self {
         Self {
             output_items: Vec::new(),
+        }
+    }
+
+    fn name_to_ident(name: &str) -> Ident {
+        if ["crate", "self", "super", "Self"].contains(&name) {
+            // These are keywords that are not allowed as raw identifiers
+            Ident::new(&format!("{}_", name), Span::call_site())
+        } else if name.is_keyword() {
+            Ident::new_raw(name, Span::call_site())
+        } else {
+            Ident::new(name, Span::call_site())
         }
     }
 
@@ -47,7 +59,7 @@ impl RustVisitor {
                 } else {
                     naming::convert::<CamelCase, PascalCase>(&element.name)
                 };
-                let type_ = Ident::new(&type_, Span::call_site());
+                let type_ = Self::name_to_ident(&type_);
                 let type_ = parse_quote!(#type_);
                 (name, type_)
             }
@@ -95,16 +107,17 @@ impl RustVisitor {
             let attribute_decl = attribute_use.attribute_declaration.get(ctx.table);
 
             let name = naming::convert::<CamelCase, SnakeCase>(&attribute_decl.name);
+            let name = Self::name_to_ident(&name);
 
             // TODO: visit simple type
             let type_def = attribute_decl.type_definition.get(ctx.table);
             let type_name = Self::get_simple_type_name(ctx, type_def);
-            let type_name = Ident::new(&type_name, Span::call_site());
+            let type_name = Self::name_to_ident(&type_name);
 
             let field: Field = Field {
                 attrs: vec![],
                 vis: parse_quote!(pub),
-                ident: Some(Ident::new(&name, Span::call_site())),
+                ident: Some(name),
                 colon_token: None,
                 ty: parse_quote!(#type_name),
                 mutability: FieldMutability::None,
@@ -146,12 +159,12 @@ impl RustVisitor {
 
         if let Some(ref name) = simple_type.name {
             // Named type => has a named struct
-            let name = Ident::new(name, Span::call_site());
+            let name = Self::name_to_ident(name);
             parse_quote!(#name)
         } else {
             // Unnamed type => create inline type
             let _variety = simple_type.variety.unwrap(); // TODO
-            let name = Ident::new("Placeholder", Span::call_site());
+            let name = Self::name_to_ident("Placeholder");
             parse_quote!(#name)
         }
     }
@@ -185,7 +198,7 @@ impl ComponentVisitor for RustVisitor {
             .map(naming::convert::<CamelCase, PascalCase>)
             .unwrap_or_else(|| "UnnamedType".into()); // TODO can name be none here?
 
-        let name = Ident::new(&name, Span::call_site());
+        let name = Self::name_to_ident(&name);
 
         match complex_type.content_type {
             ContentType::Empty => {
@@ -234,10 +247,11 @@ impl ComponentVisitor for RustVisitor {
                                 for particle in group.particles.iter().copied() {
                                     let particle = particle.get(ctx.table);
                                     let (type_, name) = self.visit_particle(ctx, particle);
+                                    let name = Self::name_to_ident(&name);
                                     let field: Field = Field {
                                         attrs: vec![],
                                         vis: parse_quote!(pub),
-                                        ident: Some(Ident::new(&name, Span::call_site())),
+                                        ident: Some(name),
                                         colon_token: None,
                                         ty: type_,
                                         mutability: FieldMutability::None,
@@ -263,7 +277,7 @@ impl ComponentVisitor for RustVisitor {
                                     }
                                 } else {
                                     let inner_name = format!("{}Inner", name);
-                                    let inner_name = Ident::new(&inner_name, Span::call_site());
+                                    let inner_name = Self::name_to_ident(&inner_name);
                                     let inner_enum: ItemEnum = parse_quote! {
                                         pub enum #inner_name {
                                         }
@@ -296,7 +310,7 @@ impl ComponentVisitor for RustVisitor {
 
                 let simple_type_name =
                     Self::get_simple_type_name(ctx, simple_type_definition.get(ctx.table));
-                let simple_type_name = Ident::new(&simple_type_name, Span::call_site());
+                let simple_type_name = Self::name_to_ident(&simple_type_name);
 
                 self.output_items.push(parse_quote! {
                     pub struct #name(#simple_type_name);
@@ -318,7 +332,7 @@ impl ComponentVisitor for RustVisitor {
         let simple_type = simple_type_ref.get(ctx.table);
 
         let name = Self::get_simple_type_name(ctx, simple_type);
-        let name = Ident::new(&name, Span::call_site());
+        let name = Self::name_to_ident(&name);
 
         let item: Item = match simple_type.variety {
             Some(SimpleVariety::Atomic) => {
@@ -331,7 +345,7 @@ impl ComponentVisitor for RustVisitor {
 
                 let primitive_type = primitive_type_ref.get(ctx.table);
                 let prim_name = Self::get_simple_type_name(ctx, primitive_type);
-                let prim_name = Ident::new(&prim_name, Span::call_site());
+                let prim_name = Self::name_to_ident(&prim_name);
                 // TODO special case for simple alias (without more facets)?
                 parse_quote! {
                     pub struct #name(#prim_name);
@@ -340,7 +354,7 @@ impl ComponentVisitor for RustVisitor {
             Some(SimpleVariety::List) => {
                 let item_type = simple_type.item_type_definition.unwrap().get(ctx.table);
                 let item_name = Self::get_simple_type_name(ctx, item_type);
-                let item_name = Ident::new(&item_name, Span::call_site());
+                let item_name = Self::name_to_ident(&item_name);
 
                 parse_quote! {
                     pub struct #name(Vec<#item_name>);
@@ -357,7 +371,7 @@ impl ComponentVisitor for RustVisitor {
                     } else {
                         "Unnamed"
                     };
-                    let variant_name = Ident::new(variant_name, Span::call_site());
+                    let variant_name = Self::name_to_ident(variant_name);
                     variants.push(Variant {
                         ident: variant_name,
                         fields: Fields::Unnamed(parse_quote! { (#content) }),
