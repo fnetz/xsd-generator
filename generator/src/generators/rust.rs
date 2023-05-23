@@ -9,12 +9,9 @@ use dt_xsd::complex_type_def::Context as ComplexContext;
 use dt_xsd::simple_type_def::Context as SimpleContext;
 use dt_xsd::simple_type_def::Variety as SimpleVariety;
 use dt_xsd::{
-    attribute_decl::ScopeVariety,
-    complex_type_def::{ContentType, ContentTypeVariety},
-    model_group::Compositor,
-    particle::MaxOccurs,
-    AttributeUse, ComplexTypeDefinition, ElementDeclaration, Particle, Ref, RefNamed, Schema,
-    SchemaComponentTable, SimpleTypeDefinition, Term, TypeDefinition,
+    attribute_decl::ScopeVariety, complex_type_def::ContentType, model_group::Compositor,
+    particle::MaxOccurs, AttributeUse, ComplexTypeDefinition, ElementDeclaration, Particle, Ref,
+    RefNamed, Schema, SchemaComponentTable, SimpleTypeDefinition, Term, TypeDefinition,
 };
 
 use super::common::ComponentVisitor;
@@ -190,109 +187,122 @@ impl ComponentVisitor for RustVisitor {
 
         let name = Ident::new(&name, Span::call_site());
 
-        if complex_type.content_type.variety() == ContentTypeVariety::Empty {
-            if !complex_type.attribute_uses.is_empty() {
-                let fields =
-                    Self::generate_fields_for_attribute_uses(ctx, &complex_type.attribute_uses);
-                self.output_items.push(parse_quote! {
-                    pub struct #name {
-                        #(#fields),*
-                    }
-                });
-            } else {
-                self.output_items.push(parse_quote! {
-                    pub type #name = ();
-                });
-            }
-            return;
-        }
-
-        let (ContentType::Mixed { particle, .. } | ContentType::ElementOnly { particle, .. }) =
-            complex_type.content_type else {
-                todo!("Simple content type")
-            };
-
-        let particle = particle.get(ctx.table);
-
-        let item_: Item = match &particle.term {
-            Term::ElementDeclaration(_) => {
-                let (content, _) = self.visit_particle(ctx, particle);
-                if complex_type.attribute_uses.is_empty() {
-                    parse_quote! {
-                        pub struct #name(#content)
-                    }
-                } else {
+        match complex_type.content_type {
+            ContentType::Empty => {
+                if !complex_type.attribute_uses.is_empty() {
                     let fields =
                         Self::generate_fields_for_attribute_uses(ctx, &complex_type.attribute_uses);
-                    parse_quote! {
+                    self.output_items.push(parse_quote! {
                         pub struct #name {
-                            inner: #content,
                             #(#fields),*
                         }
-                    }
+                    });
+                } else {
+                    self.output_items.push(parse_quote! {
+                        pub type #name = ();
+                    });
                 }
             }
-            Term::ModelGroup(group) => {
-                let group = group.get(ctx.table);
-                match group.compositor {
-                    Compositor::All | Compositor::Sequence => {
-                        let mut fields = Vec::new();
-                        for particle in group.particles.iter().copied() {
-                            let particle = particle.get(ctx.table);
-                            let (type_, name) = self.visit_particle(ctx, particle);
-                            let field: Field = Field {
-                                attrs: vec![],
-                                vis: parse_quote!(pub),
-                                ident: Some(Ident::new(&name, Span::call_site())),
-                                colon_token: None,
-                                ty: type_,
-                                mutability: FieldMutability::None,
-                            };
-                            fields.push(field);
-                        }
-                        fields.extend(Self::generate_fields_for_attribute_uses(
-                            ctx,
-                            &complex_type.attribute_uses,
-                        ));
-                        parse_quote! {
-                            pub struct #name {
-                                #(#fields),*
-                            }
-                        }
-                    }
-                    Compositor::Choice => {
+            ContentType::Mixed { particle, .. } | ContentType::ElementOnly { particle, .. } => {
+                let particle = particle.get(ctx.table);
+
+                let item_: Item = match &particle.term {
+                    Term::ElementDeclaration(_) => {
+                        let (content, _) = self.visit_particle(ctx, particle);
                         if complex_type.attribute_uses.is_empty() {
                             parse_quote! {
-                                pub enum #name {
-
-                                }
+                                pub struct #name(#content)
                             }
                         } else {
-                            let inner_name = format!("{}Inner", name);
-                            let inner_name = Ident::new(&inner_name, Span::call_site());
-                            let inner_enum: ItemEnum = parse_quote! {
-                                pub enum #inner_name {
-                                }
-                            };
-                            self.output_items.push(inner_enum.into());
-
                             let fields = Self::generate_fields_for_attribute_uses(
                                 ctx,
                                 &complex_type.attribute_uses,
                             );
                             parse_quote! {
                                 pub struct #name {
-                                    inner: #inner_name,
+                                    inner: #content,
                                     #(#fields),*
                                 }
                             }
                         }
                     }
-                }
+                    Term::ModelGroup(group) => {
+                        let group = group.get(ctx.table);
+                        match group.compositor {
+                            Compositor::All | Compositor::Sequence => {
+                                let mut fields = Vec::new();
+                                for particle in group.particles.iter().copied() {
+                                    let particle = particle.get(ctx.table);
+                                    let (type_, name) = self.visit_particle(ctx, particle);
+                                    let field: Field = Field {
+                                        attrs: vec![],
+                                        vis: parse_quote!(pub),
+                                        ident: Some(Ident::new(&name, Span::call_site())),
+                                        colon_token: None,
+                                        ty: type_,
+                                        mutability: FieldMutability::None,
+                                    };
+                                    fields.push(field);
+                                }
+                                fields.extend(Self::generate_fields_for_attribute_uses(
+                                    ctx,
+                                    &complex_type.attribute_uses,
+                                ));
+                                parse_quote! {
+                                    pub struct #name {
+                                        #(#fields),*
+                                    }
+                                }
+                            }
+                            Compositor::Choice => {
+                                if complex_type.attribute_uses.is_empty() {
+                                    parse_quote! {
+                                        pub enum #name {
+
+                                        }
+                                    }
+                                } else {
+                                    let inner_name = format!("{}Inner", name);
+                                    let inner_name = Ident::new(&inner_name, Span::call_site());
+                                    let inner_enum: ItemEnum = parse_quote! {
+                                        pub enum #inner_name {
+                                        }
+                                    };
+                                    self.output_items.push(inner_enum.into());
+
+                                    let fields = Self::generate_fields_for_attribute_uses(
+                                        ctx,
+                                        &complex_type.attribute_uses,
+                                    );
+                                    parse_quote! {
+                                        pub struct #name {
+                                            inner: #inner_name,
+                                            #(#fields),*
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Term::Wildcard(_) => todo!(),
+                };
+                self.output_items.push(item_);
             }
-            Term::Wildcard(_) => todo!(),
-        };
-        self.output_items.push(item_);
+            ContentType::Simple {
+                simple_type_definition,
+            } => {
+                // Just a wrapper around a simple type for now
+                self.visit_simple_type(ctx, simple_type_definition);
+
+                let simple_type_name =
+                    Self::get_simple_type_name(ctx, simple_type_definition.get(ctx.table));
+                let simple_type_name = Ident::new(&simple_type_name, Span::call_site());
+
+                self.output_items.push(parse_quote! {
+                    pub struct #name(#simple_type_name);
+                });
+            }
+        }
     }
 
     type SimpleTypeValue = ();
