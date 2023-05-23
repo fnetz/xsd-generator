@@ -2,7 +2,7 @@ use super::simple_type_def::Context as SimpleContext;
 use super::{
     annotation::Annotation,
     builtins::{XS_ANY_TYPE_NAME, XS_STRING_NAME},
-    complex_type_def::{self, ComplexTypeDefinition, ContentTypeVariety},
+    complex_type_def::{self, ComplexTypeDefinition, ContentType},
     components::{Component, Named, NamedXml},
     identity_constraint_def::IdentityConstraintDefinition,
     mapping_context::TopLevelMappable,
@@ -244,8 +244,11 @@ impl ElementDeclaration {
                     st
                 } else {
                     let ct = context.request(type_definition.complex().unwrap());
-                    if ct.content_type.variety == ContentTypeVariety::Simple {
-                        ct.content_type.simple_type_definition.unwrap()
+                    if let ContentType::Simple {
+                        simple_type_definition,
+                    } = ct.content_type
+                    {
+                        simple_type_definition
                     } else {
                         context.resolve(&XS_STRING_NAME)
                     }

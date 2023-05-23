@@ -99,10 +99,8 @@ fn register_xs_any_type(context: &mut RootContext) {
             target_namespace: Some(XS_NAMESPACE.into()),
             base_type_definition: TypeDefinition::Complex(xs_any_type),
             derivation_method: Some(complex_type_def::DerivationMethod::Restriction),
-            content_type: complex_type_def::ContentType {
-                variety: complex_type_def::ContentTypeVariety::Mixed,
-                particle: Some(outer_particle),
-                simple_type_definition: None,
+            content_type: complex_type_def::ContentType::Mixed {
+                particle: outer_particle,
                 open_content: None,
             },
             attribute_uses: Set::new(),

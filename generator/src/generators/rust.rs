@@ -9,9 +9,12 @@ use dt_xsd::complex_type_def::Context as ComplexContext;
 use dt_xsd::simple_type_def::Context as SimpleContext;
 use dt_xsd::simple_type_def::Variety as SimpleVariety;
 use dt_xsd::{
-    attribute_decl::ScopeVariety, complex_type_def::ContentTypeVariety, model_group::Compositor,
-    particle::MaxOccurs, AttributeUse, ComplexTypeDefinition, ElementDeclaration, Particle, Ref,
-    RefNamed, Schema, SchemaComponentTable, SimpleTypeDefinition, Term, TypeDefinition,
+    attribute_decl::ScopeVariety,
+    complex_type_def::{ContentType, ContentTypeVariety},
+    model_group::Compositor,
+    particle::MaxOccurs,
+    AttributeUse, ComplexTypeDefinition, ElementDeclaration, Particle, Ref, RefNamed, Schema,
+    SchemaComponentTable, SimpleTypeDefinition, Term, TypeDefinition,
 };
 
 use super::common::ComponentVisitor;
@@ -187,7 +190,7 @@ impl ComponentVisitor for RustVisitor {
 
         let name = Ident::new(&name, Span::call_site());
 
-        if complex_type.content_type.variety == ContentTypeVariety::Empty {
+        if complex_type.content_type.variety() == ContentTypeVariety::Empty {
             if !complex_type.attribute_uses.is_empty() {
                 let fields =
                     Self::generate_fields_for_attribute_uses(ctx, &complex_type.attribute_uses);
@@ -204,7 +207,12 @@ impl ComponentVisitor for RustVisitor {
             return;
         }
 
-        let particle = complex_type.content_type.particle.unwrap().get(ctx.table);
+        let (ContentType::Mixed { particle, .. } | ContentType::ElementOnly { particle, .. }) =
+            complex_type.content_type else {
+                todo!("Simple content type")
+            };
+
+        let particle = particle.get(ctx.table);
 
         let item_: Item = match &particle.term {
             Term::ElementDeclaration(_) => {

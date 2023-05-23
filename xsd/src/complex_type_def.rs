@@ -63,20 +63,88 @@ impl ActualValue<'_> for DerivationMethod {
     }
 }
 
-// TODO make ContentType an enum itself.
-
 /// Property Record: Content Type (§3.4)
 #[derive(Clone, Debug)]
-pub struct ContentType {
-    pub variety: ContentTypeVariety,
-    /// Required if `variety` is [element-only](ContentTypeVariety::ElementOnly) or
-    /// [mixed](ContentTypeVariety::Mixed), otherwise must be `None`.
-    pub particle: Option<Ref<Particle>>,
-    /// Optional if `variety` is [element-only](ContentTypeVariety::ElementOnly) or
-    /// [mixed](ContentTypeVariety::Mixed), otherwise must be `None`.
-    pub open_content: Option<OpenContent>,
-    ///  Required if `variety` is [simple](ContentTypeVariety::Simple), otherwise must be `None`.
-    pub simple_type_definition: Option<Ref<SimpleTypeDefinition>>,
+pub enum ContentType {
+    Empty,
+    Simple {
+        simple_type_definition: Ref<SimpleTypeDefinition>,
+    },
+    ElementOnly {
+        particle: Ref<Particle>,
+        open_content: Option<OpenContent>,
+    },
+    Mixed {
+        particle: Ref<Particle>,
+        open_content: Option<OpenContent>,
+    },
+}
+
+impl ContentType {
+    /// Constructs a `ContentType` from a `ContentTypeVariety` and the corresponding fields.
+    /// Panics if the fields are not compatible with the variety.
+    fn from_variety(
+        variety: ContentTypeVariety,
+        particle: Option<Ref<Particle>>,
+        open_content: Option<OpenContent>,
+        simple_type_definition: Option<Ref<SimpleTypeDefinition>>,
+    ) -> Self {
+        match variety {
+            ContentTypeVariety::Empty => {
+                assert!(particle.is_none());
+                assert!(open_content.is_none());
+                assert!(simple_type_definition.is_none());
+
+                Self::Empty
+            }
+            ContentTypeVariety::Simple => {
+                assert!(particle.is_none());
+                assert!(open_content.is_none());
+                Self::Simple {
+                    simple_type_definition: simple_type_definition.unwrap(),
+                }
+            }
+            ContentTypeVariety::ElementOnly => {
+                assert!(simple_type_definition.is_none());
+                Self::ElementOnly {
+                    particle: particle.unwrap(),
+                    open_content,
+                }
+            }
+            ContentTypeVariety::Mixed => {
+                assert!(simple_type_definition.is_none());
+                Self::Mixed {
+                    particle: particle.unwrap(),
+                    open_content,
+                }
+            }
+        }
+    }
+
+    pub fn variety(&self) -> ContentTypeVariety {
+        match self {
+            Self::Empty => ContentTypeVariety::Empty,
+            Self::Simple { .. } => ContentTypeVariety::Simple,
+            Self::ElementOnly { .. } => ContentTypeVariety::ElementOnly,
+            Self::Mixed { .. } => ContentTypeVariety::Mixed,
+        }
+    }
+
+    pub fn particle(&self) -> Option<Ref<Particle>> {
+        match self {
+            Self::ElementOnly { particle, .. } | Self::Mixed { particle, .. } => Some(*particle),
+            Self::Empty | Self::Simple { .. } => None,
+        }
+    }
+
+    pub fn open_content(&self) -> Option<&OpenContent> {
+        match self {
+            Self::ElementOnly { open_content, .. } | Self::Mixed { open_content, .. } => {
+                open_content.as_ref()
+            }
+            Self::Empty | Self::Simple { .. } => None,
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -200,12 +268,12 @@ impl ComplexTypeDefinition {
 
             // {content type}  A Content Type as follows:
             //   {simple_type_definition}  the appropriate case among the following:
-            let simple_type_definition = Some(
+            let simple_type_definition =
                 if let TypeDefinition::Complex(base_type_definition) = base_type_definition {
                     context.request(base_type_definition);
                     let base_type_definition = base_type_definition.get(context.components());
-                    match base_type_definition.content_type.variety {
-                        ContentTypeVariety::Simple => {
+                    match base_type_definition.content_type {
+                        ContentType::Simple { .. } => {
                             // 1 If the {base type definition} is a complex type definition whose
                             //   own {content type} has {variety} simple and the <restriction>
                             //   alternative is chosen, then let B be
@@ -221,13 +289,8 @@ impl ComplexTypeDefinition {
                             // TODO
                             todo!()
                         }
-                        ContentTypeVariety::Mixed
-                            if base_type_definition
-                                .content_type
-                                .particle
-                                .map_or(false, |particle| {
-                                    particle.get(context.components()).is_emptiable()
-                                }) =>
+                        ContentType::Mixed { particle, .. }
+                            if particle.get(context.components()).is_emptiable() =>
                         {
                             todo!()
                         }
@@ -242,15 +305,8 @@ impl ComplexTypeDefinition {
                     // 5 otherwise ·xs:anySimpleType·.
                     let any_simple_type: TypeDefinition = context.resolve(&XS_ANY_SIMPLE_TYPE_NAME);
                     any_simple_type.simple().unwrap()
-                },
-            );
-            let content_type = ContentType {
-                // {variety}  simple
-                variety: ContentTypeVariety::Simple,
-                // {particle}  ·absent·
-                particle: None,
-                // {open content}  ·absent·
-                open_content: None,
+                };
+            let content_type = ContentType::Simple {
                 // {simple_type_definition}  [from above]
                 simple_type_definition,
             };
@@ -274,15 +330,9 @@ impl ComplexTypeDefinition {
             //   If [...] the <extension> alternative is chosen, extension.
             let derivation_method = DerivationMethod::Extension;
 
-            let content_type = ContentType {
-                // {variety}  simple
-                variety: ContentTypeVariety::Simple,
-                // {particle}  ·absent·
-                particle: None,
-                // {open content}  ·absent·
-                open_content: None,
+            let content_type = ContentType::Simple {
                 // {simple_type_definition}  the appropriate case among the following:
-                simple_type_definition: Some(match base_type_definition {
+                simple_type_definition: match base_type_definition {
                     TypeDefinition::Complex(base_type_definition) => {
                         context.request(base_type_definition);
                         let base_type_definition = base_type_definition.get(context.components());
@@ -290,11 +340,11 @@ impl ComplexTypeDefinition {
                         //   {content type} has {variety} simple and the <extension> alternative is
                         //   chosen, then the {simple type definition} of the {content type} of that
                         //   complex type definition;
-                        if base_type_definition.content_type.variety == ContentTypeVariety::Simple {
-                            base_type_definition
-                                .content_type
-                                .simple_type_definition
-                                .expect("Content type (variety = simple) must have simple type def")
+                        if let ContentType::Simple {
+                            simple_type_definition,
+                        } = base_type_definition.content_type
+                        {
+                            simple_type_definition
                         } else {
                             // 5 otherwise ·xs:anySimpleType·
                             let any_simple_type: TypeDefinition =
@@ -308,7 +358,7 @@ impl ComplexTypeDefinition {
                         //   definition;
                         base_type_definition
                     }
-                }),
+                },
             };
 
             (base_type_definition, derivation_method, content_type)
@@ -529,12 +579,7 @@ impl ComplexTypeDefinition {
             // TODO restructure
             base_type_definition: mapping_context.resolve(&XS_ANY_TYPE_NAME), // TODO !!
             derivation_method: None,
-            content_type: ContentType {
-                variety: ContentTypeVariety::Empty,
-                open_content: None,
-                particle: None,
-                simple_type_definition: None,
-            },
+            content_type: ContentType::Empty,
             attribute_uses: Set::new(),
             attribute_wildcard: None,
             is_builtin: false,
@@ -738,8 +783,8 @@ impl ContentType {
             // 5.2.1 the ·explicit content type· has {variety} ≠ empty
             // 5.2.2 the ·explicit content type· has {variety} = empty and the <defaultOpenContent>
             //   element has appliesToEmpty = true
-            if explicit_content_type.variety != ContentTypeVariety::Empty
-                || (explicit_content_type.variety == ContentTypeVariety::Empty
+            if explicit_content_type.variety() != ContentTypeVariety::Empty
+                || (explicit_content_type.variety() == ContentTypeVariety::Empty
                     && default_open_content
                         .attribute("appliesToEmpty")
                         .map(|v| actual_value::<bool>(v, complex_type))
@@ -776,8 +821,8 @@ impl ContentType {
             //   {variety}
             //     The {variety} of the ·explicit content type· if it's not empty; otherwise
             //     element-only.
-            let variety = if explicit_content_type.variety != ContentTypeVariety::Empty {
-                explicit_content_type.variety
+            let variety = if explicit_content_type.variety() != ContentTypeVariety::Empty {
+                explicit_content_type.variety()
             } else {
                 ContentTypeVariety::ElementOnly
             };
@@ -785,8 +830,8 @@ impl ContentType {
             //   {particle}
             //     The {particle} of the ·explicit content type· if the {variety} of the ·explicit
             //     content type· is not empty; otherwise a Particle as follows:
-            let particle = if explicit_content_type.variety != ContentTypeVariety::Empty {
-                explicit_content_type.particle
+            let particle = if explicit_content_type.variety() != ContentTypeVariety::Empty {
+                Some(explicit_content_type.particle().unwrap())
             } else {
                 // {min occurs} 1
                 // {max occurs} 1
@@ -847,12 +892,7 @@ impl ContentType {
             // {simple type definition} ·absent·
             let simple_type_definition = None;
 
-            Self {
-                variety,
-                particle,
-                open_content,
-                simple_type_definition,
-            }
+            Self::from_variety(variety, particle, open_content, simple_type_definition)
         }
     }
 
@@ -860,7 +900,7 @@ impl ContentType {
     fn explicit_content_type_shared(
         effective_content: Option<Ref<Particle>>,
         effective_mixed: bool,
-    ) -> ContentType {
+    ) -> Self {
         if let Some(effective_content) = effective_content {
             // 4.1.2 otherwise a Content Type as follows:
             // {variety}                 mixed if the ·effective mixed· is true, otherwise
@@ -868,15 +908,16 @@ impl ContentType {
             // {particle}                The ·effective content·
             // {open content}           ·absent·
             // {simple type definition} ·absent·
-            ContentType {
-                variety: if effective_mixed {
-                    ContentTypeVariety::Mixed
-                } else {
-                    ContentTypeVariety::ElementOnly
-                },
-                particle: Some(effective_content),
-                open_content: None,
-                simple_type_definition: None,
+            if effective_mixed {
+                ContentType::Mixed {
+                    particle: effective_content,
+                    open_content: None,
+                }
+            } else {
+                ContentType::ElementOnly {
+                    particle: effective_content,
+                    open_content: None,
+                }
             }
         } else {
             // 4.1.1 If the ·effective content· is empty , then a Content Type as follows:
@@ -884,12 +925,7 @@ impl ContentType {
             // {particle}               ·absent·
             // {open content}           ·absent·
             // {simple type definition} ·absent·
-            ContentType {
-                variety: ContentTypeVariety::Empty,
-                particle: None,
-                open_content: None,
-                simple_type_definition: None,
-            }
+            ContentType::Empty
         }
     }
 
@@ -916,7 +952,7 @@ impl ContentType {
             let is_first_case = match base_type_definition {
                 TypeDefinition::Simple(_) => true,
                 TypeDefinition::Complex(c) => matches!(
-                    context.request(c).content_type.variety,
+                    context.request(c).content_type.variety(),
                     ContentTypeVariety::Empty | ContentTypeVariety::Simple
                 ),
             };
@@ -933,7 +969,7 @@ impl ContentType {
             //   type}.{variety} = element-only or mixed and the ·effective content· is empty, then
             //   {base type definition}.{content type};
             if matches!(
-                base_type_definition.content_type.variety,
+                base_type_definition.content_type.variety(),
                 ContentTypeVariety::ElementOnly | ContentTypeVariety::Mixed
             ) && effective_content.is_none()
             {
@@ -951,13 +987,13 @@ impl ContentType {
 
             // {open content}
             //   the {open content} of the {content type} of the {base type definition}.
-            let open_content = base_type_definition.content_type.open_content.clone();
+            let open_content = base_type_definition.content_type.open_content().cloned();
 
             // {particle}
             //   Let the base particle be the particle of the {content type} of the {base type
             //   definition}.
             // TODO None particle?
-            let base_particle = base_type_definition.content_type.particle.unwrap();
+            let base_particle = base_type_definition.content_type.particle().unwrap();
             let base_particle_d = base_particle.get(context.components());
 
             let base_has_compositor_all = base_particle_d
@@ -1043,12 +1079,7 @@ impl ContentType {
                 }))
             };
 
-            Self {
-                variety,
-                particle,
-                open_content,
-                simple_type_definition: None,
-            }
+            Self::from_variety(variety, particle, open_content, None)
         }
     }
 }
