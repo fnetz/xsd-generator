@@ -3,7 +3,7 @@ use super::{
     assertion::Assertion,
     attribute_decl,
     attribute_use::AttributeUse,
-    builtins::XS_ANY_TYPE_NAME,
+    builtins::{XS_ANY_SIMPLE_TYPE_NAME, XS_ANY_TYPE_NAME},
     components::{Component, Named},
     element_decl::ElementDeclaration,
     mapping_context::TopLevelMappable,
@@ -62,6 +62,8 @@ impl ActualValue<'_> for DerivationMethod {
         }
     }
 }
+
+// TODO make ContentType an enum itself.
 
 /// Property Record: Content Type (§3.4)
 #[derive(Clone, Debug)]
@@ -131,7 +133,14 @@ impl ComplexTypeDefinition {
             .children()
             .find(|c| c.tag_name().name() == "simpleContent")
         {
-            Self::map_with_simple_content(complex_type, simple_content, schema)
+            Self::map_with_simple_content(
+                context,
+                complex_type_ref,
+                complex_type,
+                simple_content,
+                schema,
+                ancestor_element,
+            )
         } else if let Some(complex_content) = complex_type
             .children()
             .find(|c| c.tag_name().name() == "complexContent")
@@ -161,8 +170,169 @@ impl ComplexTypeDefinition {
         complex_type_ref
     }
 
-    fn map_with_simple_content(_complex_type: Node, _simple_content: Node, _schema: Node) {
-        todo!("Complex type def with simple content")
+    fn map_with_simple_content(
+        context: &mut MappingContext,
+        complex_type_ref: Ref<Self>,
+        complex_type: Node,
+        simple_content: Node,
+        schema: Node,
+        ancestor_element: Option<Ref<ElementDeclaration>>,
+    ) {
+        let (base_type_definition, derivation_method, content_type) = if let Some(restriction) =
+            simple_content
+                .children()
+                .find(|c| c.tag_name().name() == "restriction")
+        {
+            // The <restriction> alternative is chosen
+
+            // {base type definition}
+            //   The type definition ·resolved· to by the ·actual value· of the base [attribute] on
+            //   the <restriction> [...] element appearing as a child of <simpleContent>
+            let base_type_definition: TypeDefinition = restriction
+                .attribute("base")
+                .map(|base| actual_value::<QName>(base, restriction))
+                .map(|n| context.resolve(&n))
+                .unwrap();
+
+            // {derivation method}
+            //   If the <restriction> alternative is chosen, then restriction [...].
+            let derivation_method = DerivationMethod::Restriction;
+
+            // {content type}  A Content Type as follows:
+            //   {simple_type_definition}  the appropriate case among the following:
+            let simple_type_definition = Some(
+                if let TypeDefinition::Complex(base_type_definition) = base_type_definition {
+                    context.request(base_type_definition);
+                    let base_type_definition = base_type_definition.get(context.components());
+                    match base_type_definition.content_type.variety {
+                        ContentTypeVariety::Simple => {
+                            // 1 If the {base type definition} is a complex type definition whose
+                            //   own {content type} has {variety} simple and the <restriction>
+                            //   alternative is chosen, then let B be
+
+                            // 1.1 the simple type definition corresponding to the <simpleType>
+                            //   among the [children] of <restriction> if there is one;
+                            // TODO
+
+                            // 1.2 otherwise (<restriction> has no <simpleType> among its
+                            //   [children]), the simple type definition which is the {simple type
+                            //   definition} of the {content type} of the {base type definition} a
+                            //   simple type definition as follows:
+                            // TODO
+                            todo!()
+                        }
+                        ContentTypeVariety::Mixed
+                            if base_type_definition
+                                .content_type
+                                .particle
+                                .map_or(false, |particle| {
+                                    particle.get(context.components()).is_emptiable()
+                                }) =>
+                        {
+                            todo!()
+                        }
+                        _ => {
+                            // 5 otherwise ·xs:anySimpleType·.
+                            let any_simple_type: TypeDefinition =
+                                context.resolve(&XS_ANY_SIMPLE_TYPE_NAME);
+                            any_simple_type.simple().unwrap()
+                        }
+                    }
+                } else {
+                    // 5 otherwise ·xs:anySimpleType·.
+                    let any_simple_type: TypeDefinition = context.resolve(&XS_ANY_SIMPLE_TYPE_NAME);
+                    any_simple_type.simple().unwrap()
+                },
+            );
+            let content_type = ContentType {
+                // {variety}  simple
+                variety: ContentTypeVariety::Simple,
+                // {particle}  ·absent·
+                particle: None,
+                // {open content}  ·absent·
+                open_content: None,
+                // {simple_type_definition}  [from above]
+                simple_type_definition,
+            };
+
+            (base_type_definition, derivation_method, content_type)
+        } else if let Some(extension) = simple_content
+            .children()
+            .find(|c| c.tag_name().name() == "extension")
+        {
+            // The <extension> alternative is chosen
+            // {base type definition}
+            //   The type definition ·resolved· to by the ·actual value· of the base [attribute] on
+            //   the [...] <extension> element appearing as a child of <simpleContent>
+            let base_type_definition = extension
+                .attribute("base")
+                .map(|base| actual_value::<QName>(base, extension))
+                .map(|n| context.resolve(&n))
+                .unwrap();
+
+            // {derivation method}
+            //   If [...] the <extension> alternative is chosen, extension.
+            let derivation_method = DerivationMethod::Extension;
+
+            let content_type = ContentType {
+                // {variety}  simple
+                variety: ContentTypeVariety::Simple,
+                // {particle}  ·absent·
+                particle: None,
+                // {open content}  ·absent·
+                open_content: None,
+                // {simple_type_definition}  the appropriate case among the following:
+                simple_type_definition: Some(match base_type_definition {
+                    TypeDefinition::Complex(base_type_definition) => {
+                        context.request(base_type_definition);
+                        let base_type_definition = base_type_definition.get(context.components());
+                        // 3 If the {base type definition} is a complex type definition whose own
+                        //   {content type} has {variety} simple and the <extension> alternative is
+                        //   chosen, then the {simple type definition} of the {content type} of that
+                        //   complex type definition;
+                        if base_type_definition.content_type.variety == ContentTypeVariety::Simple {
+                            base_type_definition
+                                .content_type
+                                .simple_type_definition
+                                .expect("Content type (variety = simple) must have simple type def")
+                        } else {
+                            // 5 otherwise ·xs:anySimpleType·
+                            let any_simple_type: TypeDefinition =
+                                context.resolve(&XS_ANY_SIMPLE_TYPE_NAME);
+                            any_simple_type.simple().unwrap()
+                        }
+                    }
+                    TypeDefinition::Simple(base_type_definition) => {
+                        // 4 If the {base type definition} is a simple type definition and the
+                        //   <extension> alternative is chosen, then that simple type
+                        //   definition;
+                        base_type_definition
+                    }
+                }),
+            };
+
+            (base_type_definition, derivation_method, content_type)
+        } else {
+            panic!("Invalid simple content")
+        };
+
+        let common = Self::map_common(context, complex_type, schema, ancestor_element);
+
+        let attribute_uses =
+            Self::map_attribute_uses_property(context, complex_type_ref, complex_type, schema);
+
+        // TODO attribute wildcard
+
+        context.insert(
+            complex_type_ref,
+            Self {
+                base_type_definition,
+                derivation_method: Some(derivation_method),
+                content_type,
+                attribute_uses,
+                ..common
+            },
+        );
     }
 
     fn map_with_explicit_complex_content(

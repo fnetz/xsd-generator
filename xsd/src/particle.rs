@@ -21,6 +21,13 @@ pub enum MaxOccurs {
 }
 
 impl Particle {
+    /// Schema Component Constraint: Particle Emptiable
+    ///
+    /// <https://www.w3.org/TR/xmlschema11-1/#cos-group-emptiable>
+    pub fn is_emptiable(&self) -> bool {
+        todo!()
+    }
+
     pub(super) fn map_from_xml_local_element(
         context: &mut MappingContext,
         particle: Node,
