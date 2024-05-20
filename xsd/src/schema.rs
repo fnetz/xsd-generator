@@ -70,6 +70,8 @@ impl Schema {
                 notation_declarations.extend(child_schema.notation_declarations);
                 identity_constraint_definitions
                     .extend(child_schema.identity_constraint_definitions);
+            } else {
+                eprintln!("Failed to resolve import: {:?}", import);
             }
         }
 

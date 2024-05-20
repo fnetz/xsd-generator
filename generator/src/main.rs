@@ -36,6 +36,7 @@ impl ImportResolver for HttpImportResolver {
         };
         let xsd = roxmltree::Document::parse_with_options(&text, options).unwrap();
         let schema = xsd.root_element();
+        import.validate_imported_schema(schema)?;
         let schema = Schema::map_from_xml(context, schema);
         Ok(schema)
     }

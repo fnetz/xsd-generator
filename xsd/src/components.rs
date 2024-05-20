@@ -533,7 +533,11 @@ impl ComponentResolver {
         LookupTables: Lookup<R>,
     {
         // TODO error handling
-        self.lookup_tables.lookup_value(key).unwrap()
+        self.lookup_tables.lookup_value(key).unwrap_or_else(|| {
+            panic!(
+                "Could not resolve component {key:?}",
+            )
+        })
     }
 
     pub(super) fn register_with_name<R>(

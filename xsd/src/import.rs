@@ -13,7 +13,7 @@ pub struct Import {
 }
 
 impl Import {
-    pub const TAG_NAME: &str = "import";
+    pub const TAG_NAME: &'static str = "import";
 
     pub fn map_from_xml(import: Node, schema: Node) -> Result<Self, XsdError> {
         let namespace = import
@@ -47,6 +47,22 @@ impl Import {
             schema_location,
         })
     }
+
+    pub fn validate_imported_schema(&self, schema: Node) -> Result<(), ImportError> {
+        // § 4.2.6 Schema Representation Constraint: Import Constraints and Semantics
+        let valid = if let Some(namespace) = self.namespace.as_ref() {
+            // 3.1 If there is a namespace [attribute], then its ·actual value· is identical to the
+            //   ·actual value· of the targetNamespace [attribute] of D2.
+            let target_namespace = schema
+                .attribute("targetNamespace")
+                .map(|tn| actual_value::<&str>(tn, schema));
+            target_namespace == Some(namespace)
+        } else {
+            // 3.2 If there is no namespace [attribute], then D2 has no targetNamespace [attribute]
+            schema.attribute("targetNamespace").is_none()
+        };
+        valid.then_some(()).ok_or(ImportError::ValidationFailed)
+    }
 }
 
 #[derive(Debug, Error)]
@@ -55,6 +71,8 @@ pub enum ImportError {
     UnsupportedImport,
     #[error("the schema failed to parse")]
     Xsd(XsdError),
+    #[error("the imported schema is not valid with regard to the import")]
+    ValidationFailed,
     #[error("an unspecified error occurred while loading the schema")]
     UnspecifiedLoad(Box<dyn std::error::Error>),
 }
