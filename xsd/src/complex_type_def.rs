@@ -368,8 +368,13 @@ impl ComplexTypeDefinition {
 
         let common = Self::map_common(context, complex_type, schema, ancestor_element);
 
-        let attribute_uses =
-            Self::map_attribute_uses_property(context, complex_type_ref, complex_type, schema);
+        let attribute_uses = Self::map_attribute_uses_property(
+            context,
+            complex_type_ref,
+            complex_type,
+            Some(simple_content),
+            schema,
+        );
 
         // TODO attribute wildcard
 
@@ -427,8 +432,13 @@ impl ComplexTypeDefinition {
 
         let common = Self::map_common(context, complex_type, schema, ancestor_element);
 
-        let attribute_uses =
-            Self::map_attribute_uses_property(context, complex_type_ref, complex_type, schema);
+        let attribute_uses = Self::map_attribute_uses_property(
+            context,
+            complex_type_ref,
+            complex_type,
+            Some(complex_content),
+            schema,
+        );
 
         // TODO attribute wildcard
 
@@ -469,8 +479,13 @@ impl ComplexTypeDefinition {
 
         let common = Self::map_common(context, complex_type, schema, ancestor_element);
 
-        let attribute_uses =
-            Self::map_attribute_uses_property(context, complex_type_ref, complex_type, schema);
+        let attribute_uses = Self::map_attribute_uses_property(
+            context,
+            complex_type_ref,
+            complex_type,
+            None,
+            schema,
+        );
 
         // TODO attribute wildcard
 
@@ -591,8 +606,21 @@ impl ComplexTypeDefinition {
         context: &mut MappingContext,
         complex_type_ref: Ref<Self>,
         complex_type: Node,
+        content_node: Option<Node>,
         schema: Node,
     ) -> Vec<Ref<AttributeUse>> {
+        // In the following rule, references to "the [children]" refer to the [children] of the
+        // <extension> or <restriction> element (whichever appears as a child of <simpleContent> or
+        // <complexContent> in the <complexType> source declaration), if present, otherwise to the
+        // [children] of the <complexType> source declaration itself.
+        let children_node = content_node
+            .and_then(|content_node| {
+                content_node
+                    .children()
+                    .find(|child| ["extension", "restriction"].contains(&child.tag_name().name()))
+            })
+            .unwrap_or(complex_type);
+
         // If the <schema> ancestor has a defaultAttributes attribute, and the <complexType>
         // element does not have defaultAttributesApply = false, then the {attribute uses} property
         // is computed as if there were an <attributeGroup> [child] with empty content and a ref
@@ -611,7 +639,7 @@ impl ComplexTypeDefinition {
             let mut attribute_uses = Set::new();
 
             // 1 The set of attribute uses corresponding to the <attribute> [children], if any.
-            complex_type
+            children_node
                 .children()
                 .filter(|c| c.tag_name().name() == "attribute")
                 .map(|attribute| {
