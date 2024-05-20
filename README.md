@@ -11,3 +11,13 @@ A long-term goal is to get the project to handle the [XML Schema for Schema Docu
 and make the parser use that.
 
 [1]: https://www.w3.org/2009/XMLSchema/datatypes.xsd
+
+## Documentation
+
+Where appropriate, text from the [W3C XML Schema Definition Language (XSD)][2]
+is used to document the data model;
+[Copyright][4] © 2012 [W3C][3]® (MIT, ERCIM, Keio)
+
+[2]: https://www.w3.org/TR/xmlschema11-1/
+[3]: https://www.w3.org/
+[4]: https://www.w3.org/copyright/document-license-2023/
