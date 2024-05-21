@@ -26,7 +26,7 @@ pub mod wildcard;
 pub mod xstypes;
 
 mod builtins;
-mod components;
+pub mod components;
 mod mapping_context;
 mod values;
 

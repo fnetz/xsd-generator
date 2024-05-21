@@ -3,8 +3,7 @@ use syn::{
     Variant,
 };
 
-use dt_xsd::complex_type_def::Context as ComplexContext;
-use dt_xsd::simple_type_def::Context as SimpleContext;
+use dt_xsd::components::IsBuiltinRef;
 use dt_xsd::simple_type_def::Variety as SimpleVariety;
 use dt_xsd::{
     attribute_decl::ScopeVariety, complex_type_def::ContentType, model_group::Compositor,
@@ -36,6 +35,38 @@ impl RustVisitor {
             Ident::new_raw(name, Span::call_site())
         } else {
             Ident::new(name, Span::call_site())
+        }
+    }
+
+    fn compute_type_name_ident(
+        type_def: TypeDefinition,
+        components: &SchemaComponentTable,
+    ) -> Ident {
+        if type_def.is_builtin(components) {
+            let name = type_def
+                .name(components)
+                .expect("Builtin type without name");
+            let name = match name.local_name.as_str() {
+                "boolean" => "bool",
+                "double" => "f64",
+                "float" => "f32",
+                "long" => "i64",
+                "int" => "i32",
+                "short" => "i16",
+                "byte" => "i8",
+                "unsignedLong" => "u64",
+                "unsignedInt" => "u32",
+                "unsignedShort" => "u16",
+                "unsignedByte" => "u8",
+                // TODO
+                _ => return Self::name_to_ident(&name.local_name.to_pascal_case()),
+            };
+            Ident::new(name, Span::call_site())
+        } else if let Some(name) = type_def.name(components) {
+            Self::name_to_ident(&name.local_name.to_pascal_case())
+        } else {
+            // TODO determine from context
+            Ident::new("UnnamedTypeTodo", Span::call_site())
         }
     }
 
@@ -109,9 +140,10 @@ impl RustVisitor {
             let name = Self::name_to_ident(&name);
 
             // TODO: visit simple type
-            let type_def = attribute_decl.type_definition.get(ctx.table);
-            let type_name = Self::get_simple_type_name(ctx, type_def);
-            let type_name = Self::name_to_ident(&type_name);
+            let type_name = Self::compute_type_name_ident(
+                TypeDefinition::Simple(attribute_decl.type_definition),
+                ctx.table,
+            );
 
             let field: Field = Field {
                 attrs: vec![],
@@ -125,29 +157,6 @@ impl RustVisitor {
             fields.push(field);
         }
         fields
-    }
-
-    fn get_simple_type_name(
-        ctx: &mut GeneratorContext,
-        simple_type: &SimpleTypeDefinition,
-    ) -> String {
-        simple_type
-            .name
-            .as_deref()
-            .or_else(|| {
-                simple_type
-                    .context
-                    .as_ref()
-                    .and_then(|context| match context {
-                        SimpleContext::ComplexType(ct) => ct.get(ctx.table).name.as_deref(),
-                        SimpleContext::SimpleType(st) => st.get(ctx.table).name.as_deref(),
-                        SimpleContext::Element(e) => Some(e.get(ctx.table).name.as_str()),
-                        SimpleContext::Attribute(a) => Some(a.get(ctx.table).name.as_str()),
-                    })
-            })
-            // TODO convert in caller
-            .map(ToPascalCase::to_pascal_case)
-            .unwrap_or_else(|| "UnnamedType".into()) // TODO can name be none here?
     }
 
     fn visit_simple_type_inline(
@@ -180,24 +189,9 @@ impl ComponentVisitor for RustVisitor {
             return;
         }
 
+        let name = Self::compute_type_name_ident(TypeDefinition::Complex(complex_type), ctx.table);
+
         let complex_type = complex_type.get(ctx.table);
-
-        let name = complex_type
-            .name
-            .as_deref()
-            .or_else(|| {
-                complex_type
-                    .context
-                    .as_ref()
-                    .and_then(|context| match context {
-                        ComplexContext::ComplexType(ct) => ct.get(ctx.table).name.as_deref(),
-                        ComplexContext::Element(e) => Some(e.get(ctx.table).name.as_str()),
-                    })
-            })
-            .map(ToPascalCase::to_pascal_case)
-            .unwrap_or_else(|| "UnnamedType".into()); // TODO can name be none here?
-
-        let name = Self::name_to_ident(&name);
 
         match complex_type.content_type {
             ContentType::Empty => {
@@ -307,9 +301,10 @@ impl ComponentVisitor for RustVisitor {
                 // Just a wrapper around a simple type for now
                 self.visit_simple_type(ctx, simple_type_definition);
 
-                let simple_type_name =
-                    Self::get_simple_type_name(ctx, simple_type_definition.get(ctx.table));
-                let simple_type_name = Self::name_to_ident(&simple_type_name);
+                let simple_type_name = Self::compute_type_name_ident(
+                    TypeDefinition::Simple(simple_type_definition),
+                    ctx.table,
+                );
 
                 self.output_items.push(parse_quote! {
                     pub struct #name(#simple_type_name);
@@ -330,8 +325,8 @@ impl ComponentVisitor for RustVisitor {
 
         let simple_type = simple_type_ref.get(ctx.table);
 
-        let name = Self::get_simple_type_name(ctx, simple_type);
-        let name = Self::name_to_ident(&name);
+        let name =
+            Self::compute_type_name_ident(TypeDefinition::Simple(simple_type_ref), ctx.table);
 
         let item: Item = match simple_type.variety {
             Some(SimpleVariety::Atomic) => {
@@ -342,18 +337,20 @@ impl ComponentVisitor for RustVisitor {
                     return;
                 }
 
-                let primitive_type = primitive_type_ref.get(ctx.table);
-                let prim_name = Self::get_simple_type_name(ctx, primitive_type);
-                let prim_name = Self::name_to_ident(&prim_name);
+                let prim_name = Self::compute_type_name_ident(
+                    TypeDefinition::Simple(primitive_type_ref),
+                    ctx.table,
+                );
+
                 // TODO special case for simple alias (without more facets)?
                 parse_quote! {
                     pub struct #name(#prim_name);
                 }
             }
             Some(SimpleVariety::List) => {
-                let item_type = simple_type.item_type_definition.unwrap().get(ctx.table);
-                let item_name = Self::get_simple_type_name(ctx, item_type);
-                let item_name = Self::name_to_ident(&item_name);
+                let item_type = simple_type.item_type_definition.unwrap();
+                let item_name =
+                    Self::compute_type_name_ident(TypeDefinition::Simple(item_type), ctx.table);
 
                 parse_quote! {
                     pub struct #name(Vec<#item_name>);
@@ -370,7 +367,8 @@ impl ComponentVisitor for RustVisitor {
                     } else {
                         "Unnamed"
                     };
-                    let variant_name = Self::name_to_ident(variant_name);
+                    let variant_name = variant_name.to_pascal_case();
+                    let variant_name = Self::name_to_ident(&variant_name);
                     variants.push(Variant {
                         ident: variant_name,
                         fields: Fields::Unnamed(parse_quote! { (#content) }),
