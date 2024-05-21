@@ -465,7 +465,7 @@ impl ComplexTypeDefinition {
         let base_type_definition = context.resolve(&XS_ANY_TYPE_NAME);
 
         // {derivation method}    restriction
-        let derivation_method = Some(DerivationMethod::Restriction);
+        let derivation_method = DerivationMethod::Restriction;
 
         let content_type = ContentType::map_complex(
             context,
@@ -473,7 +473,7 @@ impl ComplexTypeDefinition {
             complex_type,
             None,
             schema,
-            derivation_method.unwrap(),
+            derivation_method,
             base_type_definition,
         );
 
@@ -493,7 +493,7 @@ impl ComplexTypeDefinition {
             complex_type_ref,
             Self {
                 base_type_definition,
-                derivation_method,
+                derivation_method: Some(derivation_method),
                 content_type,
                 attribute_uses,
                 ..common
@@ -736,21 +736,18 @@ impl ContentType {
             None
         } else {
             // 2.2 otherwise the particle corresponding to the <all>, <choice>, <group> or <sequence> among the [children].
-            Some(
-                children_elem
-                    .children()
-                    .find_map(|c| match c.tag_name().name() {
-                        "all" | "choice" | "sequence" => Some(Particle::map_from_xml_model_group(
-                            context,
-                            c,
-                            schema,
-                            complex_type_ref,
-                        )),
-                        "group" => Some(Particle::map_from_xml_group_reference(context, c)),
-                        _ => None,
-                    }),
-            )
-            .unwrap()
+            children_elem
+                .children()
+                .find_map(|c| match c.tag_name().name() {
+                    "all" | "choice" | "sequence" => Some(Particle::map_from_xml_model_group(
+                        context,
+                        c,
+                        schema,
+                        complex_type_ref,
+                    )),
+                    "group" => Some(Particle::map_from_xml_group_reference(context, c)),
+                    _ => None,
+                })
         };
 
         // 3 Let the effective content be the appropriate case among the following:

@@ -90,7 +90,7 @@ where
     ComponentTraits: HasArenaContainer<R>,
 {
     fn clone(&self) -> Self {
-        Self(self.0, PhantomData)
+        *self
     }
 }
 
@@ -533,11 +533,9 @@ impl ComponentResolver {
         LookupTables: Lookup<R>,
     {
         // TODO error handling
-        self.lookup_tables.lookup_value(key).unwrap_or_else(|| {
-            panic!(
-                "Could not resolve component {key:?}",
-            )
-        })
+        self.lookup_tables
+            .lookup_value(key)
+            .unwrap_or_else(|| panic!("Could not resolve component {key:?}"))
     }
 
     pub(super) fn register_with_name<R>(
