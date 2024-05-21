@@ -642,7 +642,7 @@ impl ComplexTypeDefinition {
             children_node
                 .children()
                 .filter(|c| c.tag_name().name() == "attribute")
-                .map(|attribute| {
+                .filter_map(|attribute| {
                     AttributeDeclaration::map_from_xml_local(
                         context,
                         attribute,
@@ -650,7 +650,7 @@ impl ComplexTypeDefinition {
                         attribute_decl::ScopeParent::ComplexType(complex_type_ref),
                     )
                 })
-                .for_each(|(_attrib_decl, attrib_use)| attribute_uses.push(attrib_use));
+                .for_each(|attrib_use| attribute_uses.push(attrib_use));
 
             // 2 The {attribute uses} of the attribute groups ·resolved· to by the ·actual value·s
             //   of the ref [attribute] of the <attributeGroup> [children], if any.

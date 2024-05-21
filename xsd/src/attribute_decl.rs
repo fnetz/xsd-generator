@@ -175,13 +175,15 @@ impl AttributeDeclaration {
         attribute: Node,
         schema: Node,
         parent: ScopeParent,
-        // TODO is the first needed?
-    ) -> (Option<Ref<Self>>, Ref<AttributeUse>) {
+    ) -> Option<Ref<AttributeUse>> {
         assert_eq!(attribute.tag_name().name(), Self::TAG_NAME);
 
-        // TODO handle use = 'prohibited'
-
         // == Common properties for both paths ==
+
+        // [...] unless use='prohibited', in which case the item corresponds to nothing at all
+        if attribute.attribute("use") == Some("prohibited") {
+            return None;
+        }
 
         // {required}
         //   true if use = required, otherwise false.
@@ -248,7 +250,7 @@ impl AttributeDeclaration {
                 inheritable,
             });
 
-            (None, attribute_use)
+            Some(attribute_use)
         } else {
             // ===== Attribute Declaration =====
             let self_ref = context.reserve();
@@ -393,7 +395,7 @@ impl AttributeDeclaration {
                 inheritable,
             });
 
-            (Some(attribute_declaration), attribute_use)
+            Some(attribute_use)
         }
     }
 }

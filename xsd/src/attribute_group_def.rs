@@ -67,13 +67,15 @@ impl AttributeGroupDefinition {
             .children()
             .filter(|c| c.tag_name().name() == "attribute")
         {
-            let (_attribute_decl, attribute_use) = AttributeDeclaration::map_from_xml_local(
+            let attribute_use = AttributeDeclaration::map_from_xml_local(
                 context,
                 attribute,
                 schema,
                 attribute_decl::ScopeParent::AttributeGroup(attrib_group_ref),
             );
-            attribute_uses.push(attribute_use);
+            if let Some(attribute_use) = attribute_use {
+                attribute_uses.push(attribute_use);
+            }
         }
 
         // {attribute wildcard}
