@@ -23,7 +23,7 @@ pub struct Cli {
     pub input: String,
 
     /// Selects for which language the generator will output code
-    #[clap(value_enum)]
+    #[clap(short, long, value_enum)]
     pub generator: Generator,
 
     /// Allow a XML Document Type Definition (DTD) to occur
