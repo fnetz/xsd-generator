@@ -38,35 +38,153 @@ impl RustVisitor {
         }
     }
 
-    fn compute_type_name_ident(
+    fn get_type_name_builtin(
+        type_def: TypeDefinition,
+        components: &SchemaComponentTable,
+    ) -> syn::Path {
+        assert!(type_def.is_builtin(components));
+        let name = type_def
+            .name(components)
+            .expect("Builtin type without name");
+        enum BuiltinSource {
+            RustPrimitive,
+            HelperType,
+        }
+        use BuiltinSource::*;
+        let (source, name) = match name.local_name.as_str() {
+            "boolean" => (RustPrimitive, "bool"),
+            "double" => (RustPrimitive, "f64"),
+            "float" => (RustPrimitive, "f32"),
+            "long" => (RustPrimitive, "i64"),
+            "int" => (RustPrimitive, "i32"),
+            "short" => (RustPrimitive, "i16"),
+            "byte" => (RustPrimitive, "i8"),
+            "unsignedLong" => (RustPrimitive, "u64"),
+            "unsignedInt" => (RustPrimitive, "u32"),
+            "unsignedShort" => (RustPrimitive, "u16"),
+            "unsignedByte" => (RustPrimitive, "u8"),
+            "string" => (RustPrimitive, "String"),
+            "anyType" => (HelperType, "AnyType"),
+            "anySimpleType" => (HelperType, "AnySimpleType"),
+            "anyAtomicType" => (HelperType, "AnyAtomicType"),
+            "error" => (HelperType, "Error"),
+            "decimal" => (HelperType, "Decimal"),
+            "dateTime" => (HelperType, "DateTime"),
+            "duration" => (HelperType, "Duration"),
+            "time" => (HelperType, "Time"),
+            "date" => (HelperType, "Date"),
+            "gMonth" => (HelperType, "GMonth"),
+            "gMonthDay" => (HelperType, "GMonthDay"),
+            "gDay" => (HelperType, "GDay"),
+            "gYear" => (HelperType, "GYear"),
+            "gYearMonth" => (HelperType, "GYearMonth"),
+            "hexBinary" => (HelperType, "HexBinary"),
+            "base64Binary" => (HelperType, "Base64Binary"),
+            "anyURI" => (HelperType, "AnyURI"),
+            "QName" => (HelperType, "QName"),
+            "NOTATION" => (HelperType, "Notation"),
+            "normalizedString" => (HelperType, "NormalizedString"),
+            "token" => (HelperType, "Token"),
+            "language" => (HelperType, "Language"),
+            "NMTOKEN" => (HelperType, "NmToken"),
+            "NMTOKENS" => (HelperType, "NmTokens"),
+            "Name" => (HelperType, "Name"),
+            "NCName" => (HelperType, "NcName"),
+            "ID" => (HelperType, "Id"),
+            "IDREF" => (HelperType, "IdRef"),
+            "IDREFS" => (HelperType, "IdRefs"),
+            "ENTITY" => (HelperType, "Entity"),
+            "ENTITIES" => (HelperType, "Entities"),
+            "integer" => (HelperType, "Integer"),
+            "nonPositiveInteger" => (HelperType, "NonPositiveInteger"),
+            "negativeInteger" => (HelperType, "NegativeInteger"),
+            "nonNegativeInteger" => (HelperType, "NonNegativeInteger"),
+            "positiveInteger" => (HelperType, "PositiveInteger"),
+            "yearMonthDuration" => (HelperType, "YearMonthDuration"),
+            "dayTimeDuration" => (HelperType, "DayTimeDuration"),
+            "dateTimeStamp" => (HelperType, "DateTimeStamp"),
+            _ => panic!("Unknown builtin type: {:?}", name.local_name),
+        };
+        let name = Ident::new(name, Span::call_site());
+        match source {
+            RustPrimitive => parse_quote!(#name),
+            HelperType => parse_quote!(dt_builtin::#name),
+        }
+    }
+
+    fn compute_type_name_ident_non_builtin(
         type_def: TypeDefinition,
         components: &SchemaComponentTable,
     ) -> Ident {
-        if type_def.is_builtin(components) {
-            let name = type_def
-                .name(components)
-                .expect("Builtin type without name");
-            let name = match name.local_name.as_str() {
-                "boolean" => "bool",
-                "double" => "f64",
-                "float" => "f32",
-                "long" => "i64",
-                "int" => "i32",
-                "short" => "i16",
-                "byte" => "i8",
-                "unsignedLong" => "u64",
-                "unsignedInt" => "u32",
-                "unsignedShort" => "u16",
-                "unsignedByte" => "u8",
-                // TODO
-                _ => return Self::name_to_ident(&name.local_name.to_pascal_case()),
-            };
-            Ident::new(name, Span::call_site())
-        } else if let Some(name) = type_def.name(components) {
+        assert!(!type_def.is_builtin(components));
+        if let Some(name) = type_def.name(components) {
             Self::name_to_ident(&name.local_name.to_pascal_case())
         } else {
-            // TODO determine from context
-            Ident::new("UnnamedTypeTodo", Span::call_site())
+            let context_name = match type_def {
+                TypeDefinition::Simple(simple_type) => {
+                    let simple_type = simple_type.get(components);
+                    let context = simple_type
+                        .context
+                        .as_ref()
+                        .expect("context must be set if name is None");
+                    use dt_xsd::simple_type_def::Context;
+                    match context {
+                        Context::Attribute(attribute) => attribute.get(components).name.to_string(),
+                        Context::Element(element) => element.get(components).name.to_string(),
+                        // TODO: Simple/Complex types need more logic to determine the kind of
+                        // subtype we are dealing with
+                        Context::ComplexType(c) => {
+                            Self::compute_type_name_ident_non_builtin(
+                                TypeDefinition::Complex(*c),
+                                components,
+                            )
+                            .to_string()
+                                + "Inner"
+                        }
+                        Context::SimpleType(s) => {
+                            Self::compute_type_name_ident_non_builtin(
+                                TypeDefinition::Simple(*s),
+                                components,
+                            )
+                            .to_string()
+                                + "Inner"
+                        }
+                    }
+                }
+                TypeDefinition::Complex(complex_type) => {
+                    let complex_type = complex_type.get(components);
+                    let context = complex_type
+                        .context
+                        .as_ref()
+                        .expect("context must be set if name is None");
+                    use dt_xsd::complex_type_def::Context;
+                    match context {
+                        Context::Element(element) => element.get(components).name.to_string(),
+                        // TODO: Same as above
+                        Context::ComplexType(c) => {
+                            Self::compute_type_name_ident_non_builtin(
+                                TypeDefinition::Complex(*c),
+                                components,
+                            )
+                            .to_string()
+                                + "Inner"
+                        }
+                    }
+                }
+            };
+            Self::name_to_ident(&context_name.to_pascal_case())
+        }
+    }
+
+    fn compute_type_name_path(
+        type_def: TypeDefinition,
+        components: &SchemaComponentTable,
+    ) -> syn::Path {
+        if type_def.is_builtin(components) {
+            Self::get_type_name_builtin(type_def, components)
+        } else {
+            let name = Self::compute_type_name_ident_non_builtin(type_def, components);
+            parse_quote!(#name)
         }
     }
 
@@ -83,13 +201,7 @@ impl RustVisitor {
                 }
 
                 let name = element.name.to_snake_case();
-                let type_ = if let Some(type_) = element.type_definition.name(ctx.table) {
-                    // TODO qualify
-                    type_.local_name.to_pascal_case()
-                } else {
-                    element.name.to_pascal_case()
-                };
-                let type_ = Self::name_to_ident(&type_);
+                let type_ = Self::compute_type_name_path(element.type_definition, ctx.table);
                 let type_ = parse_quote!(#type_);
                 (name, type_)
             }
@@ -140,7 +252,7 @@ impl RustVisitor {
             let name = Self::name_to_ident(&name);
 
             // TODO: visit simple type
-            let type_name = Self::compute_type_name_ident(
+            let type_name = Self::compute_type_name_path(
                 TypeDefinition::Simple(attribute_decl.type_definition),
                 ctx.table,
             );
@@ -185,11 +297,17 @@ impl ComponentVisitor for RustVisitor {
         ctx: &mut GeneratorContext,
         complex_type: Ref<ComplexTypeDefinition>,
     ) {
+        if complex_type.is_builtin(ctx.table) {
+            return;
+        }
         if !ctx.visited_complex_types.insert(complex_type) {
             return;
         }
 
-        let name = Self::compute_type_name_ident(TypeDefinition::Complex(complex_type), ctx.table);
+        let name = Self::compute_type_name_ident_non_builtin(
+            TypeDefinition::Complex(complex_type),
+            ctx.table,
+        );
 
         let complex_type = complex_type.get(ctx.table);
 
@@ -301,7 +419,7 @@ impl ComponentVisitor for RustVisitor {
                 // Just a wrapper around a simple type for now
                 self.visit_simple_type(ctx, simple_type_definition);
 
-                let simple_type_name = Self::compute_type_name_ident(
+                let simple_type_name = Self::compute_type_name_path(
                     TypeDefinition::Simple(simple_type_definition),
                     ctx.table,
                 );
@@ -319,14 +437,19 @@ impl ComponentVisitor for RustVisitor {
         ctx: &mut GeneratorContext,
         simple_type_ref: Ref<SimpleTypeDefinition>,
     ) {
+        if simple_type_ref.is_builtin(ctx.table) {
+            return;
+        }
         if !ctx.visited_simple_types.insert(simple_type_ref) {
             return;
         }
 
         let simple_type = simple_type_ref.get(ctx.table);
 
-        let name =
-            Self::compute_type_name_ident(TypeDefinition::Simple(simple_type_ref), ctx.table);
+        let name = Self::compute_type_name_ident_non_builtin(
+            TypeDefinition::Simple(simple_type_ref),
+            ctx.table,
+        );
 
         let item: Item = match simple_type.variety {
             Some(SimpleVariety::Atomic) => {
@@ -337,7 +460,7 @@ impl ComponentVisitor for RustVisitor {
                     return;
                 }
 
-                let prim_name = Self::compute_type_name_ident(
+                let prim_name = Self::compute_type_name_path(
                     TypeDefinition::Simple(primitive_type_ref),
                     ctx.table,
                 );
@@ -350,7 +473,7 @@ impl ComponentVisitor for RustVisitor {
             Some(SimpleVariety::List) => {
                 let item_type = simple_type.item_type_definition.unwrap();
                 let item_name =
-                    Self::compute_type_name_ident(TypeDefinition::Simple(item_type), ctx.table);
+                    Self::compute_type_name_path(TypeDefinition::Simple(item_type), ctx.table);
 
                 parse_quote! {
                     pub struct #name(Vec<#item_name>);
