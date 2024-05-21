@@ -1,12 +1,13 @@
 use super::simple_type_def::Context as SimpleContext;
 use super::{
+    builtins::XS_ANY_SIMPLE_TYPE_NAME,
     components::{Component, Named, NamedXml},
     mapping_context::TopLevelMappable,
     shared,
     values::{actual_value, normalized_value},
     xstypes::{AnyURI, NCName, QName, Sequence},
     Annotation, AttributeGroupDefinition, AttributeUse, ComplexTypeDefinition, MappingContext, Ref,
-    SimpleTypeDefinition,
+    SimpleTypeDefinition, TypeDefinition,
 };
 
 use roxmltree::Node;
@@ -106,7 +107,8 @@ impl AttributeDeclaration {
         {
             context.resolve(&type_)
         } else {
-            todo!("xs:anySimpleType")
+            let any_simple_type: TypeDefinition = context.resolve(&XS_ANY_SIMPLE_TYPE_NAME);
+            any_simple_type.simple().unwrap()
         };
 
         // {scope}
@@ -309,7 +311,8 @@ impl AttributeDeclaration {
             {
                 context.resolve(&type_)
             } else {
-                todo!("xs:anySimpleType")
+                let any_simple_type: TypeDefinition = context.resolve(&XS_ANY_SIMPLE_TYPE_NAME);
+                any_simple_type.simple().unwrap()
             };
 
             // {scope} A Scope as follows:
