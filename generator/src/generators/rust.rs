@@ -387,10 +387,23 @@ impl ComponentVisitor for RustVisitor {
                                 }
                             }
                             Compositor::Choice => {
+                                let mut variants = Vec::new();
+                                for particle in group.particles.iter().copied() {
+                                    let particle = particle.get(ctx.table);
+                                    let (type_, name) = self.visit_particle(ctx, particle);
+                                    let name = Self::name_to_ident(&name.to_pascal_case());
+                                    variants.push(Variant {
+                                        attrs: vec![],
+                                        ident: name,
+                                        fields: Fields::Unnamed(parse_quote! { (#type_) }),
+                                        discriminant: None,
+                                    });
+                                }
+
                                 if complex_type.attribute_uses.is_empty() {
                                     parse_quote! {
                                         pub enum #name {
-
+                                            #(#variants),*
                                         }
                                     }
                                 } else {
@@ -398,6 +411,7 @@ impl ComponentVisitor for RustVisitor {
                                     let inner_name = Self::name_to_ident(&inner_name);
                                     let inner_enum: ItemEnum = parse_quote! {
                                         pub enum #inner_name {
+                                            #(#variants),*
                                         }
                                     };
                                     self.output_items.push(inner_enum.into());
