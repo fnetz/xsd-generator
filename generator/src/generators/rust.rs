@@ -256,16 +256,23 @@ impl RustVisitor {
                 TypeDefinition::Simple(attribute_decl.type_definition),
                 ctx.table,
             );
+            let type_ = Type::Path(parse_quote!(#type_name));
+
+            let type_ = if !attribute_use.required {
+                parse_quote!(Option<#type_>)
+            } else {
+                type_
+            };
 
             let field: Field = Field {
                 attrs: vec![],
                 vis: parse_quote!(pub),
                 ident: Some(name),
                 colon_token: None,
-                ty: parse_quote!(#type_name),
+                ty: type_,
                 mutability: FieldMutability::None,
             };
-            // TODO: required, value_constraint
+            // TODO: value_constraint
             fields.push(field);
         }
         fields
