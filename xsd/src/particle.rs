@@ -33,8 +33,61 @@ impl Particle {
         todo!()
     }
 
+    /// Map according to XML Representation of Model Group Schema Components (§3.8.2),
+    /// XML Mapping Summary for Model Group Schema Component
+    pub(super) fn map_from_xml_model_group_term(
+        context: &mut MappingContext,
+        particle: Node,
+        schema: Node,
+        element_parent: element_decl::ScopeParent,
+    ) -> Ref<ModelGroup> {
+        // {compositor}
+        //   One of all, choice, sequence depending on the element information item.
+        let compositor = match particle.tag_name().name() {
+            "all" => Compositor::All,
+            "choice" => Compositor::Choice,
+            "sequence" => Compositor::Sequence,
+            _ => unreachable!(),
+        };
+
+        // {particles}
+        //   A sequence of particles corresponding to all the <all>, <choice>, <sequence>,
+        //   <any>, <group> or <element> items among the [children], in order.
+        let particles = particle
+            .children()
+            .filter_map(|child| match child.tag_name().name() {
+                "all" | "choice" | "sequence" => Some(Self::map_from_xml_model_group(
+                    context,
+                    child,
+                    schema,
+                    element_parent,
+                )),
+                "any" => Some(Particle::map_from_xml_wildcard_any(context, child, schema)),
+                "group" => Some(Particle::map_from_xml_group_reference(context, child)),
+                "element" => Some(ElementDeclaration::map_from_xml_local(
+                    context,
+                    child,
+                    schema,
+                    element_parent,
+                )),
+                _ => None,
+            })
+            .collect();
+
+        // {annotations}
+        //   The ·annotation mapping· of the <all>, <choice>, or <sequence> element, whichever is
+        //   present, as defined in XML Representation of Annotation Schema Components (§3.15.2).
+        let annotations = Annotation::xml_element_annotation_mapping(context, particle);
+
+        context.create(ModelGroup {
+            compositor,
+            particles,
+            annotations,
+        })
+    }
+
     /// Mapper for Model groups `<all>`, `<sequence>`, and `<choice>`, see XML Representation of Model
-    /// Group Schema Components (§3.8.2)
+    /// Group Schema Components (§3.8.2), XML Mapping Summary for Particle Schema Component
     pub(super) fn map_from_xml_model_group(
         context: &mut MappingContext,
         particle: Node,
@@ -67,55 +120,15 @@ impl Particle {
             })
             .unwrap_or(MaxOccurs::Count(1));
 
-        // {annotations}
-        //   The ·annotation mapping· of the <all>, <choice>, or <sequence> element, whichever is
-        //   present, as defined in XML Representation of Annotation Schema Components (§3.15.2).
-        let annotations = Annotation::xml_element_annotation_mapping(context, particle);
-
-        // {term} A model group as given below.
-        let term = Term::ModelGroup({
-            // {compositor}
-            //   One of all, choice, sequence depending on the element information item.
-            let compositor = match particle.tag_name().name() {
-                "all" => Compositor::All,
-                "choice" => Compositor::Choice,
-                "sequence" => Compositor::Sequence,
-                _ => unreachable!(),
-            };
-            // {particles}
-            //   A sequence of particles corresponding to all the <all>, <choice>, <sequence>,
-            //   <any>, <group> or <element> items among the [children], in order.
-            let particles = particle
-                .children()
-                .filter_map(|child| match child.tag_name().name() {
-                    "all" | "choice" | "sequence" => Some(Self::map_from_xml_model_group(
-                        context,
-                        child,
-                        schema,
-                        element_parent,
-                    )),
-                    "any" => Some(Particle::map_from_xml_wildcard_any(context, child, schema)),
-                    "group" => Some(Particle::map_from_xml_group_reference(context, child)),
-                    "element" => Some(ElementDeclaration::map_from_xml_local(
-                        context,
-                        child,
-                        schema,
-                        element_parent,
-                    )),
-                    _ => None,
-                })
-                .collect();
-
-            context.create(ModelGroup {
-                compositor,
-                particles,
-                annotations: annotations.clone(),
-            })
-        });
+        // {term}
+        //   [see `map_from_xml_model_group_term()` above.]
+        let model_group =
+            Self::map_from_xml_model_group_term(context, particle, schema, element_parent);
+        let term = Term::ModelGroup(model_group);
 
         // {annotations}
         //   The same annotations as the {annotations} of the model group.
-        // -- created above --
+        let annotations = model_group.get(context.components()).annotations.clone();
 
         context.create(Particle {
             min_occurs,
