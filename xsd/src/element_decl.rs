@@ -68,7 +68,7 @@ pub type Scope = shared::Scope<ScopeParent>;
 pub use shared::ScopeVariety;
 use shared::ValueConstraintVariety;
 
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum ScopeParent {
     ComplexType(Ref<ComplexTypeDefinition>),
     Group(Ref<ModelGroupDefinition>),

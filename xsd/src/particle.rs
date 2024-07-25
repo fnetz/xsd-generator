@@ -6,8 +6,7 @@ use super::{
     shared::Term,
     values::actual_value,
     xstypes::{QName, Sequence},
-    ComplexTypeDefinition, ElementDeclaration, MappingContext, ModelGroup, ModelGroupDefinition,
-    Ref, Wildcard,
+    ElementDeclaration, MappingContext, ModelGroup, ModelGroupDefinition, Ref, Wildcard,
 };
 use roxmltree::Node;
 
@@ -34,27 +33,13 @@ impl Particle {
         todo!()
     }
 
-    pub(super) fn map_from_xml_local_element(
-        context: &mut MappingContext,
-        particle: Node,
-        schema: Node,
-        element_parent: Ref<ComplexTypeDefinition>,
-    ) -> Ref<Self> {
-        ElementDeclaration::map_from_xml_local(
-            context,
-            particle,
-            schema,
-            element_decl::ScopeParent::ComplexType(element_parent),
-        )
-    }
-
     /// Mapper for Model groups `<all>`, `<sequence>`, and `<choice>`, see XML Representation of Model
     /// Group Schema Components (§3.8.2)
     pub(super) fn map_from_xml_model_group(
         context: &mut MappingContext,
         particle: Node,
         schema: Node,
-        element_parent: Ref<ComplexTypeDefinition>,
+        element_parent: element_decl::ScopeParent,
     ) -> Ref<Self> {
         assert!(matches!(
             particle.tag_name().name(),
@@ -111,7 +96,7 @@ impl Particle {
                     )),
                     "any" => Some(Particle::map_from_xml_wildcard_any(context, child, schema)),
                     "group" => Some(Particle::map_from_xml_group_reference(context, child)),
-                    "element" => Some(Particle::map_from_xml_local_element(
+                    "element" => Some(ElementDeclaration::map_from_xml_local(
                         context,
                         child,
                         schema,
