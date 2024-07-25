@@ -1,7 +1,13 @@
 use super::{
-    annotation::Annotation, components::Component, element_decl, model_group::Compositor,
-    shared::Term, values::actual_value, xstypes::Sequence, ComplexTypeDefinition,
-    ElementDeclaration, MappingContext, ModelGroup, Ref, Wildcard,
+    annotation::Annotation,
+    components::Component,
+    element_decl,
+    model_group::Compositor,
+    shared::Term,
+    values::actual_value,
+    xstypes::{QName, Sequence},
+    ComplexTypeDefinition, ElementDeclaration, MappingContext, ModelGroup, ModelGroupDefinition,
+    Ref, Wildcard,
 };
 use roxmltree::Node;
 
@@ -137,11 +143,47 @@ impl Particle {
     /// Mapper for Group references `<group>`, see XML Representation of Model Group Definition
     /// Schema Components (§3.7.2)
     pub(super) fn map_from_xml_group_reference(
-        _context: &mut MappingContext,
+        context: &mut MappingContext,
         group: Node,
     ) -> Ref<Particle> {
         assert_eq!(group.tag_name().name(), "group");
-        todo!()
+        // FIXME: minOccurs=maxOccurs=0 shouldn't create anything
+
+        // The ·actual value· of the minOccurs [attribute], if present, otherwise 1.
+        let min_occurs = group
+            .attribute("minOccurs")
+            .map(|v| actual_value::<u64>(v, group))
+            .unwrap_or(1);
+
+        // unbounded, if the maxOccurs [attribute] equals unbounded, otherwise the ·actual value·
+        // of the maxOccurs [attribute], if present, otherwise 1.
+        let max_occurs = group
+            .attribute("maxOccurs")
+            .map(|v| {
+                if v == "unbounded" {
+                    MaxOccurs::Unbounded
+                } else {
+                    MaxOccurs::Count(actual_value::<u64>(v, group))
+                }
+            })
+            .unwrap_or(MaxOccurs::Count(1));
+
+        // {term}: The {model group} of the model group definition ·resolved· to by the ·actual value· of the ref [attribute]
+        // TODO: handle missing ref?
+        let ref_ = actual_value::<QName>(group.attribute("ref").unwrap(), group);
+        let ref_model_group_definition: Ref<ModelGroupDefinition> = context.resolve(&ref_);
+        let term = Term::ModelGroup(context.request(ref_model_group_definition).model_group);
+
+        // The ·annotation mapping· of the <group> element, as defined in XML Representation of
+        // Annotation Schema Components (§3.15.2).
+        let annotations = Annotation::xml_element_annotation_mapping(context, group);
+
+        context.create(Particle {
+            min_occurs,
+            max_occurs,
+            term,
+            annotations,
+        })
     }
 
     // TODO anyAttribute
