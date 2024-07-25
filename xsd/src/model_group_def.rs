@@ -1,11 +1,12 @@
 use super::{
     annotation::Annotation,
     components::{Component, Named, NamedXml},
+    element_decl,
     mapping_context::TopLevelMappable,
-    model_group::{Compositor, ModelGroup},
+    model_group::ModelGroup,
     values::actual_value,
     xstypes::{AnyURI, NCName, QName, Sequence},
-    MappingContext, Ref,
+    MappingContext, Particle, Ref,
 };
 use roxmltree::Node;
 
@@ -46,22 +47,41 @@ impl ModelGroupDefinition {
         schema: Node,
         tlref: Option<Ref<Self>>,
     ) -> Ref<Self> {
+        // {name}, {target namespace}
+        //   [see `get_name_from_xml()` above.]
         let QName {
             local_name: name,
             namespace_name: target_namespace,
         } = Self::get_name_from_xml(group, schema);
 
-        // TODO
         let self_ref = tlref.unwrap_or_else(|| context.reserve());
-        let model_group = context.create(ModelGroup {
-            annotations: Sequence::new(),
-            compositor: Compositor::All,
-            particles: Sequence::new(),
-        });
+
+        // {model group}
+        //   A model group which is the {term} of a particle corresponding to the <all>, <choice>
+        //   or <sequence> among the [children] (there must be exactly one).
+        let all_child = group.children().find(|n| n.tag_name().name() == "all");
+        let choice_child = group.children().find(|n| n.tag_name().name() == "choice");
+        let sequence_child = group.children().find(|n| n.tag_name().name() == "sequence");
+        let particle = all_child.xor(choice_child).xor(sequence_child);
+        let particle = particle
+            .expect("Model group definition needs to have EXACTLY one of all, choice or sequence");
+
+        let model_group = Particle::map_from_xml_model_group_term(
+            context,
+            particle,
+            schema,
+            element_decl::ScopeParent::Group(self_ref),
+        );
+
+        // {annotations}
+        //    The ·annotation mapping· of the <group> element, as defined in XML Representation of
+        //    Annotation Schema Components (§3.15.2).
+        let annotations = Annotation::xml_element_annotation_mapping(context, group);
+
         context.insert(
             self_ref,
             Self {
-                annotations: Sequence::new(),
+                annotations,
                 name,
                 target_namespace,
                 model_group,
