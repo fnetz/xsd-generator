@@ -682,6 +682,68 @@ impl ComplexTypeDefinition {
 }
 
 impl ContentType {
+    fn compute_explicit_content(
+        context: &mut MappingContext,
+        complex_type_ref: Ref<ComplexTypeDefinition>,
+        complex_type: Node,
+        children_elem: Node,
+        schema: Node,
+    ) -> Option<Ref<Particle>> {
+        // 2 Let the explicit content be the appropriate case among the following:
+
+        // 2.1 If at least one of the following is true
+        // 2.1.1 There is no <group>, <all>, <choice> or <sequence> among the [children];
+        let cond_1 = !children_elem
+            .children()
+            .any(|c| ["group", "all", "choice", "sequence"].contains(&c.tag_name().name()));
+        // 2.1.2 There is an <all> or <sequence> among the [children] with no [children] of its own excluding <annotation>;
+        let cond_2 = children_elem.children().any(|c| {
+            ["all", "sequence"].contains(&c.tag_name().name())
+                && !c
+                    .children()
+                    .any(|c| c.tag_name().name() != Annotation::TAG_NAME)
+        });
+        // 2.1.3 There is among the [children] a <choice> element whose minOccurs [attribute] has the ·actual value· 0 and which has no [children] of its own except for <annotation>;
+        let cond_3 = children_elem.children().any(|c| {
+            c.tag_name().name() == "choice"
+                && c.attribute("minOccurs")
+                    .map(|v| actual_value::<u64>(v, complex_type))
+                    == Some(0)
+                && !c
+                    .children()
+                    .any(|c| c.tag_name().name() != Annotation::TAG_NAME)
+        });
+        // 2.1.4 The <group>, <all>, <choice> or <sequence> element among the [children] has a maxOccurs [attribute] with an ·actual value· of 0;
+        let cond_4 = children_elem
+            .children()
+            .find(|c| ["group", "all", "choice", "sequence"].contains(&c.tag_name().name()))
+            .map(|c| {
+                c.attribute("maxOccurs")
+                    .filter(|m| *m != "unbounded")
+                    .map(|v| actual_value::<u64>(v, complex_type))
+                    == Some(0)
+            })
+            == Some(true);
+        if cond_1 || cond_2 || cond_3 || cond_4 {
+            // then empty
+            None
+        } else {
+            // 2.2 otherwise the particle corresponding to the <all>, <choice>, <group> or <sequence> among the [children].
+            children_elem
+                .children()
+                .find_map(|c| match c.tag_name().name() {
+                    "all" | "choice" | "sequence" => Some(Particle::map_from_xml_model_group(
+                        context,
+                        c,
+                        schema,
+                        element_decl::ScopeParent::ComplexType(complex_type_ref),
+                    )),
+                    "group" => Some(Particle::map_from_xml_group_reference(context, c)),
+                    _ => None,
+                })
+        }
+    }
+
     fn map_complex(
         context: &mut MappingContext,
         complex_type_ref: Ref<ComplexTypeDefinition>,
@@ -721,35 +783,14 @@ impl ContentType {
 
         // TODO maxOccurs unbounded
 
-        // 2 Let the explicit content be the appropriate case among the following:
-        // 2.1 If at least one of the following is true
-        let explicit_content: Option<Ref<Particle>> = if
-        // 2.1.1 There is no <group>, <all>, <choice> or <sequence> among the [children];
-        !children_elem.children().any(|c| ["group", "all", "choice", "sequence"].contains(&c.tag_name().name())) ||
-                // 2.1.2 There is an <all> or <sequence> among the [children] with no [children] of its own excluding <annotation>;
-                children_elem.children().any(|c| ["all", "sequence"].contains(&c.tag_name().name()) && !c.children().any(|c| c.tag_name().name() != Annotation::TAG_NAME)) ||
-                // 2.1.3 There is among the [children] a <choice> element whose minOccurs [attribute] has the ·actual value· 0 and which has no [children] of its own except for <annotation>;
-                children_elem.children().any(|c| c.tag_name().name() == "choice" && c.attribute("minOccurs").map(|v| actual_value::<u64>(v, complex_type)) == Some(0) && !c.children().any(|c| c.tag_name().name() != Annotation::TAG_NAME)) ||
-                // 2.1.4 The <group>, <all>, <choice> or <sequence> element among the [children] has a maxOccurs [attribute] with an ·actual value· of 0;
-                children_elem.children().find(|c| ["group", "all", "choice", "sequence"].contains(&c.tag_name().name())).map(|c| c.attribute("maxOccurs").filter(|m| *m != "unbounded").map(|v| actual_value::<u64>(v, complex_type)) == Some(0)) == Some(true)
-        {
-            // then empty
-            None
-        } else {
-            // 2.2 otherwise the particle corresponding to the <all>, <choice>, <group> or <sequence> among the [children].
-            children_elem
-                .children()
-                .find_map(|c| match c.tag_name().name() {
-                    "all" | "choice" | "sequence" => Some(Particle::map_from_xml_model_group(
-                        context,
-                        c,
-                        schema,
-                        element_decl::ScopeParent::ComplexType(complex_type_ref),
-                    )),
-                    "group" => Some(Particle::map_from_xml_group_reference(context, c)),
-                    _ => None,
-                })
-        };
+        // 2 (explicit content)
+        let explicit_content = Self::compute_explicit_content(
+            context,
+            complex_type_ref,
+            complex_type,
+            children_elem,
+            schema,
+        );
 
         // 3 Let the effective content be the appropriate case among the following:
         let effective_content = if let Some(explicit_content) = explicit_content {
