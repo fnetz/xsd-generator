@@ -425,7 +425,7 @@ impl ComplexTypeDefinition {
             context,
             complex_type_ref,
             complex_type,
-            None,
+            Some(complex_content),
             schema,
             derivation_method,
             base_type_definition,
