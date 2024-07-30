@@ -1177,3 +1177,69 @@ impl TopLevelMappable for ComplexTypeDefinition {
         Self::map_from_xml(context, complex_type, schema, None, Some(self_ref));
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        builtins,
+        complex_type_def::ContentType,
+        mapping_context::{MappingContext, TopLevel},
+        xstypes::QName,
+        BuiltinOverwriteAction, ComplexTypeDefinition, RootContext,
+    };
+    use roxmltree::Document;
+
+    #[test]
+    fn explicit_content_extension() {
+        const SCHEMA: &str = r#"
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+                <xs:complexType name="base" />
+                <xs:complexType name="extension">
+                    <xs:complexContent>
+                        <xs:extension base="base">
+                            <xs:sequence>
+                                <xs:element name="child" type="xs:string" />
+                            </xs:sequence>
+                        </xs:extension>
+                    </xs:complexContent>
+                </xs:complexType>
+            </xs:schema>
+        "#;
+        let schema_doc = Document::parse(SCHEMA).unwrap();
+        let schema = schema_doc.root_element();
+        let mut root_context = RootContext::new(BuiltinOverwriteAction::Deny, &[]);
+        builtins::register_builtins(&mut root_context);
+        let mut context = MappingContext::new(&mut root_context, schema);
+
+        let base_node = schema
+            .children()
+            .find(|c| c.attribute("name") == Some("base"))
+            .unwrap();
+        let extension_node = schema
+            .children()
+            .find(|c| c.attribute("name") == Some("extension"))
+            .unwrap();
+        let children_elem = extension_node
+            .first_element_child()
+            .unwrap()
+            .first_element_child()
+            .unwrap();
+
+        let base = context.reserve::<ComplexTypeDefinition>();
+        context.register_with_name(QName::without_namespace("base"), base);
+        context.top_level_refs.insert(base_node, base);
+
+        let extension = context.reserve::<ComplexTypeDefinition>();
+        context.register_with_name(QName::without_namespace("extension"), extension);
+        context.top_level_refs.insert(extension_node, extension);
+
+        let particle = ContentType::compute_explicit_content(
+            &mut context,
+            extension,
+            extension_node,
+            children_elem,
+            schema,
+        );
+        assert!(particle.is_some());
+    }
+}

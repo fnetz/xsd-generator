@@ -28,6 +28,10 @@ impl QName {
         Self::with_optional_namespace(Some(namespace_name), local_name)
     }
 
+    pub fn without_namespace(local_name: impl Into<String>) -> Self {
+        Self::with_optional_namespace(None::<String>, local_name)
+    }
+
     pub fn with_optional_namespace(
         namespace_name: Option<impl Into<String>>,
         local_name: impl Into<String>,
