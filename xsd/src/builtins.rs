@@ -12,7 +12,9 @@ use super::mapping_context::RootContext;
 use super::model_group::Compositor;
 use super::particle::MaxOccurs;
 use super::simple_type_def::{self, SimpleTypeDefinition};
-use super::wildcard::{NamespaceConstraint, NamespaceConstraintVariety, ProcessContents};
+use super::wildcard::{
+    DisallowedNameSet, NamespaceConstraint, NamespaceConstraintVariety, ProcessContents,
+};
 use super::xstypes::QName;
 use super::{
     attribute_decl, AttributeDeclaration, ModelGroup, Particle, Sequence, Set, Term,
@@ -54,7 +56,7 @@ fn register_xs_any_type(context: &mut RootContext) {
         namespace_constraint: NamespaceConstraint {
             variety: NamespaceConstraintVariety::Any,
             namespaces: Set::new(),
-            disallowed_names: Set::new(),
+            disallowed_names: DisallowedNameSet::default(),
         },
         process_contents: ProcessContents::Lax,
         annotations: Sequence::new(),
@@ -85,7 +87,7 @@ fn register_xs_any_type(context: &mut RootContext) {
         namespace_constraint: NamespaceConstraint {
             variety: NamespaceConstraintVariety::Any,
             namespaces: Set::new(),
-            disallowed_names: Set::new(),
+            disallowed_names: DisallowedNameSet::default(),
         },
         process_contents: ProcessContents::Lax,
         annotations: Sequence::new(),

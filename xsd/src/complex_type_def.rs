@@ -13,7 +13,7 @@ use super::{
     shared::TypeDefinition,
     simple_type_def::SimpleTypeDefinition,
     values::{actual_value, ActualValue},
-    wildcard::{self, Wildcard},
+    wildcard::{self, DisallowedNameSet, Wildcard},
     xstypes::{AnyURI, NCName, QName, Sequence, Set},
     AttributeDeclaration, MappingContext, ModelGroup, Ref, Term,
 };
@@ -906,7 +906,7 @@ impl ContentType {
                     namespace_constraint: wildcard::NamespaceConstraint {
                         variety: wildcard::NamespaceConstraintVariety::Any,
                         namespaces: Set::new(),
-                        disallowed_names: Set::new(),
+                        disallowed_names: DisallowedNameSet::default(),
                     },
                     process_contents: wildcard::ProcessContents::Strict,
                     annotations: Sequence::new(),

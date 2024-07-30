@@ -1,3 +1,6 @@
+use std::collections::HashSet;
+use std::fmt;
+
 use roxmltree::Node;
 
 use super::{
@@ -29,7 +32,7 @@ pub enum ProcessContents {
 pub struct NamespaceConstraint {
     pub variety: NamespaceConstraintVariety,
     pub namespaces: Set<Option<AnyURI>>,
-    pub disallowed_names: Set<DisallowedName>,
+    pub disallowed_names: DisallowedNameSet,
 }
 
 #[derive(Clone, Debug)]
@@ -39,11 +42,55 @@ pub enum NamespaceConstraintVariety {
     Not,
 }
 
-#[derive(Clone, Debug)]
-pub enum DisallowedName {
-    QName(QName),
-    Defined,
-    Sibling,
+#[derive(Clone, Default)]
+pub struct DisallowedNameSet {
+    names: HashSet<QName>,
+    keywords: u8,
+}
+
+impl DisallowedNameSet {
+    const KEYWORD_DEFINED: u8 = 0b01;
+    const KEYWORD_SIBLING: u8 = 0b10;
+
+    pub fn contains_name(&self, name: &QName) -> bool {
+        self.names.contains(name)
+    }
+
+    pub fn contains_defined(&self) -> bool {
+        self.keywords & Self::KEYWORD_DEFINED != 0
+    }
+
+    pub fn contains_sibling(&self) -> bool {
+        self.keywords & Self::KEYWORD_SIBLING != 0
+    }
+
+    fn insert_defined(&mut self) {
+        self.keywords |= Self::KEYWORD_DEFINED;
+    }
+
+    fn insert_sibling(&mut self) {
+        self.keywords |= Self::KEYWORD_SIBLING;
+    }
+
+    fn insert_name(&mut self, name: QName) {
+        self.names.insert(name);
+    }
+}
+
+impl fmt::Debug for DisallowedNameSet {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_set();
+        for name in &self.names {
+            debug.entry(name);
+        }
+        if self.contains_defined() {
+            debug.entry(&"defined");
+        }
+        if self.contains_sibling() {
+            debug.entry(&"sibling");
+        }
+        debug.finish()
+    }
 }
 
 impl Wildcard {
@@ -120,23 +167,22 @@ impl Wildcard {
                 // If the notQName [attribute] is present, then a set whose members correspond to
                 // the items in the ·actual value· of the notQName [attribute], as follows.
                 let not_qname = actual_value::<Vec<String>>(not_qname, any);
-                not_qname
-                    .into_iter()
-                    .map(|n| match n.as_str() {
-                        // If the item is the token "##defined", then the keyword defined is a
-                        // member of the set.
-                        "##defined" => DisallowedName::Defined,
-                        // If the item is the token "##definedSibling", then the keyword sibling is
-                        // a member of the set.
-                        "##definedSibling" => DisallowedName::Sibling,
-                        // If the item is a QName value (i.e. an expanded name), then that QName
-                        // value is a member of the set.
-                        _ => DisallowedName::QName(QName::parse(&n, any).unwrap()),
-                    })
-                    .collect()
+                let mut disallowed_names = DisallowedNameSet::default();
+                not_qname.into_iter().for_each(|n| match n.as_str() {
+                    // If the item is the token "##defined", then the keyword defined is a
+                    // member of the set.
+                    "##defined" => disallowed_names.insert_defined(),
+                    // If the item is the token "##definedSibling", then the keyword sibling is
+                    // a member of the set.
+                    "##definedSibling" => disallowed_names.insert_sibling(),
+                    // If the item is a QName value (i.e. an expanded name), then that QName
+                    // value is a member of the set.
+                    _ => disallowed_names.insert_name(QName::parse(&n, any).unwrap()),
+                });
+                disallowed_names
             } else {
                 // If the notQName [attribute] is not present, then the empty set.
-                Set::new()
+                DisallowedNameSet::default()
             };
 
             NamespaceConstraint {
