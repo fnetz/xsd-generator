@@ -26,7 +26,10 @@ impl ActualValue<'_> for QName {
 
 impl<'a, T: ActualValue<'a>> ActualValue<'a> for Vec<T> {
     fn convert(src: &'a str, _parent: Node) -> Self {
-        src.split(' ')
+        // NOTE: This assumes a list with whiteSpace="collapse"
+        // TODO: split_ascii_whitespace includes U+000C FORM FEED, which is not considered
+        // whitespace by the spec.
+        src.split_ascii_whitespace()
             .map(|a| ActualValue::convert(a, _parent))
             .collect()
     }
