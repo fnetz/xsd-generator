@@ -313,7 +313,7 @@ impl RustVisitor {
 
         if let Some(ref name) = simple_type.name {
             // Named type => has a named struct
-            let name = Self::name_to_ident(name);
+            let name = Self::name_to_ident(&name.to_pascal_case());
             parse_quote!(#name)
         } else {
             // Unnamed type => create inline type
