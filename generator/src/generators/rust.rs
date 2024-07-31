@@ -9,9 +9,12 @@ use dt_xsd::components::{IsBuiltinRef, Named};
 use dt_xsd::constraining_facet::WhiteSpaceValue;
 use dt_xsd::simple_type_def::Variety as SimpleVariety;
 use dt_xsd::{
-    attribute_decl::ScopeVariety, complex_type_def::ContentType, model_group::Compositor,
-    particle::MaxOccurs, AttributeUse, ComplexTypeDefinition, ElementDeclaration, Particle, Ref,
-    RefNamed, Schema, SchemaComponentTable, SimpleTypeDefinition, Term, TypeDefinition,
+    attribute_decl::ScopeVariety,
+    complex_type_def::{self, ContentType},
+    model_group::Compositor,
+    particle::MaxOccurs,
+    AttributeUse, ComplexTypeDefinition, ElementDeclaration, Particle, Ref, RefNamed, Schema,
+    SchemaComponentTable, SimpleTypeDefinition, Term, TypeDefinition,
 };
 
 use super::common::{ComponentVisitor, GeneratorContext};
