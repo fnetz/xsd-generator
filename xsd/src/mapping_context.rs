@@ -93,6 +93,7 @@ pub struct RootContext<'a> {
     resolver: ComponentResolver,
 
     import_resolvers: &'a [Box<dyn ImportResolver>],
+    resolved_imports: HashSet<Option<String>>,
 }
 
 impl<'a> RootContext<'a> {
@@ -104,6 +105,7 @@ impl<'a> RootContext<'a> {
             components: ConstructionComponentTable::new(),
             resolver: ComponentResolver::new(builtin_overwrite),
             import_resolvers,
+            resolved_imports: HashSet::new(),
         }
     }
 
@@ -157,7 +159,19 @@ impl<'a> RootContext<'a> {
     }
 
     pub(super) fn resolve_import(&mut self, import: &Import) -> Option<Schema> {
-        // TODO handle circular and duplicate imports
+        if self.resolved_imports.contains(&import.namespace) {
+            // NOTE: For now, we can return `None` since we don't treat import failures as errors,
+            // as mandated by the spec.
+            // NOTE: This strategy ignores all later imports with the same namespace, "but [that]
+            // risks missing useful information when new schemaLocations are offered."
+            // (https://www.w3.org/TR/xmlschema11-1/#src-import, Note)
+            return None;
+        }
+
+        // Mark this import as resolved, regardless of whether it succeeds or fails. This guards
+        // against circular imports, and while it's (maybe too) simplistic, it's effective enough
+        // for now.
+        self.resolved_imports.insert(import.namespace.clone());
 
         for resolver in self.import_resolvers {
             if let Ok(schema) = resolver.resolve_import(self, import) {
