@@ -108,7 +108,7 @@ impl RustVisitor {
         let name = Ident::new(name, Span::call_site());
         match source {
             RustPrimitive => parse_quote!(#name),
-            HelperType => parse_quote!(dt_builtin::#name),
+            HelperType => parse_quote!(dt_builtins::#name),
         }
     }
 

@@ -2,6 +2,7 @@
 members = [
     "xsd",
     "generator",
+    "builtins",
 ]
 resolver = "2"
 
