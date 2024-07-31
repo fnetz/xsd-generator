@@ -16,15 +16,15 @@ use super::common::{ComponentVisitor, GeneratorContext};
 use check_keyword::CheckKeyword;
 use heck::{ToPascalCase, ToSnakeCase};
 
+#[derive(Default)]
 struct RustVisitor {
     output_items: Vec<Item>,
+    unnamed_enums: usize,
 }
 
 impl RustVisitor {
     fn new() -> Self {
-        Self {
-            output_items: Vec::new(),
-        }
+        Self::default()
     }
 
     fn name_to_ident(name: &str) -> Ident {
@@ -215,9 +215,36 @@ impl RustVisitor {
                             let (type_, _) = self.visit_particle(ctx, particle);
                             members.push(type_);
                         }
-                        parse_quote! { (#(#members),*) }
+                        if members.len() == 1 {
+                            members.pop().unwrap()
+                        } else {
+                            parse_quote! { (#(#members),*) }
+                        }
                     }
-                    Compositor::Choice => todo!(),
+                    Compositor::Choice => {
+                        let mut variants = Vec::new();
+                        for particle in model_group.particles.iter().copied() {
+                            let particle = particle.get(ctx.table);
+                            let (type_, name) = self.visit_particle(ctx, particle);
+                            let name = Self::name_to_ident(&name.to_pascal_case());
+                            variants.push(Variant {
+                                attrs: vec![],
+                                ident: name,
+                                fields: Fields::Unnamed(parse_quote! { (#type_) }),
+                                discriminant: None,
+                            });
+                        }
+                        let choice_name = format!("Choice{}", self.unnamed_enums);
+                        let choice_name = Ident::new(&choice_name, Span::call_site());
+                        self.unnamed_enums += 1;
+                        let choice_enum: ItemEnum = parse_quote! {
+                            pub enum #choice_name {
+                                #(#variants),*
+                            }
+                        };
+                        self.output_items.push(choice_enum.into());
+                        parse_quote! { #choice_name }
+                    }
                 };
                 ("anon".into(), type_)
             }
