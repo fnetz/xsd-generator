@@ -45,7 +45,10 @@ impl ImportResolver for HttpImportResolver {
 fn main() {
     let cli = cli::Cli::parse();
 
-    let import_resolvers = [Box::new(HttpImportResolver) as Box<dyn ImportResolver>];
+    let mut import_resolvers = Vec::<Box<dyn ImportResolver>>::new();
+    if cli.allow_http_imports {
+        import_resolvers.push(Box::new(HttpImportResolver));
+    }
     let xsd = std::fs::read_to_string(cli.input).unwrap();
     let options = roxmltree::ParsingOptions {
         allow_dtd: cli.allow_dtd,

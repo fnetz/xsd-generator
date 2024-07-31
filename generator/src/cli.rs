@@ -30,6 +30,10 @@ pub struct Cli {
     #[clap(long)]
     pub allow_dtd: bool,
 
+    /// Allow automatic downloading of imports over HTTP
+    #[clap(long)]
+    pub allow_http_imports: bool,
+
     /// The action to take when trying to overwrite a built-in type
     #[clap(long, default_value = "deny", value_enum)]
     pub builtin_overwrite: BuiltinOverwriteAction,
