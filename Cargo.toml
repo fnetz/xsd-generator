@@ -3,6 +3,7 @@ members = [
     "xsd",
     "generator",
     "builtins",
+    "test-runner",
 ]
 resolver = "2"
 
