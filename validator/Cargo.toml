@@ -1,0 +1,11 @@
+[package]
+name = "validator"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+
+[dependencies]
+dt-xsd = { path = "../xsd" }
+clap = { version = "4.0", features = ["derive", "wrap_help"] }
+roxmltree = "0.19"
+quick-xml = "0.36.1"

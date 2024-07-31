@@ -4,6 +4,7 @@ members = [
     "generator",
     "builtins",
     "test-runner",
+    "validator",
 ]
 resolver = "2"
 

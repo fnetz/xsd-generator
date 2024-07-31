@@ -303,22 +303,22 @@ impl ConstructionComponentTable {
 /// reduces the struct's size by one pointer per component type compared to the `Vec`-storage used
 /// in the [`ConstructionComponentTable`].
 pub struct SchemaComponentTable {
-    annotations: Box<[Annotation]>,
-    assertions: Box<[Assertion]>,
-    attribute_declarations: Box<[AttributeDeclaration]>,
-    attribute_group_definitions: Box<[AttributeGroupDefinition]>,
-    attribute_uses: Box<[AttributeUse]>,
-    complex_type_definitions: Box<[ComplexTypeDefinition]>,
-    constraining_facets: Box<[ConstrainingFacet]>,
-    element_declarations: Box<[ElementDeclaration]>,
-    identity_constraint_definitions: Box<[IdentityConstraintDefinition]>,
-    model_group_definitions: Box<[ModelGroupDefinition]>,
-    model_groups: Box<[ModelGroup]>,
-    notation_declarations: Box<[NotationDeclaration]>,
-    particles: Box<[Particle]>,
-    simple_type_definitions: Box<[SimpleTypeDefinition]>,
-    type_alternatives: Box<[TypeAlternative]>,
-    wildcards: Box<[Wildcard]>,
+    pub annotations: Box<[Annotation]>,
+    pub assertions: Box<[Assertion]>,
+    pub attribute_declarations: Box<[AttributeDeclaration]>,
+    pub attribute_group_definitions: Box<[AttributeGroupDefinition]>,
+    pub attribute_uses: Box<[AttributeUse]>,
+    pub complex_type_definitions: Box<[ComplexTypeDefinition]>,
+    pub constraining_facets: Box<[ConstrainingFacet]>,
+    pub element_declarations: Box<[ElementDeclaration]>,
+    pub identity_constraint_definitions: Box<[IdentityConstraintDefinition]>,
+    pub model_group_definitions: Box<[ModelGroupDefinition]>,
+    pub model_groups: Box<[ModelGroup]>,
+    pub notation_declarations: Box<[NotationDeclaration]>,
+    pub particles: Box<[Particle]>,
+    pub simple_type_definitions: Box<[SimpleTypeDefinition]>,
+    pub type_alternatives: Box<[TypeAlternative]>,
+    pub wildcards: Box<[Wildcard]>,
 }
 
 impl ComponentTable for SchemaComponentTable {

@@ -2,7 +2,10 @@ use super::{
     annotation::Annotation,
     attribute_decl::AttributeDeclaration,
     attribute_group_def::AttributeGroupDefinition,
-    components::{Component, ComponentTraits, HasArenaContainer, Lookup, LookupTables, NamedXml},
+    components::{
+        Component, ComponentTable, ComponentTraits, HasArenaContainer, Lookup, LookupTables,
+        NamedXml,
+    },
     element_decl::ElementDeclaration,
     identity_constraint_def::IdentityConstraintDefinition,
     import::Import,
@@ -305,5 +308,20 @@ impl Schema {
 
             target_namespace,
         })
+    }
+
+    pub fn find_element_by_name(
+        &self,
+        namespace_uri: Option<&str>,
+        local_name: &str,
+        components: &impl ComponentTable,
+    ) -> Option<Ref<ElementDeclaration>> {
+        self.element_declarations
+            .iter()
+            .find(|ed| {
+                let ed = ed.get(components);
+                ed.target_namespace.as_deref() == namespace_uri && ed.name == local_name
+            })
+            .copied()
     }
 }
