@@ -14,11 +14,11 @@ default = ["generator-rust", "generator-typescript"]
 dt-xsd = { path = "../xsd" }
 clap = { version = "4.0", features = ["derive", "wrap_help"] }
 reqwest = { version = "0.12", features = ["blocking"] }
-roxmltree = "0.19"
+roxmltree = "0.20"
 
 prettyplease = { version = "0.2", optional = true }
 quote = { version = "1", optional = true }
-check_keyword = { version = "0.2", optional = true }
+check_keyword = { version = "0.3", optional = true }
 heck = { version = "0.5", optional = true }
 
 [dependencies.syn]
