@@ -510,7 +510,7 @@ impl ComponentVisitor for RustVisitor {
 
                 // TODO special case for simple alias (without more facets)?
                 parse_quote! {
-                    pub struct #name(#prim_name);
+                    pub struct #name(pub #prim_name);
                 }
             }
             Some(SimpleVariety::List) => {
@@ -519,7 +519,7 @@ impl ComponentVisitor for RustVisitor {
                     Self::compute_type_name_path(TypeDefinition::Simple(item_type), ctx.table);
 
                 parse_quote! {
-                    pub struct #name(Vec<#item_name>);
+                    pub struct #name(pub Vec<#item_name>);
                 }
             }
             Some(SimpleVariety::Union) => {
