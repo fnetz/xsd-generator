@@ -1,6 +1,6 @@
 use syn::{
     Field, Ident, Item, ItemEnum, Type, __private::Span, parse_quote, FieldMutability, Fields,
-    Variant,
+    TypePath, Variant,
 };
 
 use dt_xsd::components::IsBuiltinRef;
@@ -267,6 +267,7 @@ impl RustVisitor {
     }
 
     fn generate_fields_for_attribute_uses(
+        &mut self,
         ctx: &mut GeneratorContext,
         attribute_uses: &[Ref<AttributeUse>],
     ) -> Vec<Field> {
@@ -278,7 +279,7 @@ impl RustVisitor {
             let name = attribute_decl.name.to_snake_case();
             let name = Self::name_to_ident(&name);
 
-            // TODO: visit simple type
+            self.visit_simple_type(ctx, attribute_decl.type_definition);
             let type_name = Self::compute_type_name_path(
                 TypeDefinition::Simple(attribute_decl.type_definition),
                 ctx.table,
@@ -306,21 +307,15 @@ impl RustVisitor {
     }
 
     fn visit_simple_type_inline(
+        &mut self,
         ctx: &mut GeneratorContext,
         simple_type_ref: Ref<SimpleTypeDefinition>,
     ) -> Type {
-        let simple_type = simple_type_ref.get(ctx.table);
+        self.visit_simple_type(ctx, simple_type_ref);
 
-        if let Some(ref name) = simple_type.name {
-            // Named type => has a named struct
-            let name = Self::name_to_ident(&name.to_pascal_case());
-            parse_quote!(#name)
-        } else {
-            // Unnamed type => create inline type
-            let _variety = simple_type.variety.unwrap(); // TODO
-            let name = Self::name_to_ident("Placeholder");
-            parse_quote!(#name)
-        }
+        let path =
+            Self::compute_type_name_path(TypeDefinition::Simple(simple_type_ref), &ctx.table);
+        Type::Path(TypePath { qself: None, path })
     }
 }
 
@@ -349,7 +344,7 @@ impl ComponentVisitor for RustVisitor {
             ContentType::Empty => {
                 if !complex_type.attribute_uses.is_empty() {
                     let fields =
-                        Self::generate_fields_for_attribute_uses(ctx, &complex_type.attribute_uses);
+                        self.generate_fields_for_attribute_uses(ctx, &complex_type.attribute_uses);
                     self.output_items.push(parse_quote! {
                         pub struct #name {
                             #(#fields),*
@@ -372,7 +367,7 @@ impl ComponentVisitor for RustVisitor {
                                 pub struct #name(#content)
                             }
                         } else {
-                            let fields = Self::generate_fields_for_attribute_uses(
+                            let fields = self.generate_fields_for_attribute_uses(
                                 ctx,
                                 &complex_type.attribute_uses,
                             );
@@ -403,7 +398,7 @@ impl ComponentVisitor for RustVisitor {
                                     };
                                     fields.push(field);
                                 }
-                                fields.extend(Self::generate_fields_for_attribute_uses(
+                                fields.extend(self.generate_fields_for_attribute_uses(
                                     ctx,
                                     &complex_type.attribute_uses,
                                 ));
@@ -443,7 +438,7 @@ impl ComponentVisitor for RustVisitor {
                                     };
                                     self.output_items.push(inner_enum.into());
 
-                                    let fields = Self::generate_fields_for_attribute_uses(
+                                    let fields = self.generate_fields_for_attribute_uses(
                                         ctx,
                                         &complex_type.attribute_uses,
                                     );
@@ -532,7 +527,7 @@ impl ComponentVisitor for RustVisitor {
 
                 let mut variants = Vec::new();
                 for member in member_types {
-                    let content = Self::visit_simple_type_inline(ctx, *member);
+                    let content = self.visit_simple_type_inline(ctx, *member);
                     let variant_name = if let Some(ref name) = member.get(ctx.table).name {
                         name.as_str()
                     } else {
