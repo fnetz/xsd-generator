@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use syn::{
     Field, Ident, Item, ItemEnum, Type, __private::Span, parse_quote, FieldMutability, Fields,
     TypePath, Variant,
@@ -238,6 +240,7 @@ impl RustVisitor {
                         let choice_name = Ident::new(&choice_name, Span::call_site());
                         self.unnamed_enums += 1;
                         let choice_enum: ItemEnum = parse_quote! {
+                            #[derive(Debug)]
                             pub enum #choice_name {
                                 #(#variants),*
                             }
@@ -313,8 +316,7 @@ impl RustVisitor {
     ) -> Type {
         self.visit_simple_type(ctx, simple_type_ref);
 
-        let path =
-            Self::compute_type_name_path(TypeDefinition::Simple(simple_type_ref), &ctx.table);
+        let path = Self::compute_type_name_path(TypeDefinition::Simple(simple_type_ref), ctx.table);
         Type::Path(TypePath { qself: None, path })
     }
 }
@@ -346,6 +348,7 @@ impl ComponentVisitor for RustVisitor {
                     let fields =
                         self.generate_fields_for_attribute_uses(ctx, &complex_type.attribute_uses);
                     self.output_items.push(parse_quote! {
+                        #[derive(Debug)]
                         pub struct #name {
                             #(#fields),*
                         }
@@ -364,6 +367,7 @@ impl ComponentVisitor for RustVisitor {
                         let (content, _) = self.visit_particle(ctx, particle);
                         if complex_type.attribute_uses.is_empty() {
                             parse_quote! {
+                                #[derive(Debug)]
                                 pub struct #name(#content)
                             }
                         } else {
@@ -372,6 +376,7 @@ impl ComponentVisitor for RustVisitor {
                                 &complex_type.attribute_uses,
                             );
                             parse_quote! {
+                                #[derive(Debug)]
                                 pub struct #name {
                                     inner: #content,
                                     #(#fields),*
@@ -398,11 +403,32 @@ impl ComponentVisitor for RustVisitor {
                                     };
                                     fields.push(field);
                                 }
-                                fields.extend(self.generate_fields_for_attribute_uses(
-                                    ctx,
-                                    &complex_type.attribute_uses,
-                                ));
+                                let names = fields
+                                    .iter()
+                                    .map(|f| f.ident.as_ref().unwrap().clone())
+                                    .collect::<BTreeSet<_>>();
+                                fields.extend(
+                                    self.generate_fields_for_attribute_uses(
+                                        ctx,
+                                        &complex_type.attribute_uses,
+                                    )
+                                    .into_iter()
+                                    .map(|f| {
+                                        if names.contains(f.ident.as_ref().unwrap()) {
+                                            Field {
+                                                ident: Some(Ident::new(
+                                                    &(f.ident.unwrap().to_string() + "_attr"),
+                                                    Span::call_site(),
+                                                )),
+                                                ..f
+                                            }
+                                        } else {
+                                            f
+                                        }
+                                    }),
+                                );
                                 parse_quote! {
+                                    #[derive(Debug)]
                                     pub struct #name {
                                         #(#fields),*
                                     }
@@ -424,6 +450,7 @@ impl ComponentVisitor for RustVisitor {
 
                                 if complex_type.attribute_uses.is_empty() {
                                     parse_quote! {
+                                        #[derive(Debug)]
                                         pub enum #name {
                                             #(#variants),*
                                         }
@@ -432,6 +459,7 @@ impl ComponentVisitor for RustVisitor {
                                     let inner_name = format!("{}Inner", name);
                                     let inner_name = Self::name_to_ident(&inner_name);
                                     let inner_enum: ItemEnum = parse_quote! {
+                                        #[derive(Debug)]
                                         pub enum #inner_name {
                                             #(#variants),*
                                         }
@@ -443,6 +471,7 @@ impl ComponentVisitor for RustVisitor {
                                         &complex_type.attribute_uses,
                                     );
                                     parse_quote! {
+                                        #[derive(Debug)]
                                         pub struct #name {
                                             inner: #inner_name,
                                             #(#fields),*
@@ -468,6 +497,7 @@ impl ComponentVisitor for RustVisitor {
                 );
 
                 self.output_items.push(parse_quote! {
+                    #[derive(Debug)]
                     pub struct #name(#simple_type_name);
                 });
             }
@@ -510,6 +540,7 @@ impl ComponentVisitor for RustVisitor {
 
                 // TODO special case for simple alias (without more facets)?
                 parse_quote! {
+                    #[derive(Debug)]
                     pub struct #name(pub #prim_name);
                 }
             }
@@ -519,6 +550,7 @@ impl ComponentVisitor for RustVisitor {
                     Self::compute_type_name_path(TypeDefinition::Simple(item_type), ctx.table);
 
                 parse_quote! {
+                    #[derive(Debug)]
                     pub struct #name(pub Vec<#item_name>);
                 }
             }
@@ -544,6 +576,7 @@ impl ComponentVisitor for RustVisitor {
                 }
 
                 parse_quote! {
+                    #[derive(Debug)]
                     pub enum #name {
                         #(#variants),*
                     }
