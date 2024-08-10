@@ -174,8 +174,9 @@ impl<'a> RootContext<'a> {
         self.resolved_imports.insert(import.namespace.clone());
 
         for resolver in self.import_resolvers {
-            if let Ok(schema) = resolver.resolve_import(self, import) {
-                return Some(schema);
+            match resolver.resolve_import(self, import) {
+                Ok(schema) => return Some(schema),
+                Err(e) => eprintln!("Error during import resolution: {:?}", e),
             }
         }
 
