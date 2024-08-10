@@ -15,7 +15,7 @@ use super::{
     values::{actual_value, ActualValue},
     wildcard::{self, DisallowedNameSet, Wildcard},
     xstypes::{AnyURI, NCName, QName, Sequence, Set},
-    AttributeDeclaration, MappingContext, ModelGroup, Ref, Term,
+    AttributeDeclaration, AttributeGroupDefinition, MappingContext, ModelGroup, Ref, Term,
 };
 use roxmltree::Node;
 
@@ -375,6 +375,8 @@ impl ComplexTypeDefinition {
             complex_type,
             Some(simple_content),
             schema,
+            derivation_method,
+            base_type_definition,
         );
 
         // TODO attribute wildcard
@@ -439,6 +441,8 @@ impl ComplexTypeDefinition {
             complex_type,
             Some(complex_content),
             schema,
+            derivation_method,
+            base_type_definition,
         );
 
         // TODO attribute wildcard
@@ -486,6 +490,8 @@ impl ComplexTypeDefinition {
             complex_type,
             None,
             schema,
+            derivation_method,
+            base_type_definition,
         );
 
         // TODO attribute wildcard
@@ -609,6 +615,8 @@ impl ComplexTypeDefinition {
         complex_type: Node,
         content_node: Option<Node>,
         schema: Node,
+        derivation_method: DerivationMethod,
+        base_type_definition: TypeDefinition,
     ) -> Vec<Ref<AttributeUse>> {
         // In the following rule, references to "the [children]" refer to the [children] of the
         // <extension> or <restriction> element (whichever appears as a child of <simpleContent> or
@@ -640,22 +648,31 @@ impl ComplexTypeDefinition {
             let mut attribute_uses = Set::new();
 
             // 1 The set of attribute uses corresponding to the <attribute> [children], if any.
-            children_node
-                .children()
-                .filter(|c| c.tag_name().name() == "attribute")
-                .filter_map(|attribute| {
-                    AttributeDeclaration::map_from_xml_local(
-                        context,
-                        attribute,
-                        schema,
-                        attribute_decl::ScopeParent::ComplexType(complex_type_ref),
-                    )
-                })
-                .for_each(|attrib_use| attribute_uses.push(attrib_use));
+            attribute_uses.extend(
+                children_node
+                    .children()
+                    .filter(|c| c.tag_name().name() == "attribute")
+                    .filter_map(|attribute| {
+                        AttributeDeclaration::map_from_xml_local(
+                            context,
+                            attribute,
+                            schema,
+                            attribute_decl::ScopeParent::ComplexType(complex_type_ref),
+                        )
+                    }),
+            );
 
             // 2 The {attribute uses} of the attribute groups ·resolved· to by the ·actual value·s
             //   of the ref [attribute] of the <attributeGroup> [children], if any.
-            // TODO
+            for attribute_group in children_node
+                .children()
+                .filter(|c| c.tag_name().name() == "attributeGroup")
+            {
+                let ref_ = attribute_group.attribute("ref").unwrap();
+                let ref_ = actual_value::<QName>(ref_, complex_type);
+                let group = context.resolve::<Ref<AttributeGroupDefinition>>(&ref_);
+                attribute_uses.extend(context.request(group).attribute_uses.iter())
+            }
 
             // 3 The attribute uses "inherited" from the {base type definition} T, as described by
             //   the appropriate case among the following:
@@ -674,7 +691,15 @@ impl ComplexTypeDefinition {
             //     type definition T allows the attribute in question, but the restriction
             //     prohibits it.
             //  3.3 otherwise no attribute use is inherited.
-            // TODO
+            if let TypeDefinition::Complex(base_type_definition) = base_type_definition {
+                match derivation_method {
+                    DerivationMethod::Extension => attribute_uses
+                        .extend(context.request(base_type_definition).attribute_uses.iter()),
+                    DerivationMethod::Restriction => {
+                        // TODO
+                    }
+                }
+            }
 
             attribute_uses
         }
