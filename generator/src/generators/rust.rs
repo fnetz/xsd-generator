@@ -1,11 +1,12 @@
 use std::collections::BTreeSet;
 
 use syn::{
-    Field, Ident, Item, ItemEnum, Type, __private::Span, parse_quote, FieldMutability, Fields,
+    Field, Ident, Item, ItemEnum, Type, __private::Span, parse_quote, Arm, FieldMutability, Fields,
     TypePath, Variant,
 };
 
-use dt_xsd::components::IsBuiltinRef;
+use dt_xsd::components::{IsBuiltinRef, Named};
+use dt_xsd::constraining_facet::WhiteSpaceValue;
 use dt_xsd::simple_type_def::Variety as SimpleVariety;
 use dt_xsd::{
     attribute_decl::ScopeVariety, complex_type_def::ContentType, model_group::Compositor,
@@ -24,6 +25,21 @@ struct RustVisitor {
     unnamed_enums: usize,
 }
 
+enum BuiltinSource {
+    RustPrimitive,
+    HelperType,
+}
+
+impl BuiltinSource {
+    fn name_to_path(&self, name: &str) -> syn::Path {
+        let name = Ident::new(name, Span::call_site());
+        match self {
+            BuiltinSource::RustPrimitive => parse_quote!(#name),
+            BuiltinSource::HelperType => parse_quote!(dt_builtins::#name),
+        }
+    }
+}
+
 impl RustVisitor {
     fn new() -> Self {
         Self::default()
@@ -40,18 +56,7 @@ impl RustVisitor {
         }
     }
 
-    fn get_type_name_builtin(
-        type_def: TypeDefinition,
-        components: &SchemaComponentTable,
-    ) -> syn::Path {
-        assert!(type_def.is_builtin(components));
-        let name = type_def
-            .name(components)
-            .expect("Builtin type without name");
-        enum BuiltinSource {
-            RustPrimitive,
-            HelperType,
-        }
+    fn get_builtin_source_name(name: dt_xsd::xstypes::QName) -> (BuiltinSource, &'static str) {
         use BuiltinSource::*;
         let (source, name) = match name.local_name.as_str() {
             "boolean" => (RustPrimitive, "bool"),
@@ -107,11 +112,19 @@ impl RustVisitor {
             "dateTimeStamp" => (HelperType, "DateTimeStamp"),
             _ => panic!("Unknown builtin type: {:?}", name.local_name),
         };
-        let name = Ident::new(name, Span::call_site());
-        match source {
-            RustPrimitive => parse_quote!(#name),
-            HelperType => parse_quote!(dt_builtins::#name),
-        }
+        (source, name)
+    }
+
+    fn get_builtin_type_name(
+        type_def: TypeDefinition,
+        components: &SchemaComponentTable,
+    ) -> syn::Path {
+        assert!(type_def.is_builtin(components));
+        let name = type_def
+            .name(components)
+            .expect("Builtin type without name");
+        let (source, name) = Self::get_builtin_source_name(name);
+        source.name_to_path(name)
     }
 
     fn compute_type_name_ident_non_builtin(
@@ -183,7 +196,7 @@ impl RustVisitor {
         components: &SchemaComponentTable,
     ) -> syn::Path {
         if type_def.is_builtin(components) {
-            Self::get_type_name_builtin(type_def, components)
+            Self::get_builtin_type_name(type_def, components)
         } else {
             let name = Self::compute_type_name_ident_non_builtin(type_def, components);
             parse_quote!(#name)
@@ -318,6 +331,25 @@ impl RustVisitor {
 
         let path = Self::compute_type_name_path(TypeDefinition::Simple(simple_type_ref), ctx.table);
         Type::Path(TypePath { qself: None, path })
+    }
+
+    fn string_variant_to_ident(variant: &str) -> Ident {
+        // TODO: unicode-ident
+        if variant.is_empty() {
+            Ident::new("Empty", Span::call_site())
+        } else {
+            let first_char = variant.chars().next().unwrap();
+            let sanitized_name = variant.replace(|c: char| !c.is_ascii_alphanumeric(), "_");
+            // TODO: Improve this (e.g. for "decimal"/version values like 1.0.0)
+            if !first_char.is_ascii_alphabetic() {
+                Ident::new(
+                    &format!("_{}", sanitized_name.to_pascal_case()),
+                    Span::call_site(),
+                )
+            } else {
+                Self::name_to_ident(&sanitized_name.to_pascal_case())
+            }
+        }
     }
 }
 
@@ -523,8 +555,15 @@ impl ComponentVisitor for RustVisitor {
             TypeDefinition::Simple(simple_type_ref),
             ctx.table,
         );
-
-        let item: Item = match simple_type.variety {
+        let whitespace = simple_type
+            .facets
+            .white_space(ctx.table)
+            .map(|x| x.value)
+            .unwrap_or(
+                // Default according to Pt. 2, Section 4.3.6 whiteSpace
+                WhiteSpaceValue::Collapse,
+            );
+        let (type_def, impl_block) = match simple_type.variety {
             Some(SimpleVariety::Atomic) => {
                 // TODO handle built-in primitives
                 let primitive_type_ref = simple_type.primitive_type_definition.unwrap();
@@ -533,15 +572,91 @@ impl ComponentVisitor for RustVisitor {
                     return;
                 }
 
-                let prim_name = Self::compute_type_name_path(
-                    TypeDefinition::Simple(primitive_type_ref),
-                    ctx.table,
+                // NOTE: According to Pt. 2, 4.1.1, {primitive type definition} must be a
+                // ·primitive· built-in definition if not absent.
+                let primitive_type = &primitive_type_ref.get(ctx.table);
+                let (prim_source, prim_name_raw) = Self::get_builtin_source_name(
+                    primitive_type.name().expect("primitive type without name"),
                 );
+                let prim_name = prim_source.name_to_path(prim_name_raw);
 
-                // TODO special case for simple alias (without more facets)?
-                parse_quote! {
-                    #[derive(Debug)]
-                    pub struct #name(pub #prim_name);
+                let whitespace: Ident = match whitespace {
+                    WhiteSpaceValue::Preserve => parse_quote!(Preserve),
+                    WhiteSpaceValue::Replace => parse_quote!(Replace),
+                    WhiteSpaceValue::Collapse => parse_quote!(Collapse),
+                };
+                let prim_name_raw = Ident::new(prim_name_raw, Span::call_site());
+
+                if let Some(enumeration) = simple_type
+                    .facets
+                    .enumerations(ctx.table)
+                    .filter(|_| primitive_type.name.as_deref().unwrap() == "string")
+                {
+                    // TODO: Non-string enumerations
+                    let variants = enumeration
+                        .value
+                        .iter()
+                        .map(|value| Variant {
+                            ident: Self::string_variant_to_ident(value),
+                            fields: Fields::Unit,
+                            attrs: Vec::new(),
+                            discriminant: None,
+                        })
+                        .collect::<Vec<_>>();
+                    // TODO: equality according to facets
+                    let type_def: Item = parse_quote! {
+                        #[derive(Debug, PartialEq, Eq, Copy, Clone)]
+                        pub enum #name {
+                            #(#variants),*
+                        }
+                    };
+                    let match_arms = enumeration
+                        .value
+                        .iter()
+                        .map(|value| {
+                            let name = Self::string_variant_to_ident(value);
+                            parse_quote! {
+                                #value => Ok(Self::#name),
+                            }
+                        })
+                        .collect::<Vec<Arm>>();
+                    let impl_block: Item = parse_quote! {
+                        impl #name {
+                            pub fn from_string(s: &str) -> Result<Self, dt_builtins::meta::Error> {
+                                let normalized = dt_builtins::meta::normalized_value(s,
+                                    dt_builtins::meta::Whitespace::#whitespace);
+                                let value = dt_builtins::#prim_name_raw::from_literal(&normalized)?;
+                                match value.as_str() {
+                                    #(#match_arms)*
+                                    _ => Err(dt_builtins::meta::Error::ValueNotInEnumeration(value.to_string())),
+                                }
+                            }
+                        }
+                    };
+                    (type_def, impl_block)
+                } else {
+                    // TODO special case for simple alias (without more facets)?
+                    let type_def: Item = parse_quote! {
+                        #[derive(Debug)]
+                        pub struct #name(pub #prim_name);
+                    };
+                    // Relevant sections:
+                    // - Pt. 1, 3.16.4 Simple Type Definition Validation Rules; Validation Rule: String Valid
+                    // - Pt. 2, 4.1.4 Simple Type Definition Validation Rules; Validation Rule: Datatype Valid
+                    //   - 1 pattern valid (TODO)
+                    //   - 2.1 (atomic variety)
+                    //   - 3 facet valid (TODO)
+                    let impl_block: Item = parse_quote! {
+                        impl #name {
+                            pub fn from_string(s: &str) -> Result<Self, dt_builtins::meta::Error> {
+                                let normalized = dt_builtins::meta::normalized_value(s,
+                                    dt_builtins::meta::Whitespace::#whitespace);
+                                let value = dt_builtins::#prim_name_raw::from_literal(&normalized)?;
+                                Ok(Self(value))
+                            }
+                        }
+                    };
+                    (type_def, impl_block)
                 }
             }
             Some(SimpleVariety::List) => {
@@ -549,10 +664,18 @@ impl ComponentVisitor for RustVisitor {
                 let item_name =
                     Self::compute_type_name_path(TypeDefinition::Simple(item_type), ctx.table);
 
-                parse_quote! {
+                let type_def: Item = parse_quote! {
                     #[derive(Debug)]
                     pub struct #name(pub Vec<#item_name>);
-                }
+                };
+                let impl_block: Item = parse_quote! {
+                    impl #name {
+                        pub fn from_string(s: &str) -> Result<Self, dt_builtins::meta::Error> {
+                            todo!()
+                        }
+                    }
+                };
+                (type_def, impl_block)
             }
             Some(SimpleVariety::Union) => {
                 let member_types = simple_type.member_type_definitions.as_ref().unwrap();
@@ -575,16 +698,25 @@ impl ComponentVisitor for RustVisitor {
                     });
                 }
 
-                parse_quote! {
+                let type_def: Item = parse_quote! {
                     #[derive(Debug)]
                     pub enum #name {
                         #(#variants),*
                     }
-                }
+                };
+                let impl_block: Item = parse_quote! {
+                    impl #name {
+                        pub fn from_string(s: &str) -> Result<Self, dt_builtins::meta::Error> {
+                            todo!()
+                        }
+                    }
+                };
+                (type_def, impl_block)
             }
             None => todo!("anySimpleType"),
         };
-        self.output_items.push(item);
+        self.output_items.push(type_def);
+        self.output_items.push(impl_block);
     }
 
     type ElementDeclarationValue = ();
