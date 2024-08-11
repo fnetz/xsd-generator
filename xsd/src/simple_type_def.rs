@@ -4,7 +4,7 @@ use super::{
     builtins::{XS_ANY_ATOMIC_TYPE_NAME, XS_ANY_SIMPLE_TYPE_NAME, XS_ANY_TYPE_NAME, XS_NAMESPACE},
     complex_type_def::ComplexTypeDefinition,
     components::{Component, Named, RefNamed},
-    constraining_facet::{ConstrainingFacet, WhiteSpace, WhiteSpaceValue},
+    constraining_facet::{ConstrainingFacet, ConstrainingFacets, WhiteSpace, WhiteSpaceValue},
     element_decl::ElementDeclaration,
     fundamental_facet::{CardinalityValue, FundamentalFacet, FundamentalFacetSet, OrderedValue},
     mapping_context::{MappingContext, TopLevelMappable},
@@ -28,7 +28,7 @@ pub struct SimpleTypeDefinition {
     /// Type Definition. The exception is `anySimpleType`, which has `anyType`, a
     /// [Complex Type Definition](ComplexTypeDefinition), as its `base_type_definition`.
     pub base_type_definition: TypeDefinition,
-    pub facets: Set<Ref<ConstrainingFacet>>,
+    pub facets: ConstrainingFacets,
     pub fundamental_facets: FundamentalFacetSet,
     /// One of {atomic, list, union}.
     /// Required for all Simple Type Definitions except `xs:anySimpleType`, in which it is `absent`.
@@ -246,7 +246,7 @@ impl SimpleTypeDefinition {
                     // Special handling for xs:anySimpleType, in case it is ever loaded via this
                     // route and not as builtin: As the base is complex and anySimpleType doesn't
                     // have any facets, we just yield the empty set here.
-                    Set::new()
+                    ConstrainingFacets::new()
                 } else {
                     let base_type_definition = base_type_definition.simple().expect(
                         "Any type which is not anySimpleType must have a simple type as base",
@@ -289,7 +289,7 @@ impl SimpleTypeDefinition {
                     // 3 Every facet in R is required by clause 1 or clause 2 above.
                     //   --trivial--
 
-                    r
+                    ConstrainingFacets::from(r)
                 }
             }
             // 3 If the <list> alternative is chosen, then a set with one member, a whiteSpace facet
@@ -299,10 +299,10 @@ impl SimpleTypeDefinition {
                     WhiteSpaceValue::Collapse,
                     true,
                 )));
-                [ws].into_iter().collect()
+                ConstrainingFacets::from(vec![ws])
             }
             // 4 otherwise the empty set
-            _ => Set::new(),
+            _ => ConstrainingFacets::new(),
         };
 
         // {context} The appropriate case among the following:
@@ -677,7 +677,7 @@ impl SimpleTypeDefinition {
 
     fn map_cardinality_atomic(
         ctx: &MappingContext,
-        facets: &[Ref<ConstrainingFacet>],
+        facets: &ConstrainingFacets,
         base_type_definition: &SimpleTypeDefinition,
         //primitive_type_definition: &SimpleTypeDefinition,
     ) -> CardinalityValue {
