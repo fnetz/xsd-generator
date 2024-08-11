@@ -2,8 +2,8 @@ use lazy_static::lazy_static;
 
 use super::complex_type_def::{self, ComplexTypeDefinition};
 use super::constraining_facet::{
-    ConstrainingFacet, ExplicitTimezone, ExplicitTimezoneValue, FractionDigits, Length, MinMax,
-    Pattern, WhiteSpace, WhiteSpaceValue,
+    ConstrainingFacet, ConstrainingFacets, ExplicitTimezone, ExplicitTimezoneValue, FractionDigits,
+    Length, MinMax, Pattern, WhiteSpace, WhiteSpaceValue,
 };
 use super::fundamental_facet::{
     CardinalityValue, FundamentalFacet, FundamentalFacetSet, OrderedValue,
@@ -136,7 +136,7 @@ fn register_special_types(context: &mut RootContext) {
             final_: Set::new(),
             context: None,
             base_type_definition: TypeDefinition::Complex(xs_any_type),
-            facets: Set::new(),
+            facets: ConstrainingFacets::new(),
             fundamental_facets: FundamentalFacetSet::empty(),
             variety: None,
             primitive_type_definition: None,
@@ -159,7 +159,7 @@ fn register_special_types(context: &mut RootContext) {
             final_: Set::new(),
             context: None,
             base_type_definition: xs_any_simple_type_def,
-            facets: Set::new(),
+            facets: ConstrainingFacets::new(),
             fundamental_facets: FundamentalFacetSet::empty(),
             variety: Some(simple_type_def::Variety::Atomic),
             primitive_type_definition: None,
@@ -189,7 +189,7 @@ fn register_xs_error(context: &mut RootContext) {
         .collect(),
         context: None,
         base_type_definition: xs_any_simple_type_def,
-        facets: Set::new(),
+        facets: ConstrainingFacets::new(),
         fundamental_facets: FundamentalFacetSet::empty(),
         variety: Some(simple_type_def::Variety::Union),
         primitive_type_definition: None,
@@ -295,7 +295,7 @@ fn register_builtin_primitive_types(context: &mut RootContext) {
                 final_: Set::new(),
                 variety: Some(simple_type_def::Variety::Atomic),
                 primitive_type_definition: Some(simple_type_def),
-                facets: vec![whitespace],
+                facets: ConstrainingFacets::from(vec![whitespace]),
                 fundamental_facets,
                 context: None,
                 item_type_definition: None,
@@ -837,7 +837,7 @@ fn register_builtin_ordinary_types(context: &mut RootContext) {
                     final_: Set::new(),
                     context: Some(simple_type_def::Context::SimpleType(simple_type_ref)),
                     base_type_definition: xs_any_simple_type,
-                    facets: Set::new(),
+                    facets: ConstrainingFacets::new(),
                     fundamental_facets: FundamentalFacetSet::empty(),
                     variety: Some(simple_type_def::Variety::List),
                     primitive_type_definition: None,
@@ -869,10 +869,12 @@ fn register_builtin_ordinary_types(context: &mut RootContext) {
             }
         };
 
-        let facets = facets
-            .iter()
-            .map(|f| context.create(f.to_constraining_facet()))
-            .collect();
+        let facets = ConstrainingFacets::from(
+            facets
+                .iter()
+                .map(|f| context.create(f.to_constraining_facet()))
+                .collect::<Vec<_>>(),
+        );
 
         context.insert(
             simple_type_ref,
@@ -945,7 +947,7 @@ fn register_builtin_attribute_decls(context: &mut RootContext) {
         name: None,
         target_namespace: Some(XSI_NAMESPACE.into()),
         base_type_definition: any_simple_type,
-        facets: Set::new(), // TODO spec says absent?
+        facets: ConstrainingFacets::new(), // TODO spec says absent?
         variety: Some(simple_type_def::Variety::List),
         item_type_definition: Some(any_uri),
         annotations: Sequence::new(),

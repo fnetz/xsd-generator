@@ -1,7 +1,9 @@
+use std::fmt;
+
 use roxmltree::Node;
 
 use super::{
-    components::Component,
+    components::{Component, ComponentTable},
     values::{actual_value, ActualValue},
     xstypes::{Sequence, Set},
     Annotation, Assertion, MappingContext, Ref,
@@ -40,6 +42,13 @@ pub enum ConstrainingFacet {
     ExplicitTimezone(ExplicitTimezone),
 }
 
+/// Container for constraining facets. Allows access to the individual facets, while hiding the
+/// actual storage structure.
+#[derive(Clone, Default)]
+pub struct ConstrainingFacets {
+    facets: Vec<Ref<ConstrainingFacet>>,
+}
+
 /// Common type for the length, minLength and maxLength Constraining Facets
 #[derive(Clone, Debug)]
 pub struct Length {
@@ -70,7 +79,7 @@ pub struct WhiteSpace {
     pub fixed: bool,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum WhiteSpaceValue {
     Preserve,
     Replace,
@@ -116,7 +125,7 @@ pub struct ExplicitTimezone {
     pub fixed: bool,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ExplicitTimezoneValue {
     Required,
     Prohibited,
@@ -393,6 +402,65 @@ impl ConstrainingFacet {
     /// _discriminant_, i.e. ignores the data.
     pub fn is_of_same_kind_as(&self, other: &Self) -> bool {
         std::mem::discriminant(self) == std::mem::discriminant(other)
+    }
+}
+
+macro_rules! access_methods {
+    ($($name:ident => $variant:ident: $typ:ty),*) => {
+        $(
+            pub fn $name<'a>(&self, components: &'a impl ComponentTable) -> Option<&'a $typ> {
+                self.facets.iter().find_map(|f| match f.get(components) {
+                    ConstrainingFacet::$variant(ref c) => Some(c),
+                    _ => None,
+                })
+            }
+        )*
+    };
+}
+
+impl ConstrainingFacets {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &Ref<ConstrainingFacet>> {
+        self.facets.iter()
+    }
+
+    pub fn inter_resolved<'a, 'b: 'a>(
+        &'a self,
+        components: &'b impl ComponentTable,
+    ) -> impl Iterator<Item = &'b ConstrainingFacet> + 'a {
+        self.facets.iter().map(move |f| f.get(components))
+    }
+
+    access_methods! {
+        length => Length: Length,
+        min_length => MinLength: Length,
+        max_length => MaxLength: Length,
+        patterns => Pattern: Pattern,
+        enumerations => Enumeration: Enumeration,
+        white_space => WhiteSpace: WhiteSpace,
+        max_inclusive => MaxInclusive: MinMax,
+        max_exclusive => MaxExclusive: MinMax,
+        min_exclusive => MinExclusive: MinMax,
+        min_inclusive => MinInclusive: MinMax,
+        total_digits => TotalDigits: TotalDigits,
+        fraction_digits => FractionDigits: FractionDigits,
+        assertions => Assertions: Assertions,
+        explicit_timezone => ExplicitTimezone: ExplicitTimezone
+    }
+}
+
+impl fmt::Debug for ConstrainingFacets {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&self.facets, f)
+    }
+}
+
+impl From<Vec<Ref<ConstrainingFacet>>> for ConstrainingFacets {
+    fn from(facets: Vec<Ref<ConstrainingFacet>>) -> Self {
+        Self { facets }
     }
 }
 
