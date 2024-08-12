@@ -1,6 +1,6 @@
 use super::{
     annotation::Annotation,
-    components::Component,
+    components::{Component, ComponentTable},
     element_decl,
     model_group::Compositor,
     shared::Term,
@@ -25,12 +25,86 @@ pub enum MaxOccurs {
     Count(u64), // TODO NonZeroU64
 }
 
+impl MaxOccurs {
+    pub(crate) fn add(&self, other: &Self) -> Self {
+        match (self, other) {
+            (Self::Unbounded, _) | (_, Self::Unbounded) => Self::Unbounded,
+            (Self::Count(a), Self::Count(b)) => Self::Count(a + b),
+        }
+    }
+
+    pub(crate) fn mul(&self, other: &Self) -> Self {
+        match (self, other) {
+            (Self::Unbounded, _) | (_, Self::Unbounded) => Self::Unbounded,
+            (Self::Count(a), Self::Count(b)) => Self::Count(a * b),
+        }
+    }
+
+    pub(crate) fn max(&self, other: &Self) -> Self {
+        match (self, other) {
+            (Self::Unbounded, _) | (_, Self::Unbounded) => Self::Unbounded,
+            (Self::Count(a), Self::Count(b)) => Self::Count((*a).max(*b)),
+        }
+    }
+}
+
 impl Particle {
     /// Schema Component Constraint: Particle Emptiable
     ///
     /// <https://www.w3.org/TR/xmlschema11-1/#cos-group-emptiable>
-    pub fn is_emptiable(&self) -> bool {
-        todo!()
+    pub fn is_emptiable(&self, components: &impl ComponentTable) -> bool {
+        // [Definition:]  For a particle to be emptiable one or more of the following is true:
+        // 1 Its {min occurs} is 0.
+        // 2 Its {term} is a group and the minimum part of the effective total range of that group
+        //   [...] is 0.
+        self.min_occurs == 0
+            || (self.term.is_model_group() && self.effective_total_range(components).0 == 0)
+    }
+
+    /// Schema Component Constraint: Effective Total Range
+    ///
+    /// # Panics
+    /// Panics if the particle's term is not a model group.
+    pub fn effective_total_range(&self, components: &impl ComponentTable) -> (u64, MaxOccurs) {
+        let Term::ModelGroup(group) = self.term else {
+            panic!("effective_total_range needs term to be a model group");
+        };
+        let group = group.get(components);
+
+        match group.compositor {
+            Compositor::All | Compositor::Sequence => {
+                // Pt. 1, 3.8.6.5 Effective Total Range (all and sequence)
+                let mut min_acc = 0;
+                let mut max_acc = MaxOccurs::Count(0);
+                for particle in group.particles.iter() {
+                    let particle = particle.get(components);
+                    let (min, max) = if particle.term.is_model_group() {
+                        particle.effective_total_range(components)
+                    } else {
+                        (particle.min_occurs, particle.max_occurs.clone())
+                    };
+                    min_acc += min;
+                    max_acc = max_acc.add(&max);
+                }
+                (self.min_occurs * min_acc, self.max_occurs.mul(&max_acc))
+            }
+            Compositor::Choice => {
+                // Pt. 2, 3.8.6.6 Effective Total Range (choice)
+                let mut min_acc = 0;
+                let mut max_acc = MaxOccurs::Count(0);
+                for particle in group.particles.iter() {
+                    let particle = particle.get(components);
+                    let (min, max) = if particle.term.is_model_group() {
+                        particle.effective_total_range(components)
+                    } else {
+                        (particle.min_occurs, particle.max_occurs.clone())
+                    };
+                    min_acc = min_acc.min(min);
+                    max_acc = max_acc.max(&max);
+                }
+                (self.min_occurs * min_acc, self.max_occurs.mul(&max_acc))
+            }
+        }
     }
 
     /// Map according to XML Representation of Model Group Schema Components (§3.8.2),
