@@ -1,4 +1,5 @@
 use super::generated::*;
+use dt_builtins::meta::SimpleType as _;
 use roxmltree::Node;
 
 const XLINK: &str = "http://www.w3.org/1999/xlink";
@@ -21,12 +22,12 @@ impl Ref {
             annotation: vec![],
             r#type: node
                 .attribute((XLINK, "type"))
-                .map(|t| TypeType(t.into()))
-                .or_else(|| Some(TypeType("locator".into()))),
+                .map(|t| TypeType::from_string(t).unwrap())
+                .or(Some(TypeType::Locator)),
             // TODO: optional with default value should not generate Option<...>
             href: node
                 .attribute((XLINK, "href"))
-                .map(|h| HrefType(dt_builtins::AnyURI(h.into()))),
+                .map(|h| HrefType::from_string(h).unwrap()),
         };
         for child in node.children().filter(|n| n.is_element()) {
             match child.tag_name().name() {
@@ -38,27 +39,20 @@ impl Ref {
     }
 }
 
-impl VersionInfo {
-    pub fn from_xml(value: &str) -> Self {
-        VersionInfo(
-            value
-                .trim()
-                .split_whitespace()
-                .map(|s| VersionToken::Nmtoken(dt_builtins::NmToken(s.into())))
-                .collect(),
-        )
-    }
-}
-
 impl TestSuite {
     pub fn from_xml(node: Node) -> Self {
         let mut result = TestSuite {
             annotation: vec![],
             test_set_ref: vec![],
-            name: dt_builtins::Name(node.attribute("name").unwrap().into()),
-            release_date: dt_builtins::Date(node.attribute("releaseDate").unwrap().into()),
+            name: dt_builtins::Name::from_string(node.attribute("name").unwrap()).unwrap(),
+            release_date: dt_builtins::Date::from_string(node.attribute("releaseDate").unwrap())
+                .unwrap(),
             schema_version: node.attribute("schemaVersion").unwrap().into(),
-            version: node.attribute("version").map(VersionInfo::from_xml),
+            version: node
+                .attribute("version")
+                .map(VersionInfo::from_string)
+                .transpose()
+                .unwrap(),
         };
         #[derive(Copy, Clone, Debug)]
         enum State {
@@ -85,39 +79,15 @@ impl TestSuite {
     }
 }
 
-impl TestOutcome {
-    pub fn from_xml(value: &str) -> Option<Self> {
-        match value {
-            "valid" => Some(TestOutcome(value.into())),
-            "invalid" => Some(TestOutcome(value.into())),
-            "notKnown" => Some(TestOutcome(value.into())),
-            "runtime-schema-error" => Some(TestOutcome(value.into())),
-            _ => None,
-        }
-    }
-}
-
-impl ExpectedOutcome {
-    pub fn from_xml(value: &str) -> Self {
-        if let Some(outcome) = TestOutcome::from_xml(value) {
-            ExpectedOutcome::TestOutcome(outcome)
-        } else {
-            ExpectedOutcome::Unnamed(match value {
-                "implementation-defined" => ExpectedOutcomeInner(value.into()),
-                "implementation-dependent" => ExpectedOutcomeInner(value.into()),
-                "indeterminate" => ExpectedOutcomeInner(value.into()),
-                "invalid-latent" => ExpectedOutcomeInner(value.into()),
-                _ => unimplemented!("unexpected value: {}", value),
-            })
-        }
-    }
-}
-
 impl Expected {
     pub fn from_xml(node: Node) -> Self {
         let result = Expected {
-            validity: ExpectedOutcome::from_xml(node.attribute("validity").unwrap()),
-            version: node.attribute("version").map(VersionInfo::from_xml),
+            validity: ExpectedOutcome::from_string(node.attribute("validity").unwrap()).unwrap(),
+            version: node
+                .attribute("version")
+                .map(VersionInfo::from_string)
+                .transpose()
+                .unwrap(),
         };
         result
     }
@@ -127,11 +97,11 @@ impl StatusEntry {
     pub fn from_xml(node: Node) -> Self {
         let mut result = StatusEntry {
             annotation: vec![],
-            status: Status(node.attribute("status").unwrap().into()),
-            date: dt_builtins::Date(node.attribute("date").unwrap().into()),
+            status: Status::from_string(node.attribute("status").unwrap()).unwrap(),
+            date: dt_builtins::Date::from_string(node.attribute("date").unwrap()).unwrap(),
             bugzilla: node
                 .attribute("bugzilla")
-                .map(|x| BugUri(dt_builtins::AnyURI(x.into()))),
+                .map(|x| BugUri::from_string(x).unwrap()),
         };
         for child in node.children().filter(|n| n.is_element()) {
             match child.tag_name().name() {
@@ -147,14 +117,16 @@ impl SchemaDocumentRef {
     pub fn from_xml(node: Node) -> Self {
         let mut result = SchemaDocumentRef {
             annotation: vec![],
-            role: node.attribute("role").map(|r| Role(r.into())),
+            role: node
+                .attribute("role")
+                .map(|r| Role::from_string(r).unwrap()),
             r#type: node
                 .attribute((XLINK, "type"))
-                .map(|t| TypeType(t.into()))
-                .or_else(|| Some(TypeType("locator".into()))),
+                .map(|t| TypeType::from_string(t).unwrap())
+                .or(Some(TypeType::Locator)),
             href: node
                 .attribute((XLINK, "href"))
-                .map(|h| HrefType(dt_builtins::AnyURI(h.into()))),
+                .map(|h| HrefType::from_string(h).unwrap()),
         };
         for child in node.children().filter(|n| n.is_element()) {
             match child.tag_name().name() {
@@ -174,8 +146,12 @@ impl SchemaTest {
             expected: vec![],
             current: None,
             prior: vec![],
-            name: dt_builtins::Name(node.attribute("name").unwrap().into()),
-            version: node.attribute("version").map(VersionInfo::from_xml),
+            name: dt_builtins::Name::from_string(node.attribute("name").unwrap()).unwrap(),
+            version: node
+                .attribute("version")
+                .map(VersionInfo::from_string)
+                .transpose()
+                .unwrap(),
         };
         #[derive(Copy, Clone, Debug)]
         enum State {
@@ -274,8 +250,12 @@ impl InstanceTest {
             expected,
             current,
             prior,
-            name: dt_builtins::Name(node.attribute("name").unwrap().into()),
-            version: node.attribute("version").map(VersionInfo::from_xml),
+            name: dt_builtins::Name::from_string(node.attribute("name").unwrap()).unwrap(),
+            version: node
+                .attribute("version")
+                .map(VersionInfo::from_string)
+                .transpose()
+                .unwrap(),
         };
         result
     }
@@ -289,7 +269,11 @@ impl TestGroup {
             schema_test: None,
             instance_test: vec![],
             name: dt_builtins::Name(node.attribute("name").unwrap().into()),
-            version: node.attribute("version").map(VersionInfo::from_xml),
+            version: node
+                .attribute("version")
+                .map(VersionInfo::from_string)
+                .transpose()
+                .unwrap(),
         };
         #[derive(Copy, Clone, Debug)]
         enum State {
@@ -338,8 +322,12 @@ impl TestSet {
             annotation: vec![],
             test_group: vec![],
             contributor: node.attribute("contributor").unwrap().into(),
-            name: dt_builtins::Name(node.attribute("name").unwrap().into()),
-            version: node.attribute("version").map(VersionInfo::from_xml),
+            name: dt_builtins::Name::from_string(node.attribute("name").unwrap()).unwrap(),
+            version: node
+                .attribute("version")
+                .map(VersionInfo::from_string)
+                .transpose()
+                .unwrap(),
         };
         #[derive(Copy, Clone, Debug)]
         enum State {
