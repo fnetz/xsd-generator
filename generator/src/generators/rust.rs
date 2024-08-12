@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
 
 use syn::{
-    Field, Ident, Item, ItemEnum, Type, __private::Span, parse_quote, Arm, FieldMutability, Fields,
-    TypePath, Variant,
+    Field, Ident, Item, ItemEnum, Type, __private::Span, parse_quote, Arm, Expr, ExprIf,
+    FieldMutability, Fields, Token, TypePath, Variant,
 };
 
 use dt_xsd::components::{IsBuiltinRef, Named};
@@ -580,7 +580,7 @@ impl ComponentVisitor for RustVisitor {
                 );
                 let prim_name = prim_source.name_to_path(prim_name_raw);
 
-                let whitespace: Ident = match whitespace {
+                let whitespace_ident: Ident = match whitespace {
                     WhiteSpaceValue::Preserve => parse_quote!(Preserve),
                     WhiteSpaceValue::Replace => parse_quote!(Replace),
                     WhiteSpaceValue::Collapse => parse_quote!(Collapse),
@@ -593,16 +593,22 @@ impl ComponentVisitor for RustVisitor {
                     .filter(|_| primitive_type.name.as_deref().unwrap() == "string")
                 {
                     // TODO: Non-string enumerations
-                    let variants = enumeration
+                    let enum_members = enumeration
                         .value
                         .iter()
-                        .map(|value| Variant {
-                            ident: Self::string_variant_to_ident(value),
-                            fields: Fields::Unit,
-                            attrs: Vec::new(),
-                            discriminant: None,
-                        })
+                        .map(|value| (value, Self::string_variant_to_ident(value)))
                         .collect::<Vec<_>>();
+
+                    let variants = enum_members.iter().map(|(value, name)| Variant {
+                        ident: name.clone(),
+                        fields: Fields::Unit,
+                        attrs: vec![{
+                            let c = format!("Enumeration value for `` {value} ``");
+                            parse_quote!(#[doc = #c])
+                        }],
+                        discriminant: None,
+                    });
+
                     // TODO: equality according to facets
                     let type_def: Item = parse_quote! {
                         #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -610,25 +616,20 @@ impl ComponentVisitor for RustVisitor {
                             #(#variants),*
                         }
                     };
-                    let match_arms = enumeration
-                        .value
-                        .iter()
-                        .map(|value| {
-                            let name = Self::string_variant_to_ident(value);
-                            parse_quote! {
-                                #value => Ok(Self::#name),
-                            }
-                        })
-                        .collect::<Vec<Arm>>();
+                    let match_arms = enum_members.iter().map(|(value, name)| -> Arm {
+                        parse_quote! {
+                            #value => Ok(Self::#name),
+                        }
+                    });
                     let impl_block: Item = parse_quote! {
-                        impl #name {
-                            pub fn from_string(s: &str) -> Result<Self, dt_builtins::meta::Error> {
-                                let normalized = dt_builtins::meta::normalized_value(s,
-                                    dt_builtins::meta::Whitespace::#whitespace);
-                                let value = dt_builtins::#prim_name_raw::from_literal(&normalized)?;
+                        impl meta::SimpleType for #name {
+                            const FACET_WHITE_SPACE: Option<meta::Whitespace>
+                                = Some(meta::Whitespace::#whitespace_ident);
+                            fn from_literal(normalized: &str) -> Result<Self, meta::Error> {
+                                let value = dt_builtins::#prim_name_raw::from_literal(normalized)?;
                                 match value.as_str() {
                                     #(#match_arms)*
-                                    _ => Err(dt_builtins::meta::Error::ValueNotInEnumeration(value.to_string())),
+                                    _ => Err(meta::Error::ValueNotInEnumeration(value.to_string())),
                                 }
                             }
                         }
@@ -647,11 +648,11 @@ impl ComponentVisitor for RustVisitor {
                     //   - 2.1 (atomic variety)
                     //   - 3 facet valid (TODO)
                     let impl_block: Item = parse_quote! {
-                        impl #name {
-                            pub fn from_string(s: &str) -> Result<Self, dt_builtins::meta::Error> {
-                                let normalized = dt_builtins::meta::normalized_value(s,
-                                    dt_builtins::meta::Whitespace::#whitespace);
-                                let value = dt_builtins::#prim_name_raw::from_literal(&normalized)?;
+                        impl meta::SimpleType for #name {
+                            const FACET_WHITE_SPACE: Option<meta::Whitespace>
+                                = Some(meta::Whitespace::#whitespace_ident);
+                            fn from_literal(normalized: &str) -> Result<Self, meta::Error> {
+                                let value = dt_builtins::#prim_name_raw::from_literal(normalized)?;
                                 Ok(Self(value))
                             }
                         }
@@ -668,10 +669,19 @@ impl ComponentVisitor for RustVisitor {
                     #[derive(Debug)]
                     pub struct #name(pub Vec<#item_name>);
                 };
+                // whiteSpace:
+                //   "For all datatypes ·constructed· by ·list· the value of whiteSpace is collapse
+                //   and cannot be changed by a schema author"
+                //   (Pt. 2, 4.3.6 whiteSpace)
+                debug_assert_eq!(whitespace, WhiteSpaceValue::Collapse);
                 let impl_block: Item = parse_quote! {
-                    impl #name {
-                        pub fn from_string(s: &str) -> Result<Self, dt_builtins::meta::Error> {
-                            todo!()
+                    impl meta::SimpleType for #name {
+                        const FACET_WHITE_SPACE: Option<meta::Whitespace> = Some(dt_builtins::meta::Whitespace::Collapse);
+                        fn from_literal(normalized: &str) -> Result<Self, meta::Error> {
+                            let list = normalized.split(' ').map(|s| {
+                                #item_name::from_literal(s)
+                            }).collect::<Result<Vec<_>, _>>()?;
+                            Ok(Self(list))
                         }
                     }
                 };
@@ -681,6 +691,7 @@ impl ComponentVisitor for RustVisitor {
                 let member_types = simple_type.member_type_definitions.as_ref().unwrap();
 
                 let mut variants = Vec::new();
+                let mut branches = Vec::new();
                 for member in member_types {
                     let content = self.visit_simple_type_inline(ctx, *member);
                     let variant_name = if let Some(ref name) = member.get(ctx.table).name {
@@ -690,11 +701,30 @@ impl ComponentVisitor for RustVisitor {
                     };
                     let variant_name = variant_name.to_pascal_case();
                     let variant_name = Self::name_to_ident(&variant_name);
+                    branches.push(ExprIf {
+                        attrs: vec![],
+                        if_token: Token![if](Span::call_site()),
+                        cond: Box::new(Expr::Let(
+                            parse_quote! { let Ok(value) = #content::from_string(s) },
+                        )),
+                        then_branch: parse_quote! { { Ok(Self::#variant_name(value)) } },
+                        else_branch: None,
+                    });
                     variants.push(Variant {
                         ident: variant_name,
                         fields: Fields::Unnamed(parse_quote! { (#content) }),
                         attrs: Vec::new(),
                         discriminant: None,
+                    });
+                }
+
+                let mut if_chain = Expr::Block(parse_quote! {
+                    { Err(meta::Error::NoValidBranch) }
+                });
+                for branch in branches.into_iter().rev() {
+                    if_chain = Expr::If(ExprIf {
+                        else_branch: Some((Token![else](Span::call_site()), Box::new(if_chain))),
+                        ..branch
                     });
                 }
 
@@ -705,9 +735,10 @@ impl ComponentVisitor for RustVisitor {
                     }
                 };
                 let impl_block: Item = parse_quote! {
-                    impl #name {
-                        pub fn from_string(s: &str) -> Result<Self, dt_builtins::meta::Error> {
-                            todo!()
+                    impl meta::SimpleType for #name {
+                        const FACET_WHITE_SPACE: Option<meta::Whitespace> = None;
+                        fn from_literal(s: &str) -> Result<Self, meta::Error> {
+                            #if_chain
                         }
                     }
                 };
@@ -742,6 +773,13 @@ pub fn generate(schema: &Schema, components: &SchemaComponentTable) -> String {
     let mut ctx = GeneratorContext::new(components);
     let mut visitor = RustVisitor::new();
 
+    visitor.output_items.push(Item::Use(parse_quote!(
+        use dt_builtins::meta;
+    )));
+    visitor.output_items.push(Item::Use(parse_quote!(
+        use meta::SimpleType as _;
+    )));
+
     for type_def in schema.type_definitions.iter().copied() {
         match type_def {
             TypeDefinition::Complex(complex_type) => {
@@ -767,7 +805,7 @@ pub fn generate(schema: &Schema, components: &SchemaComponentTable) -> String {
         shebang: None,
         attrs: vec![
             parse_quote!(#![doc = #doc_comment]),
-            parse_quote!(#![allow(dead_code)]),
+            parse_quote!(#![allow(dead_code, unused_imports)]),
         ],
         items: visitor.output_items,
     };
