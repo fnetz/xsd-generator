@@ -1,7 +1,4 @@
-use std::{
-    panic::AssertUnwindSafe,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use dt_xsd::{
     import::{ImportError, ImportResolver},
@@ -101,6 +98,7 @@ fn read_test_set(path: &Path) -> TestSet {
 
 fn main() {
     let base_path = Path::new("xsdtests");
+    let predefined_schemas_path = std::env::current_dir().unwrap();
 
     let suite = std::fs::read_to_string(base_path.join("suite.xml")).unwrap();
     let suite = Document::parse(&suite).unwrap();
@@ -109,10 +107,6 @@ fn main() {
         "SUITE {:?} (release date {})",
         suite.name.0, suite.release_date.0
     );
-
-    let import_resolvers: [Box<dyn ImportResolver>; 1] = [Box::new(LocalImportResolver {
-        base_path: std::env::current_dir().unwrap(),
-    })];
 
     let mut count_ok = 0;
     let mut count_fail = 0;
@@ -161,18 +155,24 @@ fn main() {
                     let base_path = path.parent().unwrap();
                     let href = (schema.href.unwrap().0).0;
                     eprintln!("      SCHEMA {href}");
-                    let schema = base_path.join(href);
-                    let buf = std::fs::read(&schema).unwrap();
+                    let schema_path = base_path.join(href);
+                    let schema_dir = schema_path.parent().unwrap();
+                    let buf = std::fs::read(&schema_path).unwrap();
                     let (decoded, _, _) = Encoding::decode(UTF_8, &buf);
                     let schema = Document::parse(&decoded).unwrap();
-                    let res = std::panic::catch_unwind(AssertUnwindSafe(|| {
+                    let res = std::panic::catch_unwind(|| {
+                        let import_resolvers: [Box<dyn ImportResolver>; 1] =
+                            [Box::new(LocalImportResolver {
+                                base_path: predefined_schemas_path.clone(),
+                                schema_dir: schema_dir.to_path_buf(),
+                            })];
                         dt_xsd::read_schema(
                             schema,
                             BuiltinOverwriteAction::Deny,
                             RegisterBuiltins::Yes,
                             &import_resolvers,
                         )
-                    }));
+                    });
                     if res.is_err() {
                         ok = false;
                     }
@@ -212,6 +212,7 @@ fn main() {
 
 struct LocalImportResolver {
     base_path: PathBuf,
+    schema_dir: PathBuf,
 }
 
 impl ImportResolver for LocalImportResolver {
@@ -220,13 +221,27 @@ impl ImportResolver for LocalImportResolver {
         context: &mut dt_xsd::RootContext,
         import: &dt_xsd::import::Import,
     ) -> Result<Schema, ImportError> {
-        let location = match import.namespace.as_deref() {
-            Some("http://www.w3.org/1999/xlink") => "xlink.xsd",
-            Some("http://www.w3.org/XML/1998/namespace") => "xml.xsd",
-            _ => return Err(ImportError::UnsupportedImport),
+        let path = if let Some(location) = import
+            .schema_location
+            .as_ref()
+            .filter(|l| !l.contains(['/', '\\', ':']))
+        {
+            // TODO: better path validation?
+            let location = self.schema_dir.join(location);
+            if !location.exists() {
+                return Err(ImportError::ValidationFailed);
+            }
+            location
+        } else {
+            let location = match import.namespace.as_deref() {
+                Some("http://www.w3.org/1999/xlink") => "xlink.xsd",
+                Some("http://www.w3.org/XML/1998/namespace") => "xml.xsd",
+                _ => return Err(ImportError::UnsupportedImport),
+            };
+            self.base_path.join(location)
         };
 
-        let text = std::fs::read_to_string(self.base_path.join(location)).unwrap();
+        let text = std::fs::read_to_string(path).unwrap();
         let options = roxmltree::ParsingOptions {
             allow_dtd: true,
             ..Default::default()
