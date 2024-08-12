@@ -157,9 +157,35 @@ pub enum Term {
 }
 
 impl Term {
+    pub fn is_model_group(&self) -> bool {
+        matches!(self, Self::ModelGroup(_))
+    }
+
     pub fn model_group(self) -> Option<Ref<ModelGroup>> {
         match self {
             Self::ModelGroup(g) => Some(g),
+            _ => None,
+        }
+    }
+
+    pub fn is_element_declaration(&self) -> bool {
+        matches!(self, Self::ElementDeclaration(_))
+    }
+
+    pub fn element_declaration(self) -> Option<Ref<ElementDeclaration>> {
+        match self {
+            Self::ElementDeclaration(e) => Some(e),
+            _ => None,
+        }
+    }
+
+    pub fn is_wildcard(&self) -> bool {
+        matches!(self, Self::Wildcard(_))
+    }
+
+    pub fn wildcard(self) -> Option<Ref<Wildcard>> {
+        match self {
+            Self::Wildcard(w) => Some(w),
             _ => None,
         }
     }

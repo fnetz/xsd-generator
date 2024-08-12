@@ -291,7 +291,9 @@ impl ComplexTypeDefinition {
                             todo!()
                         }
                         ContentType::Mixed { particle, .. }
-                            if particle.get(context.components()).is_emptiable() =>
+                            if particle
+                                .get(context.components())
+                                .is_emptiable(context.components()) =>
                         {
                             todo!()
                         }
