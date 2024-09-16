@@ -527,15 +527,12 @@ impl ComponentResolver {
         }
     }
 
-    pub(super) fn resolve<R>(&self, key: &QName) -> R
+    pub(super) fn resolve<R>(&self, key: &QName) -> Option<R>
     where
         R: Copy,
         LookupTables: Lookup<R>,
     {
-        // TODO error handling
-        self.lookup_tables
-            .lookup_value(key)
-            .unwrap_or_else(|| panic!("Could not resolve component {key:?}"))
+        self.lookup_tables.lookup_value(key)
     }
 
     pub(super) fn register_with_name<R>(

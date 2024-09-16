@@ -1,6 +1,7 @@
 use super::{
     annotation::Annotation,
     components::{Component, Named, NamedXml},
+    error::XsdError,
     mapping_context::TopLevelMappable,
     values::actual_value,
     xstypes::{AnyURI, NCName, QName, Sequence},
@@ -46,7 +47,7 @@ impl NotationDeclaration {
         notation: Node,
         schema: Node,
         tlref: Option<Ref<Self>>,
-    ) -> Ref<Self> {
+    ) -> Result<Ref<Self>, XsdError> {
         assert_eq!(notation.tag_name().name(), Self::TAG_NAME);
 
         let self_ref = tlref.unwrap_or_else(|| context.reserve());
@@ -73,7 +74,7 @@ impl NotationDeclaration {
         //   of Annotation Schema Components (§3.15.2).
         let annotations = Annotation::xml_element_annotation_mapping(context, notation);
 
-        context.insert(
+        Ok(context.insert(
             self_ref,
             Self {
                 annotations,
@@ -82,7 +83,7 @@ impl NotationDeclaration {
                 system_identifier,
                 public_identifier,
             },
-        )
+        ))
     }
 }
 
@@ -105,7 +106,8 @@ impl TopLevelMappable for NotationDeclaration {
         self_ref: Ref<Self>,
         notation: Node,
         schema: Node,
-    ) {
-        Self::map_from_xml(context, notation, schema, Some(self_ref));
+    ) -> Result<(), XsdError> {
+        Self::map_from_xml(context, notation, schema, Some(self_ref))?;
+        Ok(())
     }
 }

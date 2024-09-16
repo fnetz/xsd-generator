@@ -1,6 +1,5 @@
 mod cli;
 mod generators;
-
 use clap::Parser;
 
 use dt_xsd::import::{Import, ImportError, ImportResolver};
@@ -37,7 +36,7 @@ impl ImportResolver for HttpImportResolver {
         let xsd = roxmltree::Document::parse_with_options(&text, options).unwrap();
         let schema = xsd.root_element();
         import.validate_imported_schema(schema)?;
-        let schema = Schema::map_from_xml(context, schema);
+        let schema = Schema::map_from_xml(context, schema).map_err(ImportError::Xsd)?;
         Ok(schema)
     }
 }
@@ -67,7 +66,8 @@ fn main() {
             cli::RegisterBuiltins::No => dt_xsd::RegisterBuiltins::No,
         },
         &import_resolvers,
-    );
+    )
+    .unwrap();
     let rst = cli.generator.generate(&schema, &components);
     print!("{rst}");
 }

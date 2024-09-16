@@ -3,6 +3,7 @@ use super::{
     attribute_decl::{self, AttributeDeclaration},
     attribute_use::AttributeUse,
     components::{Component, Named, NamedXml},
+    error::XsdError,
     mapping_context::TopLevelMappable,
     values::actual_value,
     wildcard::Wildcard,
@@ -49,7 +50,7 @@ impl AttributeGroupDefinition {
         attribute_group: Node,
         schema: Node,
         attrib_group_ref: Option<Ref<Self>>,
-    ) -> Ref<Self> {
+    ) -> Result<Ref<Self>, XsdError> {
         let attrib_group_ref = attrib_group_ref.unwrap_or_else(|| context.reserve());
 
         let QName {
@@ -72,7 +73,7 @@ impl AttributeGroupDefinition {
                 attribute,
                 schema,
                 attribute_decl::ScopeParent::AttributeGroup(attrib_group_ref),
-            );
+            )?;
             if let Some(attribute_use) = attribute_use {
                 attribute_uses.push(attribute_use);
             }
@@ -96,7 +97,7 @@ impl AttributeGroupDefinition {
             .for_each(|c| annot_elements.push(c));
         let annotations = Annotation::xml_element_set_annotation_mapping(context, &annot_elements);
 
-        context.insert(
+        Ok(context.insert(
             attrib_group_ref,
             Self {
                 annotations,
@@ -105,8 +106,7 @@ impl AttributeGroupDefinition {
                 attribute_uses,
                 attribute_wildcard,
             },
-        );
-        attrib_group_ref
+        ))
     }
 }
 
@@ -129,7 +129,8 @@ impl TopLevelMappable for AttributeGroupDefinition {
         self_ref: Ref<Self>,
         attribute_group: Node,
         schema: Node,
-    ) {
-        Self::map_from_xml(context, attribute_group, schema, Some(self_ref));
+    ) -> Result<(), XsdError> {
+        Self::map_from_xml(context, attribute_group, schema, Some(self_ref))?;
+        Ok(())
     }
 }

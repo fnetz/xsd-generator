@@ -76,16 +76,16 @@ pub fn read_schema(
     builtin_overwrite: BuiltinOverwriteAction,
     register_builtins: RegisterBuiltins,
     import_resolvers: &[Box<dyn ImportResolver>],
-) -> (Schema, SchemaComponentTable) {
+) -> Result<(Schema, SchemaComponentTable), error::XsdError> {
     let schema = schema.root_element();
     let mut root_context = RootContext::new(builtin_overwrite, import_resolvers);
     if register_builtins == RegisterBuiltins::Yes {
         builtins::register_builtins(&mut root_context);
     }
-    let schema = Schema::map_from_xml(&mut root_context, schema);
+    let schema = Schema::map_from_xml(&mut root_context, schema)?;
     let components = root_context
         .into_components()
         .convert_to_schema_table()
-        .unwrap();
-    (schema, components)
+        .ok_or(error::XsdError::AbsentComponentValue)?;
+    Ok((schema, components))
 }

@@ -2,6 +2,7 @@ use super::simple_type_def::Context as SimpleContext;
 use super::{
     builtins::XS_ANY_SIMPLE_TYPE_NAME,
     components::{Component, Named, NamedXml},
+    error::XsdError,
     mapping_context::TopLevelMappable,
     shared,
     values::{actual_value, normalized_value},
@@ -74,7 +75,7 @@ impl AttributeDeclaration {
         attribute: Node,
         schema: Node,
         tlref: Ref<Self>,
-    ) -> Ref<Self> {
+    ) -> Result<Ref<Self>, XsdError> {
         assert_eq!(attribute.tag_name().name(), Self::TAG_NAME);
 
         let QName {
@@ -97,7 +98,8 @@ impl AttributeDeclaration {
                     None,
                     Some(SimpleContext::Attribute(tlref)),
                 )
-            });
+            })
+            .transpose()?;
 
         let type_definition = if let Some(simple_type_def) = simple_type_def {
             simple_type_def
@@ -105,9 +107,13 @@ impl AttributeDeclaration {
             .attribute("type")
             .map(|v| actual_value::<QName>(v, attribute))
         {
-            context.resolve(&type_)
+            context
+                .resolve(&type_)
+                .ok_or_else(|| XsdError::UnresolvedReference(type_))?
         } else {
-            let any_simple_type: TypeDefinition = context.resolve(&XS_ANY_SIMPLE_TYPE_NAME);
+            let any_simple_type: TypeDefinition = context
+                .resolve(&XS_ANY_SIMPLE_TYPE_NAME)
+                .ok_or_else(|| XsdError::UnresolvedBuiltin(&XS_ANY_SIMPLE_TYPE_NAME))?;
             any_simple_type.simple().unwrap()
         };
 
@@ -154,7 +160,7 @@ impl AttributeDeclaration {
         //   of Annotation Schema Components (§3.15.2).
         let annotations = Annotation::xml_element_annotation_mapping(context, attribute);
 
-        context.insert(
+        Ok(context.insert(
             tlref,
             AttributeDeclaration {
                 annotations,
@@ -166,7 +172,7 @@ impl AttributeDeclaration {
                 inheritable,
                 is_builtin: false,
             },
-        )
+        ))
     }
 
     // TODO Extract common attribute procedures
@@ -175,14 +181,14 @@ impl AttributeDeclaration {
         attribute: Node,
         schema: Node,
         parent: ScopeParent,
-    ) -> Option<Ref<AttributeUse>> {
+    ) -> Result<Option<Ref<AttributeUse>>, XsdError> {
         assert_eq!(attribute.tag_name().name(), Self::TAG_NAME);
 
         // == Common properties for both paths ==
 
         // [...] unless use='prohibited', in which case the item corresponds to nothing at all
         if attribute.attribute("use") == Some("prohibited") {
-            return None;
+            return Ok(None);
         }
 
         // {required}
@@ -204,7 +210,7 @@ impl AttributeDeclaration {
             //   The (top-level) attribute declaration ·resolved· to by the ·actual value· of the
             //   ref [attribute]
             let ref_ = actual_value::<QName>(ref_, attribute);
-            let attribute_declaration: Ref<AttributeDeclaration> = context.resolve(&ref_);
+            let attribute_declaration: Ref<AttributeDeclaration> = context.resolve(&ref_).unwrap(); // TODO
 
             // {value constraint}
             //   If there is a default or a fixed [attribute], then a Value Constraint as follows,
@@ -239,8 +245,12 @@ impl AttributeDeclaration {
             //   {attribute declaration}.{inheritable}.
             let inheritable = attribute
                 .attribute("inheritable")
-                .map(|v| actual_value::<bool>(v, attribute))
-                .unwrap_or_else(|| context.request(attribute_declaration).inheritable);
+                .map(|v| Ok(actual_value::<bool>(v, attribute)))
+                .unwrap_or_else(|| {
+                    context
+                        .request(attribute_declaration)
+                        .map(|a| a.inheritable)
+                })?;
 
             let attribute_use = context.create(AttributeUse {
                 annotations,
@@ -250,7 +260,7 @@ impl AttributeDeclaration {
                 inheritable,
             });
 
-            Some(attribute_use)
+            Ok(Some(attribute_use))
         } else {
             // ===== Attribute Declaration =====
             let self_ref = context.reserve();
@@ -303,7 +313,8 @@ impl AttributeDeclaration {
                         None,
                         Some(SimpleContext::Attribute(self_ref)),
                     )
-                });
+                })
+                .transpose()?;
 
             let type_definition = if let Some(simple_type_def) = simple_type_def {
                 simple_type_def
@@ -311,9 +322,10 @@ impl AttributeDeclaration {
                 .attribute("type")
                 .map(|v| actual_value::<QName>(v, attribute))
             {
-                context.resolve(&type_)
+                context.resolve(&type_).unwrap() // TODO
             } else {
-                let any_simple_type: TypeDefinition = context.resolve(&XS_ANY_SIMPLE_TYPE_NAME);
+                let any_simple_type: TypeDefinition =
+                    context.resolve(&XS_ANY_SIMPLE_TYPE_NAME).unwrap(); // TODO
                 any_simple_type.simple().unwrap()
             };
 
@@ -395,7 +407,7 @@ impl AttributeDeclaration {
                 inheritable,
             });
 
-            Some(attribute_use)
+            Ok(Some(attribute_use))
         }
     }
 }
@@ -423,8 +435,9 @@ impl TopLevelMappable for AttributeDeclaration {
         self_ref: Ref<Self>,
         attribute: Node,
         schema: Node,
-    ) {
+    ) -> Result<(), XsdError> {
         // TODO inline?
-        Self::map_from_xml_global(context, attribute, schema, self_ref);
+        Self::map_from_xml_global(context, attribute, schema, self_ref)?;
+        Ok(())
     }
 }
