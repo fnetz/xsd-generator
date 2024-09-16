@@ -165,6 +165,16 @@ impl Schema {
                     ))
                 }
             }
+
+            top_level_element.descendants().for_each(|e| {
+                // "The identity-constraint definitions corresponding to all the <key>, <keyref>,
+                // and <unique> element information items *anywhere within* the [children], if any
+                // [...]" - Spec pt.1, 3.17.2 XML Representation of Schema Components,
+                // {identity-constraint definitions} representation
+                if IdentityConstraintDefinition::TAG_NAMES.contains(&e.tag_name().name()) {
+                    reserve_top_level::<IdentityConstraintDefinition>(&mut context, e, schema);
+                }
+            });
         }
 
         // {type definitions}
@@ -255,7 +265,7 @@ impl Schema {
         //   <unique> element information items anywhere within the [children], if any, plus any
         //   definitions brought in via <include>, <override>, <redefine>, and <import>.
         for icd in schema
-            .children()
+            .descendants()
             .filter(|e| IdentityConstraintDefinition::TAG_NAMES.contains(&e.tag_name().name()))
         {
             let icd = context.request_ref_by_node(icd)?;
