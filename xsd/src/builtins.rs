@@ -123,7 +123,9 @@ fn register_xs_any_type(context: &mut RootContext) {
 /// (see Specification pt. 2, §3.2 Special Built-in Datatypes; and pt. 2, §4.1.6 Built-in Simple
 /// Type Definitions)
 fn register_special_types(context: &mut RootContext) {
-    let xs_any_type = context.resolve(&XS_ANY_TYPE_NAME);
+    let xs_any_type = context
+        .resolve(&XS_ANY_TYPE_NAME)
+        .expect("xs:anyType should be registered before xs:anySimpleType and xs:anyAtomicType");
 
     // anySimpleType (pt. 2, §3.2.1)
     let xs_any_simple_type = context.reserve();
@@ -174,7 +176,9 @@ fn register_special_types(context: &mut RootContext) {
 
 /// Registers the built-in `xs:error` type (see Specification pt. 1, §3.16.7.3)
 fn register_xs_error(context: &mut RootContext) {
-    let xs_any_simple_type_def = context.resolve(&XS_ANY_SIMPLE_TYPE_NAME);
+    let xs_any_simple_type_def = context
+        .resolve(&XS_ANY_SIMPLE_TYPE_NAME)
+        .expect("xs:anySimpleType should be registered before xs:error");
 
     let xs_error = context.create(SimpleTypeDefinition {
         name: Some("error".into()),
@@ -256,7 +260,9 @@ fn register_builtin_primitive_types(context: &mut RootContext) {
         PrimitiveInfo::new("NOTATION", False, false, CountablyInfinite, false),
     ];
 
-    let xs_any_atomic_type_def = context.resolve(&XS_ANY_ATOMIC_TYPE_NAME);
+    let xs_any_atomic_type_def = context
+        .resolve(&XS_ANY_ATOMIC_TYPE_NAME)
+        .expect("xs:anyAtomicType should be registered before the primitive types");
 
     for PrimitiveInfo {
         name,
@@ -823,13 +829,19 @@ fn register_builtin_ordinary_types(context: &mut RootContext) {
         let base_type = match base_type {
             OrdinaryBaseType::Named(base_type_name) => {
                 let base_type_name = QName::with_namespace(XS_NAMESPACE, base_type_name);
-                context.resolve(&base_type_name)
+                context.resolve(&base_type_name).unwrap_or_else(|| {
+                    panic!("Base type {:?} for {} not found", base_type_name, name)
+                })
             }
             OrdinaryBaseType::AnonIndirectList(item_type_name) => {
                 let item_type_name = QName::with_namespace(XS_NAMESPACE, item_type_name);
-                let item_type = context.resolve(&item_type_name);
+                let item_type = context.resolve(&item_type_name).unwrap_or_else(|| {
+                    panic!("Item type {:?} for {} not found", item_type_name, name)
+                });
 
-                let xs_any_simple_type = context.resolve(&XS_ANY_SIMPLE_TYPE_NAME);
+                let xs_any_simple_type = context
+                    .resolve(&XS_ANY_SIMPLE_TYPE_NAME)
+                    .expect("xs:anySimpleType should be registered before the ordinary types");
                 context.create(SimpleTypeDefinition {
                     annotations: Sequence::new(),
                     name: None,
@@ -864,7 +876,11 @@ fn register_builtin_ordinary_types(context: &mut RootContext) {
                 let item_type_name = QName::with_namespace(XS_NAMESPACE, item_type_name);
                 (
                     simple_type_def::Variety::List,
-                    Some(context.resolve(&item_type_name)),
+                    Some(
+                        context
+                            .resolve(&item_type_name)
+                            .expect("Item type not found"),
+                    ),
                 )
             }
         };
@@ -909,10 +925,18 @@ fn register_builtin_ordinary_types(context: &mut RootContext) {
 }
 
 fn register_builtin_attribute_decls(context: &mut RootContext) {
-    let qname = context.resolve(&XS_QNAME_NAME);
-    let boolean = context.resolve(&XS_BOOLEAN_NAME);
-    let any_uri = context.resolve(&XS_ANY_URI_NAME);
-    let any_simple_type = context.resolve(&XS_ANY_SIMPLE_TYPE_NAME);
+    let qname = context
+        .resolve(&XS_QNAME_NAME)
+        .expect("xs:QName should be registered");
+    let boolean = context
+        .resolve(&XS_BOOLEAN_NAME)
+        .expect("xs:boolean should be registered");
+    let any_uri = context
+        .resolve(&XS_ANY_URI_NAME)
+        .expect("xs:anyURI should be registered");
+    let any_simple_type = context
+        .resolve(&XS_ANY_SIMPLE_TYPE_NAME)
+        .expect("xs:anySimpleType should be registered");
 
     // Built-in Attribute Declarations according to pt. 1, §3.2.7
     // The {inheritable} property is not specified by the 1.1 spec;

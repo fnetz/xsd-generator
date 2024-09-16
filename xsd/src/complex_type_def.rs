@@ -7,6 +7,7 @@ use super::{
     components::{Component, Named},
     element_decl,
     element_decl::ElementDeclaration,
+    error::XsdError,
     mapping_context::TopLevelMappable,
     model_group::Compositor,
     particle::{MaxOccurs, Particle},
@@ -195,7 +196,7 @@ impl ComplexTypeDefinition {
         schema: Node,
         ancestor_element: Option<Ref<ElementDeclaration>>,
         tlref: Option<Ref<Self>>,
-    ) -> Ref<Self> {
+    ) -> Result<Ref<Self>, XsdError> {
         let complex_type_ref = tlref.unwrap_or_else(|| context.reserve::<Self>());
 
         if let Some(simple_content) = complex_type
@@ -209,7 +210,7 @@ impl ComplexTypeDefinition {
                 simple_content,
                 schema,
                 ancestor_element,
-            )
+            )?
         } else if let Some(complex_content) = complex_type
             .children()
             .find(|c| c.tag_name().name() == "complexContent")
@@ -221,7 +222,7 @@ impl ComplexTypeDefinition {
                 complex_content,
                 schema,
                 ancestor_element,
-            )
+            )?
         } else {
             Self::map_with_implicit_complex_content(
                 context,
@@ -229,14 +230,14 @@ impl ComplexTypeDefinition {
                 complex_type,
                 schema,
                 ancestor_element,
-            )
+            )?
         }
 
         assert!(
             context.components().is_present(complex_type_ref),
             "ComplexTypeDefinition mapper failed to populate ref"
         );
-        complex_type_ref
+        Ok(complex_type_ref)
     }
 
     fn map_with_simple_content(
@@ -246,7 +247,7 @@ impl ComplexTypeDefinition {
         simple_content: Node,
         schema: Node,
         ancestor_element: Option<Ref<ElementDeclaration>>,
-    ) {
+    ) -> Result<(), XsdError> {
         let (base_type_definition, derivation_method, content_type) = if let Some(restriction) =
             simple_content
                 .children()
@@ -260,7 +261,7 @@ impl ComplexTypeDefinition {
             let base_type_definition: TypeDefinition = restriction
                 .attribute("base")
                 .map(|base| actual_value::<QName>(base, restriction))
-                .map(|n| context.resolve(&n))
+                .map(|n| context.resolve(&n).unwrap()) // TODO
                 .unwrap();
 
             // {derivation method}
@@ -271,7 +272,7 @@ impl ComplexTypeDefinition {
             //   {simple_type_definition}  the appropriate case among the following:
             let simple_type_definition =
                 if let TypeDefinition::Complex(base_type_definition) = base_type_definition {
-                    context.request(base_type_definition);
+                    context.request(base_type_definition)?;
                     let base_type_definition = base_type_definition.get(context.components());
                     match base_type_definition.content_type {
                         ContentType::Simple { .. } => {
@@ -300,13 +301,14 @@ impl ComplexTypeDefinition {
                         _ => {
                             // 5 otherwise ·xs:anySimpleType·.
                             let any_simple_type: TypeDefinition =
-                                context.resolve(&XS_ANY_SIMPLE_TYPE_NAME);
+                                context.resolve(&XS_ANY_SIMPLE_TYPE_NAME).unwrap(); // TODO
                             any_simple_type.simple().unwrap()
                         }
                     }
                 } else {
                     // 5 otherwise ·xs:anySimpleType·.
-                    let any_simple_type: TypeDefinition = context.resolve(&XS_ANY_SIMPLE_TYPE_NAME);
+                    let any_simple_type: TypeDefinition =
+                        context.resolve(&XS_ANY_SIMPLE_TYPE_NAME).unwrap(); // TODO
                     any_simple_type.simple().unwrap()
                 };
             let content_type = ContentType::Simple {
@@ -326,7 +328,7 @@ impl ComplexTypeDefinition {
             let base_type_definition = extension
                 .attribute("base")
                 .map(|base| actual_value::<QName>(base, extension))
-                .map(|n| context.resolve(&n))
+                .map(|n| context.resolve(&n).unwrap()) // TODO
                 .unwrap();
 
             // {derivation method}
@@ -337,7 +339,7 @@ impl ComplexTypeDefinition {
                 // {simple_type_definition}  the appropriate case among the following:
                 simple_type_definition: match base_type_definition {
                     TypeDefinition::Complex(base_type_definition) => {
-                        context.request(base_type_definition);
+                        context.request(base_type_definition)?;
                         let base_type_definition = base_type_definition.get(context.components());
                         // 3 If the {base type definition} is a complex type definition whose own
                         //   {content type} has {variety} simple and the <extension> alternative is
@@ -351,7 +353,7 @@ impl ComplexTypeDefinition {
                         } else {
                             // 5 otherwise ·xs:anySimpleType·
                             let any_simple_type: TypeDefinition =
-                                context.resolve(&XS_ANY_SIMPLE_TYPE_NAME);
+                                context.resolve(&XS_ANY_SIMPLE_TYPE_NAME).unwrap(); // TODO
                             any_simple_type.simple().unwrap()
                         }
                     }
@@ -379,7 +381,7 @@ impl ComplexTypeDefinition {
             schema,
             derivation_method,
             base_type_definition,
-        );
+        )?;
 
         // TODO attribute wildcard
 
@@ -393,6 +395,7 @@ impl ComplexTypeDefinition {
                 ..common
             },
         );
+        Ok(())
     }
 
     fn map_with_explicit_complex_content(
@@ -402,7 +405,7 @@ impl ComplexTypeDefinition {
         complex_content: Node,
         schema: Node,
         ancestor_element: Option<Ref<ElementDeclaration>>,
-    ) {
+    ) -> Result<(), XsdError> {
         let content = complex_content
             .children()
             .find(|c| ["restriction", "extension"].contains(&c.tag_name().name()))
@@ -413,7 +416,7 @@ impl ComplexTypeDefinition {
         let base_type_definition = content
             .attribute("base")
             .map(|base| actual_value::<QName>(base, content))
-            .map(|n| context.resolve(&n))
+            .map(|n| context.resolve(&n).unwrap()) // TODO
             .unwrap();
 
         // {derivation method}
@@ -433,7 +436,7 @@ impl ComplexTypeDefinition {
             schema,
             derivation_method,
             base_type_definition,
-        );
+        )?;
 
         let common = Self::map_common(context, complex_type, schema, ancestor_element);
 
@@ -445,7 +448,7 @@ impl ComplexTypeDefinition {
             schema,
             derivation_method,
             base_type_definition,
-        );
+        )?;
 
         // TODO attribute wildcard
 
@@ -459,6 +462,7 @@ impl ComplexTypeDefinition {
                 ..common
             },
         );
+        Ok(())
     }
 
     fn map_with_implicit_complex_content(
@@ -467,9 +471,9 @@ impl ComplexTypeDefinition {
         complex_type: Node,
         schema: Node,
         ancestor_element: Option<Ref<ElementDeclaration>>,
-    ) {
+    ) -> Result<(), XsdError> {
         // {base type definition} ·xs:anyType·
-        let base_type_definition = context.resolve(&XS_ANY_TYPE_NAME);
+        let base_type_definition = context.resolve(&XS_ANY_TYPE_NAME).unwrap(); // TODO
 
         // {derivation method}    restriction
         let derivation_method = DerivationMethod::Restriction;
@@ -482,7 +486,7 @@ impl ComplexTypeDefinition {
             schema,
             derivation_method,
             base_type_definition,
-        );
+        )?;
 
         let common = Self::map_common(context, complex_type, schema, ancestor_element);
 
@@ -494,7 +498,7 @@ impl ComplexTypeDefinition {
             schema,
             derivation_method,
             base_type_definition,
-        );
+        )?;
 
         // TODO attribute wildcard
 
@@ -508,6 +512,7 @@ impl ComplexTypeDefinition {
                 ..common
             },
         );
+        Ok(())
     }
 
     fn map_common(
@@ -601,7 +606,7 @@ impl ComplexTypeDefinition {
 
             // Populated in the specific mapping implementations
             // TODO restructure
-            base_type_definition: mapping_context.resolve(&XS_ANY_TYPE_NAME), // TODO !!
+            base_type_definition: mapping_context.resolve(&XS_ANY_TYPE_NAME).unwrap(), // TODO !!
             derivation_method: None,
             content_type: ContentType::Empty,
             attribute_uses: Set::new(),
@@ -619,7 +624,7 @@ impl ComplexTypeDefinition {
         schema: Node,
         derivation_method: DerivationMethod,
         base_type_definition: TypeDefinition,
-    ) -> Vec<Ref<AttributeUse>> {
+    ) -> Result<Vec<Ref<AttributeUse>>, XsdError> {
         // In the following rule, references to "the [children]" refer to the [children] of the
         // <extension> or <restriction> element (whichever appears as a child of <simpleContent> or
         // <complexContent> in the <complexType> source declaration), if present, otherwise to the
@@ -661,6 +666,7 @@ impl ComplexTypeDefinition {
                             schema,
                             attribute_decl::ScopeParent::ComplexType(complex_type_ref),
                         )
+                        .unwrap() // TODO
                     }),
             );
 
@@ -672,8 +678,10 @@ impl ComplexTypeDefinition {
             {
                 let ref_ = attribute_group.attribute("ref").unwrap();
                 let ref_ = actual_value::<QName>(ref_, complex_type);
-                let group = context.resolve::<Ref<AttributeGroupDefinition>>(&ref_);
-                attribute_uses.extend(context.request(group).attribute_uses.iter())
+                let group = context
+                    .resolve::<Ref<AttributeGroupDefinition>>(&ref_)
+                    .unwrap(); // TODO
+                attribute_uses.extend(context.request(group)?.attribute_uses.iter())
             }
 
             // 3 The attribute uses "inherited" from the {base type definition} T, as described by
@@ -696,14 +704,14 @@ impl ComplexTypeDefinition {
             if let TypeDefinition::Complex(base_type_definition) = base_type_definition {
                 match derivation_method {
                     DerivationMethod::Extension => attribute_uses
-                        .extend(context.request(base_type_definition).attribute_uses.iter()),
+                        .extend(context.request(base_type_definition)?.attribute_uses.iter()),
                     DerivationMethod::Restriction => {
                         // TODO
                     }
                 }
             }
 
-            attribute_uses
+            Ok(attribute_uses)
         }
     }
 }
@@ -715,7 +723,7 @@ impl ContentType {
         complex_type: Node,
         children_elem: Node,
         schema: Node,
-    ) -> Option<Ref<Particle>> {
+    ) -> Result<Option<Ref<Particle>>, XsdError> {
         // 2 Let the explicit content be the appropriate case among the following:
 
         // 2.1 If at least one of the following is true
@@ -753,7 +761,7 @@ impl ContentType {
             == Some(true);
         if cond_1 || cond_2 || cond_3 || cond_4 {
             // then empty
-            None
+            Ok(None)
         } else {
             // 2.2 otherwise the particle corresponding to the <all>, <choice>, <group> or <sequence> among the [children].
             children_elem
@@ -768,6 +776,7 @@ impl ContentType {
                     "group" => Some(Particle::map_from_xml_group_reference(context, c)),
                     _ => None,
                 })
+                .transpose()
         }
     }
 
@@ -779,7 +788,7 @@ impl ContentType {
         schema: Node,
         derivation_method: DerivationMethod,
         base_type_definition: TypeDefinition,
-    ) -> Self {
+    ) -> Result<Self, XsdError> {
         // When the mapping rule below refers to "the [children]", ...
         let children_elem = if let Some(complex_content) = complex_content {
             // ... for a <complexType> source declaration with a <complexContent> child, the
@@ -817,7 +826,7 @@ impl ContentType {
             complex_type,
             children_elem,
             schema,
-        );
+        )?;
 
         // 3 Let the effective content be the appropriate case among the following:
         let effective_content = if let Some(explicit_content) = explicit_content {
@@ -859,7 +868,7 @@ impl ContentType {
             effective_mixed,
             base_type_definition,
             context,
-        );
+        )?;
 
         // 5 Let the wildcard element be the appropriate case among the following:
         let wildcard_element = if let Some(open_content) = children_elem
@@ -906,7 +915,7 @@ impl ContentType {
         {
             // 6.1 If the ·wildcard element· is ·absent· or is present and has mode = 'none', then
             //   the ·explicit content type·.
-            explicit_content_type
+            Ok(explicit_content_type)
         } else {
             // The wildcard element must be present
             let wildcard_element = wildcard_element.unwrap();
@@ -986,7 +995,12 @@ impl ContentType {
             // {simple type definition} ·absent·
             let simple_type_definition = None;
 
-            Self::from_variety(variety, particle, open_content, simple_type_definition)
+            Ok(Self::from_variety(
+                variety,
+                particle,
+                open_content,
+                simple_type_definition,
+            ))
         }
     }
 
@@ -1030,12 +1044,15 @@ impl ContentType {
         effective_mixed: bool,
         base_type_definition: TypeDefinition,
         context: &mut MappingContext,
-    ) -> ContentType {
+    ) -> Result<ContentType, XsdError> {
         // 4 Let the explicit content type be the appropriate case among the following:
         if derivation_method == DerivationMethod::Restriction {
             // 4.1 If {derivation method} = restriction, then the appropriate case among the
             //   following:
-            Self::explicit_content_type_shared(effective_content, effective_mixed)
+            Ok(Self::explicit_content_type_shared(
+                effective_content,
+                effective_mixed,
+            ))
         } else {
             // 4.2 If {derivation method} = extension, then the appropriate case among the
             //   following:
@@ -1046,18 +1063,21 @@ impl ContentType {
             let is_first_case = match base_type_definition {
                 TypeDefinition::Simple(_) => true,
                 TypeDefinition::Complex(c) => matches!(
-                    context.request(c).content_type.variety(),
+                    context.request(c)?.content_type.variety(),
                     ContentTypeVariety::Empty | ContentTypeVariety::Simple
                 ),
             };
 
             if is_first_case {
-                return Self::explicit_content_type_shared(effective_content, effective_mixed);
+                return Ok(Self::explicit_content_type_shared(
+                    effective_content,
+                    effective_mixed,
+                ));
             }
 
             // The base type must be a complex type here
             let base_type_definition = base_type_definition.complex().unwrap();
-            let base_type_definition = context.request(base_type_definition);
+            let base_type_definition = context.request(base_type_definition)?;
 
             // 4.2.2 If the {base type definition} is a complex type definition whose {content
             //   type}.{variety} = element-only or mixed and the ·effective content· is empty, then
@@ -1067,7 +1087,7 @@ impl ContentType {
                 ContentTypeVariety::ElementOnly | ContentTypeVariety::Mixed
             ) && effective_content.is_none()
             {
-                return base_type_definition.content_type.clone();
+                return Ok(base_type_definition.content_type.clone());
             };
 
             // 4.2.3 otherwise a Content Type as follows:
@@ -1173,7 +1193,7 @@ impl ContentType {
                 }))
             };
 
-            Self::from_variety(variety, particle, open_content, None)
+            Ok(Self::from_variety(variety, particle, open_content, None))
         }
     }
 }
@@ -1200,8 +1220,9 @@ impl TopLevelMappable for ComplexTypeDefinition {
         self_ref: Ref<Self>,
         complex_type: Node,
         schema: Node,
-    ) {
-        Self::map_from_xml(context, complex_type, schema, None, Some(self_ref));
+    ) -> Result<(), XsdError> {
+        Self::map_from_xml(context, complex_type, schema, None, Some(self_ref))?;
+        Ok(())
     }
 }
 
@@ -1266,7 +1287,8 @@ mod tests {
             extension_node,
             children_elem,
             schema,
-        );
+        )
+        .unwrap();
         assert!(particle.is_some());
     }
 }

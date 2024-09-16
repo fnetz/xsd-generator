@@ -7,6 +7,7 @@ use super::{
         Component, ComponentResolver, ComponentTraits, ConstructionComponentTable, DynamicRef,
         HasArenaContainer, Lookup, LookupTables, RefNamed,
     },
+    error::XsdError,
     import::{Import, ImportResolver},
     xstypes::QName,
     AttributeDeclaration, AttributeGroupDefinition, ComplexTypeDefinition, ElementDeclaration,
@@ -85,7 +86,7 @@ where
         self_ref: Ref<Self>,
         self_node: Node,
         schema_node: Node,
-    );
+    ) -> Result<(), XsdError>;
 }
 
 pub struct RootContext<'a> {
@@ -150,7 +151,7 @@ impl<'a> RootContext<'a> {
         self.components.insert(ref_, value)
     }
 
-    pub(super) fn resolve<R>(&self, key: &QName) -> R
+    pub(super) fn resolve<R>(&self, key: &QName) -> Option<R>
     where
         R: Copy,
         LookupTables: Lookup<R>,
@@ -245,7 +246,7 @@ impl<'a, 'b, 'input: 'a, 'p> MappingContext<'a, 'b, 'input, 'p> {
             .register_with_name(name, value, &self.root.components)
     }
 
-    pub(super) fn resolve<R>(&self, key: &QName) -> R
+    pub(super) fn resolve<R>(&self, key: &QName) -> Option<R>
     where
         R: Copy,
         LookupTables: Lookup<R>,
@@ -253,7 +254,7 @@ impl<'a, 'b, 'input: 'a, 'p> MappingContext<'a, 'b, 'input, 'p> {
         self.root.resolve(key)
     }
 
-    fn ensure_top_level_is_present<C>(&mut self, ref_: Ref<C>, node: Node)
+    fn ensure_top_level_is_present<C>(&mut self, ref_: Ref<C>, node: Node) -> Result<(), XsdError>
     where
         C: Component + TopLevelMappable + 'static,
         ComponentTraits: HasArenaContainer<C>,
@@ -267,15 +268,17 @@ impl<'a, 'b, 'input: 'a, 'p> MappingContext<'a, 'b, 'input, 'p> {
         if !self.root.components.is_present(ref_) {
             self.in_progress_top_level.insert(dynref);
 
-            C::map_from_top_level_xml(self, ref_, node, self.schema_node);
+            C::map_from_top_level_xml(self, ref_, node, self.schema_node)?;
             assert!(self.root.components.is_present(ref_));
 
             let was_removed = self.in_progress_top_level.remove(&dynref);
             assert!(was_removed);
         }
+
+        Ok(())
     }
 
-    pub(super) fn request<C>(&mut self, ref_: Ref<C>) -> &C
+    pub(super) fn request<C>(&mut self, ref_: Ref<C>) -> Result<&C, XsdError>
     where
         C: Component + TopLevelMappable + 'static,
         ComponentTraits: HasArenaContainer<C>,
@@ -283,19 +286,19 @@ impl<'a, 'b, 'input: 'a, 'p> MappingContext<'a, 'b, 'input, 'p> {
     {
         let node = self.top_level_refs.get_node_by_ref(ref_);
         if let Some(node) = node {
-            self.ensure_top_level_is_present(ref_, node);
+            self.ensure_top_level_is_present(ref_, node)?;
         }
-        ref_.get(&self.root.components)
+        Ok(ref_.get(&self.root.components))
     }
 
-    pub(super) fn request_ref_by_node<C>(&mut self, node: Node) -> Ref<C>
+    pub(super) fn request_ref_by_node<C>(&mut self, node: Node) -> Result<Ref<C>, XsdError>
     where
         C: Component + TopLevelMappable + 'static,
         ComponentTraits: HasArenaContainer<C>,
         TopLevelElements<'a, 'input>: TopLevel<'a, 'input, C>,
     {
         let ref_: Ref<C> = self.top_level_refs.get_ref_by_node_id(node.id());
-        self.ensure_top_level_is_present(ref_, node);
-        ref_
+        self.ensure_top_level_is_present(ref_, node)?;
+        Ok(ref_)
     }
 }

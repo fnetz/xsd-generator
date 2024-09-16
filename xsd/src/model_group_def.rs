@@ -2,6 +2,7 @@ use super::{
     annotation::Annotation,
     components::{Component, Named, NamedXml},
     element_decl,
+    error::XsdError,
     mapping_context::TopLevelMappable,
     model_group::ModelGroup,
     values::actual_value,
@@ -46,7 +47,7 @@ impl ModelGroupDefinition {
         group: Node,
         schema: Node,
         tlref: Option<Ref<Self>>,
-    ) -> Ref<Self> {
+    ) -> Result<Ref<Self>, XsdError> {
         // {name}, {target namespace}
         //   [see `get_name_from_xml()` above.]
         let QName {
@@ -71,14 +72,14 @@ impl ModelGroupDefinition {
             particle,
             schema,
             element_decl::ScopeParent::Group(self_ref),
-        );
+        )?;
 
         // {annotations}
         //    The ·annotation mapping· of the <group> element, as defined in XML Representation of
         //    Annotation Schema Components (§3.15.2).
         let annotations = Annotation::xml_element_annotation_mapping(context, group);
 
-        context.insert(
+        Ok(context.insert(
             self_ref,
             Self {
                 annotations,
@@ -86,7 +87,7 @@ impl ModelGroupDefinition {
                 target_namespace,
                 model_group,
             },
-        )
+        ))
     }
 }
 
@@ -109,7 +110,8 @@ impl TopLevelMappable for ModelGroupDefinition {
         self_ref: Ref<Self>,
         group: Node,
         schema: Node,
-    ) {
-        Self::map_from_xml(context, group, schema, Some(self_ref));
+    ) -> Result<(), XsdError> {
+        Self::map_from_xml(context, group, schema, Some(self_ref))?;
+        Ok(())
     }
 }

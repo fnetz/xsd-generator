@@ -4,6 +4,7 @@ use super::{
     builtins::{XS_ANY_TYPE_NAME, XS_STRING_NAME},
     complex_type_def::{self, ComplexTypeDefinition, ContentType},
     components::{Component, Named, NamedXml},
+    error::XsdError,
     identity_constraint_def::IdentityConstraintDefinition,
     mapping_context::TopLevelMappable,
     model_group_def::ModelGroupDefinition,
@@ -104,7 +105,7 @@ impl ElementDeclaration {
         self_ref: Ref<Self>,
         element: Node,
         schema: Node,
-    ) -> Self {
+    ) -> Result<Self, XsdError> {
         // NOTE: For now, get_name_from_xml() can't be used as the common case doesn't handle the
         //       target namespace
 
@@ -135,7 +136,8 @@ impl ElementDeclaration {
                     schema,
                     None,
                     Some(SimpleContext::Element(self_ref)),
-                );
+                )
+                .unwrap(); // TODO
                 TypeDefinition::Simple(simple_type_def)
             })
             .or_else(|| {
@@ -149,24 +151,31 @@ impl ElementDeclaration {
                             schema,
                             Some(self_ref),
                             None,
-                        );
+                        )
+                        .unwrap(); // TODO
                         TypeDefinition::Complex(complex_type_def)
                     })
             })
             .or_else(|| {
                 element
                     .attribute("type")
-                    .map(|type_| context.resolve(&actual_value::<QName>(type_, element)))
+                    .map(|type_| actual_value::<QName>(type_, element))
+                    .map(|type_| context.resolve(&type_).unwrap()) // TODO
             })
             .or_else(|| {
                 element
                     .attribute("substitutionGroup")
                     .map(|v| actual_value::<Vec<QName>>(v, element))
                     .and_then(|v| v.first().cloned())
-                    .map(|name| context.resolve::<Ref<ElementDeclaration>>(&name))
-                    .map(|element_decl| context.request(element_decl).type_definition)
+                    .map(|name| context.resolve::<Ref<ElementDeclaration>>(&name).unwrap()) // TODO
+                    .map(|element_decl| {
+                        context
+                            .request(element_decl)
+                            .unwrap() // TODO
+                            .type_definition
+                    })
             })
-            .unwrap_or_else(|| context.resolve(&XS_ANY_TYPE_NAME));
+            .unwrap_or_else(|| context.resolve(&XS_ANY_TYPE_NAME).unwrap()); // TODO
 
         // {type table}
         //   A Type Table corresponding to the <alternative> element information items among the
@@ -243,14 +252,14 @@ impl ElementDeclaration {
                 if let TypeDefinition::Simple(st) = type_definition {
                     st
                 } else {
-                    let ct = context.request(type_definition.complex().unwrap());
+                    let ct = context.request(type_definition.complex().unwrap())?;
                     if let ContentType::Simple {
                         simple_type_definition,
                     } = ct.content_type
                     {
                         simple_type_definition
                     } else {
-                        context.resolve(&XS_STRING_NAME)
+                        context.resolve(&XS_STRING_NAME).unwrap() // TODO
                     }
                 };
 
@@ -286,7 +295,7 @@ impl ElementDeclaration {
                 .contains(&c.tag_name().name())
             })
             .map(|icd| IdentityConstraintDefinition::map_from_xml_local(context, icd, schema))
-            .collect();
+            .collect::<Result<Vec<_>, _>>()?;
 
         // {substitution group affiliations}
         //   A set of the element declarations ·resolved· to by the items in the ·actual value· of
@@ -294,7 +303,7 @@ impl ElementDeclaration {
         let substitution_group_affiliations = element
             .attribute("substitutionGroup")
             .map(|v| actual_value::<Vec<QName>>(v, element))
-            .map(|v| v.iter().map(|c| context.resolve(c)).collect())
+            .map(|v| v.iter().map(|c| context.resolve(c).unwrap()).collect()) // TODO
             .unwrap_or_default();
 
         // {disallowed substitutions} (see the helper function for explanation)
@@ -343,7 +352,7 @@ impl ElementDeclaration {
             .for_each(|e| annot_elements.push(e));
         let annotations = Annotation::xml_element_set_annotation_mapping(context, &annot_elements);
 
-        Self {
+        Ok(Self {
             annotations,
             name,
             type_definition,
@@ -359,7 +368,7 @@ impl ElementDeclaration {
             // Populated by the specific implementations below
             target_namespace: None,
             scope: Scope::new_global(),
-        }
+        })
     }
 
     /// Maps the [`ElementDeclaration`] from an `<element>` without a `ref` attribute.
@@ -368,7 +377,7 @@ impl ElementDeclaration {
         element: Node,
         schema: Node,
         parent: ScopeParent,
-    ) -> Ref<Self> {
+    ) -> Result<Ref<Self>, XsdError> {
         let self_ref = context.reserve();
 
         // {target namespace} The appropriate case among the following:
@@ -402,17 +411,16 @@ impl ElementDeclaration {
         //              information item), the Model Group Definition corresponding to that item.
         let scope = Scope::new_local(parent);
 
-        let common = Self::map_from_xml_common(context, self_ref, element, schema);
+        let common = Self::map_from_xml_common(context, self_ref, element, schema)?;
 
-        context.insert(
+        Ok(context.insert(
             self_ref,
             Self {
                 target_namespace,
                 scope,
                 ..common
             },
-        );
-        self_ref
+        ))
     }
 
     pub(super) fn map_from_xml_local(
@@ -420,7 +428,7 @@ impl ElementDeclaration {
         element: Node,
         schema: Node,
         parent: ScopeParent,
-    ) -> Ref<Particle> {
+    ) -> Result<Ref<Particle>, XsdError> {
         assert_eq!(element.tag_name().name(), "element");
         // FIXME: minOccurs=maxOccurs=0 shouldn't create anything
 
@@ -433,7 +441,7 @@ impl ElementDeclaration {
             //   The (top-level) element declaration ·resolved· to by the ·actual value· of the ref
             //   [attribute].
             let ref_: QName = actual_value(ref_, element);
-            context.resolve(&ref_)
+            context.resolve(&ref_).unwrap() // TODO
         } else {
             // If the <element> element information item has <complexType> or <group> as an
             // ancestor, and the ref [attribute] is absent, and it does not have
@@ -442,7 +450,7 @@ impl ElementDeclaration {
 
             // {term}
             //   A (local) element declaration as given below.
-            Self::map_local_element_decl(context, element, schema, parent)
+            Self::map_local_element_decl(context, element, schema, parent)?
         };
         let term = Term::ElementDeclaration(element_decl);
 
@@ -472,16 +480,16 @@ impl ElementDeclaration {
         // {annotations}
         //   The same annotations as the {annotations} of the {term}.
         let annotations = match term {
-            Term::ElementDeclaration(element) => context.request(element).annotations.clone(),
+            Term::ElementDeclaration(element) => context.request(element)?.annotations.clone(),
             _ => unreachable!(),
         };
 
-        context.create(Particle {
+        Ok(context.create(Particle {
             min_occurs,
             max_occurs,
             term,
             annotations,
-        })
+        }))
     }
 
     fn map_attrib_set_helper<'a, T: ActualValue<'a> + PartialEq + Copy>(
@@ -543,7 +551,7 @@ impl TopLevelMappable for ElementDeclaration {
         self_ref: Ref<Self>,
         element: Node,
         schema: Node,
-    ) {
+    ) -> Result<(), XsdError> {
         // {target namespace}
         //   The ·actual value· of the targetNamespace [attribute] of the parent <schema> element
         //   information item, or ·absent· if there is none.
@@ -556,7 +564,7 @@ impl TopLevelMappable for ElementDeclaration {
         //   {parent}  ·absent·
         let scope = Scope::new_global();
 
-        let common = Self::map_from_xml_common(context, self_ref, element, schema);
+        let common = Self::map_from_xml_common(context, self_ref, element, schema)?;
 
         context.insert(
             self_ref,
@@ -566,5 +574,6 @@ impl TopLevelMappable for ElementDeclaration {
                 ..common
             },
         );
+        Ok(())
     }
 }

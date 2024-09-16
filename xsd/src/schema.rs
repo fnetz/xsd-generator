@@ -34,7 +34,10 @@ pub struct Schema {
 }
 
 impl Schema {
-    pub fn map_from_xml(root_context: &mut RootContext, schema: Node) -> Self {
+    pub fn map_from_xml(
+        root_context: &mut RootContext,
+        schema: Node,
+    ) -> Result<Self, crate::error::XsdError> {
         assert_eq!(schema.tag_name().name(), "schema");
 
         let target_namespace = schema
@@ -55,7 +58,7 @@ impl Schema {
             .children()
             .filter(|c| c.tag_name().name() == Import::TAG_NAME)
         {
-            let import = Import::map_from_xml(import, schema).unwrap();
+            let import = Import::map_from_xml(import, schema)?;
             let child_schema = context.root_mut().resolve_import(&import);
 
             // NOTE: Import failure is not an error, but there should be a way to emit a
@@ -95,15 +98,15 @@ impl Schema {
             match top_level_element.tag_name().name() {
                 SimpleTypeDefinition::TAG_NAME => {
                     // TODO unnamed top level allowed?
-                    let name =
-                        SimpleTypeDefinition::name_from_xml(top_level_element, schema).unwrap();
+                    let name = SimpleTypeDefinition::name_from_xml(top_level_element, schema)
+                        .ok_or(crate::error::XsdError::UnnamedTopLevelElement)?;
                     let std_ref = context.reserve();
                     context.register_with_name(name, TypeDefinition::Simple(std_ref));
                     context.top_level_refs.insert(top_level_element, std_ref);
                 }
                 ComplexTypeDefinition::TAG_NAME => {
-                    let name =
-                        ComplexTypeDefinition::name_from_xml(top_level_element, schema).unwrap();
+                    let name = ComplexTypeDefinition::name_from_xml(top_level_element, schema)
+                        .ok_or(crate::error::XsdError::UnnamedTopLevelElement)?;
                     let ctd_ref = context.reserve();
                     context.register_with_name(name, TypeDefinition::Complex(ctd_ref));
                     context.top_level_refs.insert(top_level_element, ctd_ref);
@@ -156,10 +159,11 @@ impl Schema {
                 // These tags don't directly contribute top-level components
                 Annotation::TAG_NAME | Import::TAG_NAME => {}
 
-                _ => panic!(
-                    "Unknown top level element {}",
-                    top_level_element.tag_name().name()
-                ),
+                _ => {
+                    return Err(crate::error::XsdError::UnknownTopLevelElement(
+                        top_level_element.tag_name().name().into(),
+                    ))
+                }
             }
         }
 
@@ -173,16 +177,16 @@ impl Schema {
         //   References to schema components across namespaces (<import>) (§4.2.6)).
         for simple_type in schema
             .children()
-            .filter(|e| e.tag_name().name() == "simpleType")
+            .filter(|e| e.tag_name().name() == SimpleTypeDefinition::TAG_NAME)
         {
-            let simple_type_def = context.request_ref_by_node(simple_type);
+            let simple_type_def = context.request_ref_by_node(simple_type)?;
             type_definitions.push(TypeDefinition::Simple(simple_type_def));
         }
         for complex_type in schema
             .children()
-            .filter(|e| e.tag_name().name() == "complexType")
+            .filter(|e| e.tag_name().name() == ComplexTypeDefinition::TAG_NAME)
         {
-            let complex_type_def = context.request_ref_by_node(complex_type);
+            let complex_type_def = context.request_ref_by_node(complex_type)?;
             type_definitions.push(TypeDefinition::Complex(complex_type_def));
         }
 
@@ -190,67 +194,73 @@ impl Schema {
         //   The (top-level) attribute declarations corresponding to all the <attribute> element
         //   information items in the [children], if any, plus any declarations brought in via
         //   <include>, <override>, <redefine>, and <import>.
-        attribute_declarations.extend(
-            schema
-                .children()
-                .filter(|e| e.tag_name().name() == "attribute")
-                .map(|attribute| context.request_ref_by_node(attribute)),
-        );
+        for attribute_decl in schema
+            .children()
+            .filter(|e| e.tag_name().name() == AttributeDeclaration::TAG_NAME)
+        {
+            let attribute_decl = context.request_ref_by_node(attribute_decl)?;
+            attribute_declarations.push(attribute_decl);
+        }
 
         // {element declarations}
         //   The (top-level) element declarations corresponding to all the <element> element
         //   information items in the [children], if any, plus any declarations brought in via
         //   <include>, <override>, <redefine>, and <import>.
-        element_declarations.extend(
-            schema
-                .children()
-                .filter(|e| e.tag_name().name() == "element")
-                .map(|element| context.request_ref_by_node(element)),
-        );
+        for element_decl in schema
+            .children()
+            .filter(|e| e.tag_name().name() == ElementDeclaration::TAG_NAME)
+        {
+            let element_decl = context.request_ref_by_node(element_decl)?;
+            element_declarations.push(element_decl);
+        }
 
         // {attribute group definitions}
         //   The attribute group definitions corresponding to all the <attributeGroup> element
         //   information items in the [children], if any, plus any definitions brought in via
         //   <include>, <override>, <redefine>, and <import>.
-        attribute_group_definitions.extend(
-            schema
-                .children()
-                .filter(|e| e.tag_name().name() == "attributeGroup")
-                .map(|attribute_group| context.request_ref_by_node(attribute_group)),
-        );
+        for attribute_group_def in schema
+            .children()
+            .filter(|e| e.tag_name().name() == AttributeGroupDefinition::TAG_NAME)
+        {
+            let attribute_group_def = context.request_ref_by_node(attribute_group_def)?;
+            attribute_group_definitions.push(attribute_group_def);
+        }
 
         // {model group definitions}
         //   The model group definitions corresponding to all the <group> element information items
         //   in the [children], if any, plus any definitions brought in via <include>, <redefine>
         //   and <import>.
-        model_group_definitions.extend(
-            schema
-                .children()
-                .filter(|e| e.tag_name().name() == "group")
-                .map(|group| context.request_ref_by_node(group)),
-        );
+        for model_group_def in schema
+            .children()
+            .filter(|e| e.tag_name().name() == ModelGroupDefinition::TAG_NAME)
+        {
+            let model_group_def = context.request_ref_by_node(model_group_def)?;
+            model_group_definitions.push(model_group_def);
+        }
 
         // {notation declarations}
         //   The notation declarations corresponding to all the <notation> element information
         //   items in the [children], if any, plus any declarations brought in via <include>,
         //   <override>, <redefine>, and <import>.
-        notation_declarations.extend(
-            schema
-                .children()
-                .filter(|e| e.tag_name().name() == "notation")
-                .map(|notation| context.request_ref_by_node(notation)),
-        );
+        for notation_decl in schema
+            .children()
+            .filter(|e| e.tag_name().name() == NotationDeclaration::TAG_NAME)
+        {
+            let notation_decl = context.request_ref_by_node(notation_decl)?;
+            notation_declarations.push(notation_decl);
+        }
 
         // {identity-constraint definitions}
         //   The identity-constraint definitions corresponding to all the <key>, <keyref>, and
         //   <unique> element information items anywhere within the [children], if any, plus any
         //   definitions brought in via <include>, <override>, <redefine>, and <import>.
-        identity_constraint_definitions.extend(
-            schema
-                .children()
-                .filter(|e| ["key", "keyref", "unique"].contains(&e.tag_name().name()))
-                .map(|icd| context.request_ref_by_node(icd)),
-        );
+        for icd in schema
+            .children()
+            .filter(|e| IdentityConstraintDefinition::TAG_NAMES.contains(&e.tag_name().name()))
+        {
+            let icd = context.request_ref_by_node(icd)?;
+            identity_constraint_definitions.push(icd);
+        }
 
         // {annotations}
         //   The ·annotation mapping· of the set of elements containing the <schema> and all the
@@ -273,7 +283,7 @@ impl Schema {
         let annotations =
             Annotation::xml_element_set_annotation_mapping(&mut context, &annot_elements);
 
-        Self {
+        Ok(Self {
             annotations,
             type_definitions,
             attribute_declarations,
@@ -284,6 +294,6 @@ impl Schema {
             identity_constraint_definitions,
 
             target_namespace,
-        }
+        })
     }
 }

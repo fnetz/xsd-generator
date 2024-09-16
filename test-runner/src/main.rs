@@ -173,7 +173,7 @@ fn main() {
                             &import_resolvers,
                         )
                     });
-                    if res.is_err() {
+                    if matches!(res, Err(_) | Ok(Err(_))) {
                         ok = false;
                     }
                 }
@@ -249,7 +249,7 @@ impl ImportResolver for LocalImportResolver {
         let xsd = roxmltree::Document::parse_with_options(&text, options).unwrap();
         let schema = xsd.root_element();
         import.validate_imported_schema(schema)?;
-        let schema = Schema::map_from_xml(context, schema);
+        let schema = Schema::map_from_xml(context, schema).map_err(ImportError::Xsd)?;
         Ok(schema)
     }
 }

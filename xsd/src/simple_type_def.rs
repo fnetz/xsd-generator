@@ -6,6 +6,7 @@ use super::{
     components::{Component, Named, RefNamed},
     constraining_facet::{ConstrainingFacet, ConstrainingFacets, WhiteSpace, WhiteSpaceValue},
     element_decl::ElementDeclaration,
+    error::XsdError,
     fundamental_facet::{CardinalityValue, FundamentalFacet, FundamentalFacetSet, OrderedValue},
     mapping_context::{MappingContext, TopLevelMappable},
     shared::TypeDefinition,
@@ -117,7 +118,7 @@ impl SimpleTypeDefinition {
         schema: Node,
         tlref: Option<Ref<Self>>,
         parent: Option<Context>,
-    ) -> Ref<Self> {
+    ) -> Result<Ref<Self>, XsdError> {
         assert_eq!(simple_type.tag_name().name(), Self::TAG_NAME);
 
         let self_ref = tlref.unwrap_or_else(|| ctx.reserve());
@@ -164,26 +165,26 @@ impl SimpleTypeDefinition {
             child
                 .attribute("base")
                 .map(|v| actual_value::<QName>(v, child))
-                .map(|name| ctx.resolve(&name))
+                .map(|name| ctx.resolve(&name).unwrap()) // TODO
                 .unwrap_or_else(|| {
                     let st = child
                         .children()
                         .find(|c| c.tag_name().name() == Self::TAG_NAME)
-                        .map(|st| {
-                            Self::map_from_xml(
-                                ctx,
-                                st,
-                                schema,
-                                None,
-                                Some(Context::SimpleType(self_ref)),
-                            )
-                        })
                         .unwrap();
+                    let st = Self::map_from_xml(
+                        ctx,
+                        st,
+                        schema,
+                        None,
+                        Some(Context::SimpleType(self_ref)),
+                    )
+                    .unwrap(); // TODO
                     TypeDefinition::Simple(st)
                 })
         } else {
             // 2 If the <list> or <union> alternative is chosen, then ·xs:anySimpleType·.
             ctx.resolve(&XS_ANY_SIMPLE_TYPE_NAME)
+                .expect("Built-in type xs:anySimpleType must be present")
         };
 
         // {final}
@@ -267,7 +268,7 @@ impl SimpleTypeDefinition {
                         ConstrainingFacet::map_from_xml(ctx, &facet_nodes, schema).unwrap();
 
                     // Request the component here to avoid a mutable borrow through b
-                    ctx.request(base_type_definition);
+                    ctx.request(base_type_definition)?;
 
                     // Given two sets of facets B and S, the result of overlaying B with S is the
                     // set of facets R for which all of the following are true:
@@ -337,7 +338,7 @@ impl SimpleTypeDefinition {
                     );
 
                     let variety = ctx
-                        .request(base_type_definition)
+                        .request(base_type_definition)?
                         .variety
                         .expect("Any type which is not anySimpleType must have a variety");
 
@@ -391,7 +392,7 @@ impl SimpleTypeDefinition {
                         //       whichever is present.
                         list.attribute("itemType")
                             .map(|item_type| actual_value::<QName>(item_type, list))
-                            .map(|item_type| ctx.resolve(&item_type))
+                            .map(|item_type| ctx.resolve(&item_type).unwrap()) // TODO
                             .or_else(|| {
                                 list.children()
                                     .find(|c| c.tag_name().name() == Self::TAG_NAME)
@@ -403,6 +404,7 @@ impl SimpleTypeDefinition {
                                             None,
                                             Some(Context::SimpleType(self_ref)),
                                         )
+                                        .unwrap() // TODO
                                     })
                             })
                             .unwrap()
@@ -410,7 +412,7 @@ impl SimpleTypeDefinition {
                         // 2 otherwise (that is, the {base type definition} is not
                         //   ·xs:anySimpleType·), the {item type definition} of the {base type
                         //   definition}.
-                        ctx.request(base_type_definition.simple().unwrap())
+                        ctx.request(base_type_definition.simple().unwrap())?
                             .item_type_definition
                             .unwrap() // TODO unwrap allowed?
                     },
@@ -420,7 +422,7 @@ impl SimpleTypeDefinition {
                 let union_ = child;
 
                 // {member type definitions} The appropriate case among the following:
-                let base_type_definition = ctx.request(base_type_definition.simple().unwrap());
+                let base_type_definition = ctx.request(base_type_definition.simple().unwrap())?;
                 member_type_definitions = Some(
                     if base_type_definition.name().as_ref() == Some(&XS_ANY_SIMPLE_TYPE_NAME) {
                         // 1 If the {base type definition} is ·xs:anySimpleType·, then the sequence
@@ -437,6 +439,7 @@ impl SimpleTypeDefinition {
                                     .into_iter()
                                     .map(|member_type| {
                                         ctx.resolve::<Ref<SimpleTypeDefinition>>(&member_type)
+                                            .unwrap() // TODO
                                     })
                                     .collect::<Vec<_>>()
                             })
@@ -454,6 +457,7 @@ impl SimpleTypeDefinition {
                                         None,
                                         Some(Context::SimpleType(self_ref)),
                                     )
+                                    .unwrap() // TODO
                                 }),
                         );
 
@@ -474,7 +478,7 @@ impl SimpleTypeDefinition {
         // TODO make fundamental facets non-optional
         let fundamental_facets = {
             let base_type_definition = base_type_definition.simple().unwrap();
-            ctx.request(base_type_definition);
+            ctx.request(base_type_definition)?;
 
             // === ordered ===
             // The appropriate case among the following must be true:
@@ -505,7 +509,7 @@ impl SimpleTypeDefinition {
                     //     component in its {fundamental facets} whose {value} is false, then
                     //     {value} is false.
                     if member_type_definitions.iter().copied().all(|member| {
-                        let member = ctx.request(member);
+                        let member = ctx.request(member).unwrap(); // TODO
                         member.fundamental_facets.ordered() == Some(OrderedValue::False)
                     }) {
                         OrderedValue::False
@@ -584,7 +588,7 @@ impl SimpleTypeDefinition {
                     // otherwise {value} is countably infinite.
                     if has_facet!(Length) || (has_facet!(MinLength) && has_facet!(MaxLength)) {
                         let item_type_definition = item_type_definition.unwrap();
-                        let item_type_definition = ctx.request(item_type_definition);
+                        let item_type_definition = ctx.request(item_type_definition)?;
 
                         let cardinality = item_type_definition.fundamental_facets.cardinality();
                         if cardinality == Some(CardinalityValue::Finite) {
@@ -605,7 +609,12 @@ impl SimpleTypeDefinition {
                         .unwrap()
                         .iter()
                         .copied()
-                        .map(|member| ctx.request(member).fundamental_facets.cardinality())
+                        .map(|member| {
+                            ctx.request(member)
+                                .unwrap() // TODO
+                                .fundamental_facets
+                                .cardinality()
+                        })
                         .all(|cardinality| cardinality == Some(CardinalityValue::Finite))
                     {
                         CardinalityValue::Finite
@@ -640,7 +649,12 @@ impl SimpleTypeDefinition {
                         .unwrap()
                         .iter()
                         .copied()
-                        .map(|member| ctx.request(member).fundamental_facets.numeric())
+                        .map(|member| {
+                            ctx.request(member)
+                                .unwrap() // TODO
+                                .fundamental_facets
+                                .numeric()
+                        })
                         .all(|numeric| numeric == Some(true))
                 }
             };
@@ -672,7 +686,7 @@ impl SimpleTypeDefinition {
             },
         );
 
-        self_ref
+        Ok(self_ref)
     }
 
     fn map_cardinality_atomic(
@@ -787,7 +801,8 @@ impl TopLevelMappable for SimpleTypeDefinition {
         self_ref: Ref<Self>,
         simple_type: Node,
         schema: Node,
-    ) {
-        Self::map_from_xml(context, simple_type, schema, Some(self_ref), None);
+    ) -> Result<(), XsdError> {
+        Self::map_from_xml(context, simple_type, schema, Some(self_ref), None)?;
+        Ok(())
     }
 }

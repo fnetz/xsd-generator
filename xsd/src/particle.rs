@@ -2,6 +2,7 @@ use super::{
     annotation::Annotation,
     components::{Component, ComponentTable},
     element_decl,
+    error::XsdError,
     model_group::Compositor,
     shared::Term,
     values::actual_value,
@@ -114,7 +115,7 @@ impl Particle {
         particle: Node,
         schema: Node,
         element_parent: element_decl::ScopeParent,
-    ) -> Ref<ModelGroup> {
+    ) -> Result<Ref<ModelGroup>, XsdError> {
         // {compositor}
         //   One of all, choice, sequence depending on the element information item.
         let compositor = match particle.tag_name().name() {
@@ -146,18 +147,18 @@ impl Particle {
                 )),
                 _ => None,
             })
-            .collect();
+            .collect::<Result<Vec<_>, _>>()?;
 
         // {annotations}
         //   The ·annotation mapping· of the <all>, <choice>, or <sequence> element, whichever is
         //   present, as defined in XML Representation of Annotation Schema Components (§3.15.2).
         let annotations = Annotation::xml_element_annotation_mapping(context, particle);
 
-        context.create(ModelGroup {
+        Ok(context.create(ModelGroup {
             compositor,
             particles,
             annotations,
-        })
+        }))
     }
 
     /// Mapper for Model groups `<all>`, `<sequence>`, and `<choice>`, see XML Representation of Model
@@ -167,7 +168,7 @@ impl Particle {
         particle: Node,
         schema: Node,
         element_parent: element_decl::ScopeParent,
-    ) -> Ref<Self> {
+    ) -> Result<Ref<Self>, XsdError> {
         assert!(matches!(
             particle.tag_name().name(),
             "all" | "choice" | "sequence"
@@ -197,19 +198,19 @@ impl Particle {
         // {term}
         //   [see `map_from_xml_model_group_term()` above.]
         let model_group =
-            Self::map_from_xml_model_group_term(context, particle, schema, element_parent);
+            Self::map_from_xml_model_group_term(context, particle, schema, element_parent)?;
         let term = Term::ModelGroup(model_group);
 
         // {annotations}
         //   The same annotations as the {annotations} of the model group.
         let annotations = model_group.get(context.components()).annotations.clone();
 
-        context.create(Particle {
+        Ok(context.create(Particle {
             min_occurs,
             max_occurs,
             term,
             annotations,
-        })
+        }))
     }
 
     /// Mapper for Group references `<group>`, see XML Representation of Model Group Definition
@@ -217,7 +218,7 @@ impl Particle {
     pub(super) fn map_from_xml_group_reference(
         context: &mut MappingContext,
         group: Node,
-    ) -> Ref<Particle> {
+    ) -> Result<Ref<Particle>, XsdError> {
         assert_eq!(group.tag_name().name(), "group");
         // FIXME: minOccurs=maxOccurs=0 shouldn't create anything
 
@@ -243,19 +244,19 @@ impl Particle {
         // {term}: The {model group} of the model group definition ·resolved· to by the ·actual value· of the ref [attribute]
         // TODO: handle missing ref?
         let ref_ = actual_value::<QName>(group.attribute("ref").unwrap(), group);
-        let ref_model_group_definition: Ref<ModelGroupDefinition> = context.resolve(&ref_);
-        let term = Term::ModelGroup(context.request(ref_model_group_definition).model_group);
+        let ref_model_group_definition: Ref<ModelGroupDefinition> = context.resolve(&ref_).unwrap(); // TODO
+        let term = Term::ModelGroup(context.request(ref_model_group_definition)?.model_group);
 
         // The ·annotation mapping· of the <group> element, as defined in XML Representation of
         // Annotation Schema Components (§3.15.2).
         let annotations = Annotation::xml_element_annotation_mapping(context, group);
 
-        context.create(Particle {
+        Ok(context.create(Particle {
             min_occurs,
             max_occurs,
             term,
             annotations,
-        })
+        }))
     }
 
     // TODO anyAttribute
@@ -265,7 +266,7 @@ impl Particle {
         context: &mut MappingContext,
         any: Node,
         schema: Node,
-    ) -> Ref<Self> {
+    ) -> Result<Ref<Self>, XsdError> {
         // TODO handle minOccurs=maxOccurs=0
         assert_eq!(any.tag_name().name(), "any");
 
@@ -296,12 +297,12 @@ impl Particle {
         // {annotations} The same annotations as the {annotations} of the wildcard.
         let annotations = wildcard.get(context.components()).annotations.clone();
 
-        context.create(Particle {
+        Ok(context.create(Particle {
             min_occurs,
             max_occurs,
             term,
             annotations,
-        })
+        }))
     }
 }
 

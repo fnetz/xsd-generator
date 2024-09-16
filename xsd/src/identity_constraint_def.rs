@@ -4,6 +4,7 @@ use super::{
     annotation::Annotation,
     assertion::XPathExpression,
     components::{Component, Named, NamedXml},
+    error::XsdError,
     mapping_context::{MappingContext, TopLevelMappable},
     values::actual_value,
     xstypes::{AnyURI, NCName, QName, Sequence},
@@ -61,12 +62,17 @@ impl IdentityConstraintDefinition {
     pub const KEY_TAG_NAME: &'static str = "key";
     pub const KEYREF_TAG_NAME: &'static str = "keyref";
     pub const UNIQUE_TAG_NAME: &'static str = "unique";
+    pub const TAG_NAMES: [&'static str; 3] = [
+        Self::KEY_TAG_NAME,
+        Self::KEYREF_TAG_NAME,
+        Self::UNIQUE_TAG_NAME,
+    ];
 
     pub(super) fn map_from_xml_local(
         context: &mut MappingContext,
         icd: Node,
         schema: Node,
-    ) -> Ref<Self> {
+    ) -> Result<Ref<Self>, XsdError> {
         let self_ref = context.reserve();
         Self::map_from_xml(context, icd, schema, self_ref)
     }
@@ -76,7 +82,7 @@ impl IdentityConstraintDefinition {
         icd: Node,
         schema: Node,
         self_ref: Ref<Self>,
-    ) -> Ref<Self> {
+    ) -> Result<Ref<Self>, XsdError> {
         let QName {
             local_name: name,
             namespace_name: target_namespace,
@@ -122,7 +128,11 @@ impl IdentityConstraintDefinition {
         //   ·actual value· of the refer [attribute], otherwise ·absent·.
         let referenced_key = if icd.tag_name().name() == "keyref" {
             let refer: QName = actual_value(icd.attribute("refer").unwrap(), icd);
-            Some(context.resolve(&refer))
+            Some(
+                context
+                    .resolve(&refer)
+                    .ok_or(XsdError::UnresolvedReference(refer))?,
+            )
         } else {
             None
         };
@@ -135,7 +145,7 @@ impl IdentityConstraintDefinition {
         // TODO selector, field
         let annotations = Annotation::xml_element_set_annotation_mapping(context, &ae);
 
-        context.insert(
+        Ok(context.insert(
             self_ref,
             Self {
                 annotations,
@@ -146,7 +156,7 @@ impl IdentityConstraintDefinition {
                 fields,
                 referenced_key,
             },
-        )
+        ))
     }
 }
 
@@ -160,7 +170,8 @@ impl TopLevelMappable for IdentityConstraintDefinition {
         self_ref: Ref<Self>,
         icd: Node,
         schema: Node,
-    ) {
-        Self::map_from_xml(context, icd, schema, self_ref);
+    ) -> Result<(), XsdError> {
+        Self::map_from_xml(context, icd, schema, self_ref)?;
+        Ok(())
     }
 }
