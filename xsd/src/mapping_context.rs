@@ -262,7 +262,7 @@ impl<'a, 'b, 'input: 'a, 'p> MappingContext<'a, 'b, 'input, 'p> {
         let dynref: DynamicRef = ref_.into();
 
         if self.in_progress_top_level.contains(&dynref) {
-            panic!("Invalid circular dependency detected!");
+            return Err(XsdError::UnsupportedCircularReference);
         }
 
         if !self.root.components.is_present(ref_) {

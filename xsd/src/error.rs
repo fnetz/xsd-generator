@@ -10,6 +10,7 @@ pub enum XsdError {
     UnknownTopLevelElement(String),
     UnresolvedReference(QName),
     UnresolvedBuiltin(&'static QName),
+    UnsupportedCircularReference,
 }
 
 impl fmt::Display for XsdError {
@@ -32,6 +33,9 @@ impl fmt::Display for XsdError {
             }
             Self::UnresolvedBuiltin(name) => {
                 write!(f, "Unresolved builtin {name:?}")
+            }
+            Self::UnsupportedCircularReference => {
+                write!(f, "Unsupported circular reference")
             }
         }
     }
