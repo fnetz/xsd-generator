@@ -6,7 +6,7 @@ use super::{
     simple_type_def::SimpleTypeDefinition,
     wildcard::Wildcard,
     xstypes::QName,
-    Ref,
+    Annotation, Ref,
 };
 
 /// Common type for [attribute_decl::ScopeVariety](super::attribute_decl::ScopeVariety) and
@@ -192,6 +192,14 @@ impl Term {
 
     pub fn is_basic(&self) -> bool {
         matches!(self, Self::ElementDeclaration(_) | Self::Wildcard(_))
+    }
+
+    pub fn annotations<'a>(&self, components: &'a impl ComponentTable) -> &'a [Ref<Annotation>] {
+        match self {
+            Self::ElementDeclaration(e) => &e.get(components).annotations,
+            Self::ModelGroup(g) => &g.get(components).annotations,
+            Self::Wildcard(w) => &w.get(components).annotations,
+        }
     }
 }
 

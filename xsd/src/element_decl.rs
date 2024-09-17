@@ -479,10 +479,8 @@ impl ElementDeclaration {
 
         // {annotations}
         //   The same annotations as the {annotations} of the {term}.
-        let annotations = match term {
-            Term::ElementDeclaration(element) => context.request(element)?.annotations.clone(),
-            _ => unreachable!(),
-        };
+        // NOTE: These are provided on-demand by the `annotations` method on Particle.
+        let annotations = None;
 
         Ok(context.create(Particle {
             min_occurs,
