@@ -851,7 +851,7 @@ impl ContentType {
                     min_occurs: 1,
                     max_occurs: MaxOccurs::Count(1),
                     term,
-                    annotations: Sequence::new(),
+                    annotations: None,
                 }))
             } else {
                 // 3.1.2 otherwise empty.
@@ -949,7 +949,7 @@ impl ContentType {
                     min_occurs: 1,
                     max_occurs: MaxOccurs::Count(1),
                     term,
-                    annotations: Sequence::new(),
+                    annotations: None,
                 }))
             };
 
@@ -1175,7 +1175,7 @@ impl ContentType {
                             .min_occurs,
                         max_occurs: MaxOccurs::Count(1),
                         term: Term::ModelGroup(term),
-                        annotations: Sequence::new(),
+                        annotations: None,
                     }),
                 )
             } else {
@@ -1189,7 +1189,7 @@ impl ContentType {
                     min_occurs: 1,
                     max_occurs: MaxOccurs::Count(1),
                     term: Term::ModelGroup(mg),
-                    annotations: Sequence::new(),
+                    annotations: None,
                 }))
             };
 

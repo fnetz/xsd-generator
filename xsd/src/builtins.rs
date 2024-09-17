@@ -66,7 +66,7 @@ fn register_xs_any_type(context: &mut RootContext) {
         min_occurs: 0,
         max_occurs: MaxOccurs::Unbounded,
         term: Term::Wildcard(inner_particle_term),
-        annotations: Sequence::new(),
+        annotations: None,
     });
 
     // The outer particle of ·xs:anyType· contains a sequence with a single term:
@@ -80,7 +80,7 @@ fn register_xs_any_type(context: &mut RootContext) {
         min_occurs: 1,
         max_occurs: MaxOccurs::Count(1),
         term: Term::ModelGroup(outer_particle_term),
-        annotations: Sequence::new(),
+        annotations: None,
     });
 
     let wildcard = context.create(Wildcard {

@@ -17,7 +17,7 @@ pub struct Particle {
     pub min_occurs: u64, // TODO nonNegativeInteger
     pub max_occurs: MaxOccurs,
     pub term: Term,
-    pub annotations: Sequence<Ref<Annotation>>,
+    pub(crate) annotations: Option<Sequence<Ref<Annotation>>>,
 }
 
 #[derive(Clone, Debug)]
@@ -203,7 +203,8 @@ impl Particle {
 
         // {annotations}
         //   The same annotations as the {annotations} of the model group.
-        let annotations = model_group.get(context.components()).annotations.clone();
+        // NOTE: These are provided on-demand by the `annotations` method.
+        let annotations = None;
 
         Ok(context.create(Particle {
             min_occurs,
@@ -249,7 +250,7 @@ impl Particle {
 
         // The ·annotation mapping· of the <group> element, as defined in XML Representation of
         // Annotation Schema Components (§3.15.2).
-        let annotations = Annotation::xml_element_annotation_mapping(context, group);
+        let annotations = Some(Annotation::xml_element_annotation_mapping(context, group));
 
         Ok(context.create(Particle {
             min_occurs,
@@ -295,7 +296,8 @@ impl Particle {
         let term = Term::Wildcard(wildcard);
 
         // {annotations} The same annotations as the {annotations} of the wildcard.
-        let annotations = wildcard.get(context.components()).annotations.clone();
+        // NOTE: These are provided on-demand by the `annotations` method.
+        let annotations = None;
 
         Ok(context.create(Particle {
             min_occurs,
@@ -303,6 +305,12 @@ impl Particle {
             term,
             annotations,
         }))
+    }
+
+    pub fn annotations<'a>(&'a self, components: &'a impl ComponentTable) -> &'a [Ref<Annotation>] {
+        self.annotations
+            .as_deref()
+            .unwrap_or_else(|| self.term.annotations(components))
     }
 }
 
