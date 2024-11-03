@@ -1,5 +1,7 @@
 mod cli;
 mod generators;
+mod ist;
+
 use clap::Parser;
 
 use dt_xsd::import::{Import, ImportError, ImportResolver};

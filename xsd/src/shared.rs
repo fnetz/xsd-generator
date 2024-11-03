@@ -58,7 +58,7 @@ impl<P> Scope<P> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ValueConstraintVariety {
     Default,
     Fixed,

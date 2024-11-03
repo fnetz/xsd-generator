@@ -21,6 +21,7 @@ pub mod particle;
 pub mod schema;
 pub mod shared;
 pub mod simple_type_def;
+pub mod state_machine;
 pub mod type_alternative;
 pub mod wildcard;
 pub mod xstypes;

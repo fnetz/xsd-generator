@@ -7,5 +7,5 @@ license.workspace = true
 [dependencies]
 dt-xsd = { path = "../xsd" }
 clap = { version = "4.0", features = ["derive", "wrap_help"] }
-roxmltree = "0.19"
+roxmltree = "0.20"
 quick-xml = "0.36.1"
