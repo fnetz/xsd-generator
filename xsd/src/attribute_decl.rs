@@ -1,7 +1,7 @@
 use super::simple_type_def::Context as SimpleContext;
 use super::{
     builtins::XS_ANY_SIMPLE_TYPE_NAME,
-    components::{Component, Named, NamedXml},
+    components::{AnnotatedComponent, Component, Named, NamedXml},
     error::XsdError,
     mapping_context::TopLevelMappable,
     shared,
@@ -417,6 +417,12 @@ impl Component for AttributeDeclaration {
 
     fn is_builtin(&self) -> bool {
         self.is_builtin
+    }
+}
+
+impl AnnotatedComponent for AttributeDeclaration {
+    fn annotations(&self) -> &[Ref<Annotation>] {
+        &self.annotations
     }
 }
 

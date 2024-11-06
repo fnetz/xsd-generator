@@ -1,6 +1,10 @@
 use super::{
-    annotation::Annotation, assertion::XPathExpression, components::Component,
-    shared::TypeDefinition, xstypes::Sequence, Ref,
+    annotation::Annotation,
+    assertion::XPathExpression,
+    components::{AnnotatedComponent, Component},
+    shared::TypeDefinition,
+    xstypes::Sequence,
+    Ref,
 };
 use roxmltree::Node;
 
@@ -20,4 +24,10 @@ impl TypeAlternative {
 
 impl Component for TypeAlternative {
     const DISPLAY_NAME: &'static str = "TypeAlternative";
+}
+
+impl AnnotatedComponent for TypeAlternative {
+    fn annotations(&self) -> &[Ref<Annotation>] {
+        &self.annotations
+    }
 }

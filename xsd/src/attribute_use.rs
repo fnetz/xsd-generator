@@ -1,6 +1,10 @@
 use super::{
-    annotation::Annotation, attribute_decl::AttributeDeclaration, components::Component, shared,
-    xstypes::Sequence, Ref,
+    annotation::Annotation,
+    attribute_decl::AttributeDeclaration,
+    components::{AnnotatedComponent, Component},
+    shared,
+    xstypes::Sequence,
+    Ref,
 };
 
 /// Schema Component: Attribute Use, a kind of Annotated Component (§3.5)
@@ -18,4 +22,10 @@ pub use shared::ValueConstraint;
 
 impl Component for AttributeUse {
     const DISPLAY_NAME: &'static str = "AttributeUse";
+}
+
+impl AnnotatedComponent for AttributeUse {
+    fn annotations(&self) -> &[Ref<Annotation>] {
+        &self.annotations
+    }
 }

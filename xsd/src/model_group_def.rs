@@ -1,6 +1,6 @@
 use super::{
     annotation::Annotation,
-    components::{Component, Named, NamedXml},
+    components::{AnnotatedComponent, Component, Named, NamedXml},
     element_decl,
     error::XsdError,
     mapping_context::TopLevelMappable,
@@ -93,6 +93,12 @@ impl ModelGroupDefinition {
 
 impl Component for ModelGroupDefinition {
     const DISPLAY_NAME: &'static str = "ModelGroupDefinition";
+}
+
+impl AnnotatedComponent for ModelGroupDefinition {
+    fn annotations(&self) -> &[Ref<Annotation>] {
+        &self.annotations
+    }
 }
 
 impl Named for ModelGroupDefinition {

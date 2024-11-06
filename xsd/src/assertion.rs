@@ -1,6 +1,6 @@
 use super::{
     annotation::Annotation,
-    components::Component,
+    components::{AnnotatedComponent, Component},
     values::actual_value,
     xstypes::{AnyURI, NCName, Sequence, Set},
     MappingContext, Ref,
@@ -129,4 +129,10 @@ impl XPathExpression {
 
 impl Component for Assertion {
     const DISPLAY_NAME: &'static str = "Assertion";
+}
+
+impl AnnotatedComponent for Assertion {
+    fn annotations(&self) -> &[Ref<Annotation>] {
+        &self.annotations
+    }
 }

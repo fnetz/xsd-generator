@@ -325,3 +325,5 @@ impl Schema {
             .copied()
     }
 }
+
+// TODO: impl AnnotatedComponent

@@ -3,7 +3,7 @@ use roxmltree::Node;
 use super::{
     annotation::Annotation,
     assertion::XPathExpression,
-    components::{Component, Named, NamedXml},
+    components::{AnnotatedComponent, Component, Named, NamedXml},
     error::XsdError,
     mapping_context::{MappingContext, TopLevelMappable},
     values::actual_value,
@@ -162,6 +162,12 @@ impl IdentityConstraintDefinition {
 
 impl Component for IdentityConstraintDefinition {
     const DISPLAY_NAME: &'static str = "IdentityConstraintDefinition";
+}
+
+impl AnnotatedComponent for IdentityConstraintDefinition {
+    fn annotations(&self) -> &[Ref<Annotation>] {
+        &self.annotations
+    }
 }
 
 impl TopLevelMappable for IdentityConstraintDefinition {

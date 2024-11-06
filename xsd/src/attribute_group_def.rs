@@ -2,7 +2,7 @@ use super::{
     annotation::Annotation,
     attribute_decl::{self, AttributeDeclaration},
     attribute_use::AttributeUse,
-    components::{Component, Named, NamedXml},
+    components::{AnnotatedComponent, Component, Named, NamedXml},
     error::XsdError,
     mapping_context::TopLevelMappable,
     values::actual_value,
@@ -121,6 +121,12 @@ impl Named for AttributeGroupDefinition {
 
 impl Component for AttributeGroupDefinition {
     const DISPLAY_NAME: &'static str = "AttributeGroupDefinition";
+}
+
+impl AnnotatedComponent for AttributeGroupDefinition {
+    fn annotations(&self) -> &[Ref<Annotation>] {
+        &self.annotations
+    }
 }
 
 impl TopLevelMappable for AttributeGroupDefinition {

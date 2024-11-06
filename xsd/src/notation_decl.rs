@@ -1,6 +1,6 @@
 use super::{
     annotation::Annotation,
-    components::{Component, Named, NamedXml},
+    components::{AnnotatedComponent, Component, Named, NamedXml},
     error::XsdError,
     mapping_context::TopLevelMappable,
     values::actual_value,
@@ -89,6 +89,12 @@ impl NotationDeclaration {
 
 impl Component for NotationDeclaration {
     const DISPLAY_NAME: &'static str = "NotationDeclaration";
+}
+
+impl AnnotatedComponent for NotationDeclaration {
+    fn annotations(&self) -> &[Ref<Annotation>] {
+        &self.annotations
+    }
 }
 
 impl Named for NotationDeclaration {

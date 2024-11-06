@@ -26,6 +26,11 @@ pub trait Component {
     }
 }
 
+/// Annotated component per <https://www.w3.org/TR/xmlschema11-1/#ac>.
+pub trait AnnotatedComponent: Component {
+    fn annotations(&self) -> &[Ref<Annotation>];
+}
+
 /// Type on which internal component traits are implemented.
 ///
 /// This type is used to prevent leaking internal functions into the [`Component`]
