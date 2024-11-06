@@ -1,13 +1,12 @@
-/// https://www.cogsci.ed.ac.uk/~ht/XML_Europe_2003.html
+//! https://www.cogsci.ed.ac.uk/~ht/XML_Europe_2003.html
+use crate::{
+    model_group::Compositor, ElementDeclaration, Particle, Ref, SchemaComponentTable, Term,
+    Wildcard,
+};
 use std::{
     borrow::Borrow,
     collections::{BTreeMap, BTreeSet, HashMap},
     rc::Rc,
-};
-
-use crate::{
-    components::ComponentTable, model_group::Compositor, ElementDeclaration, Particle, Ref,
-    SchemaComponentTable, Term, Wildcard,
 };
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]

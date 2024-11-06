@@ -1,4 +1,4 @@
-use super::{
+use crate::{
     annotation::Annotation,
     assertion::XPathExpression,
     components::{AnnotatedComponent, Component},

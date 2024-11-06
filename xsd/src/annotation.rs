@@ -1,6 +1,4 @@
-use super::components::Component;
-use super::xstypes::Sequence;
-use super::{MappingContext, Ref};
+use crate::{components::Component, xstypes::Sequence, MappingContext, Ref};
 use roxmltree::Node;
 
 /// Schema Component: Annotation, a kind of Component (§3.15)

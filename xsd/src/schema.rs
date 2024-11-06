@@ -1,4 +1,4 @@
-use super::{
+use crate::{
     annotation::Annotation,
     attribute_decl::AttributeDeclaration,
     attribute_group_def::AttributeGroupDefinition,

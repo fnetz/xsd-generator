@@ -1,6 +1,4 @@
-use roxmltree::Node;
-
-use super::{
+use crate::{
     annotation::Annotation,
     assertion::XPathExpression,
     components::{AnnotatedComponent, Component, Named, NamedXml},
@@ -10,6 +8,7 @@ use super::{
     xstypes::{AnyURI, NCName, QName, Sequence},
     Ref,
 };
+use roxmltree::Node;
 
 /// Schema Component: Identity-Constraint Definition, a kind of Annotated Component (§3.11)
 #[derive(Clone, Debug)]

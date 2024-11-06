@@ -1,4 +1,4 @@
-use super::xstypes::Set;
+use crate::xstypes::Set;
 
 /// Fundamental facet (pt. 2, §4.2)
 ///

@@ -1,6 +1,5 @@
-use std::collections::{HashMap, HashSet};
-
 use roxmltree::{Node, NodeId};
+use std::collections::{HashMap, HashSet};
 
 use super::{
     components::{

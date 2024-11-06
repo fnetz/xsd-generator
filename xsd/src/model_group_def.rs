@@ -1,4 +1,4 @@
-use super::{
+use crate::{
     annotation::Annotation,
     components::{AnnotatedComponent, Component, Named, NamedXml},
     element_decl,

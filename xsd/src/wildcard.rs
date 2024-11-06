@@ -1,7 +1,5 @@
-use std::collections::HashSet;
-use std::fmt;
-
 use roxmltree::Node;
+use std::{collections::HashSet, fmt};
 
 use super::{
     annotation::Annotation,

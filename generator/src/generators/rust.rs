@@ -5,14 +5,14 @@ use syn::{
     FieldMutability, Fields, Token, TypePath, Variant,
 };
 
-use dt_xsd::components::{IsBuiltinRef, Named};
-use dt_xsd::constraining_facet::WhiteSpaceValue;
-use dt_xsd::simple_type_def::Variety as SimpleVariety;
 use dt_xsd::{
     attribute_decl::ScopeVariety,
     complex_type_def::{self, ContentType},
+    components::{IsBuiltinRef, Named},
+    constraining_facet::WhiteSpaceValue,
     model_group::Compositor,
     particle::MaxOccurs,
+    simple_type_def::Variety as SimpleVariety,
     AttributeUse, ComplexTypeDefinition, ElementDeclaration, Particle, Ref, RefNamed, Schema,
     SchemaComponentTable, SimpleTypeDefinition, Term, TypeDefinition,
 };

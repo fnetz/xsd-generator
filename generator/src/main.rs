@@ -4,8 +4,10 @@ mod ist;
 
 use clap::Parser;
 
-use dt_xsd::import::{Import, ImportError, ImportResolver};
-use dt_xsd::{RootContext, Schema};
+use dt_xsd::{
+    import::{Import, ImportError, ImportResolver},
+    RootContext, Schema,
+};
 
 struct HttpImportResolver;
 

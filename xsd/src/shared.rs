@@ -1,4 +1,4 @@
-use super::{
+use crate::{
     complex_type_def::ComplexTypeDefinition,
     components::{ComponentTable, IsBuiltinRef, Named, RefNamed},
     element_decl::ElementDeclaration,

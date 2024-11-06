@@ -1,6 +1,5 @@
+use crate::xstypes::QName;
 use roxmltree::Node;
-
-use super::xstypes::QName;
 
 pub trait ActualValue<'a> {
     fn convert(src: &'a str, parent: Node) -> Self;

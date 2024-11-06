@@ -1,7 +1,6 @@
+use crate::{error::XsdError, mapping_context::RootContext, values::actual_value, Schema};
 use roxmltree::Node;
 use thiserror::Error;
-
-use super::{error::XsdError, mapping_context::RootContext, values::actual_value, Schema};
 
 /// This structure represents the `import` element; it is not a schema component.
 ///

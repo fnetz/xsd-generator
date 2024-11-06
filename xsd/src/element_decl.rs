@@ -1,5 +1,4 @@
-use super::simple_type_def::Context as SimpleContext;
-use super::{
+use crate::{
     annotation::Annotation,
     builtins::{XS_ANY_TYPE_NAME, XS_STRING_NAME},
     complex_type_def::{self, ComplexTypeDefinition, ContentType},
@@ -10,12 +9,12 @@ use super::{
     model_group_def::ModelGroupDefinition,
     particle::MaxOccurs,
     shared::{self, TypeDefinition},
+    simple_type_def::Context as SimpleContext,
     type_alternative::TypeAlternative,
     values::{actual_value, ActualValue},
     xstypes::{AnyURI, NCName, QName, Sequence, Set},
     MappingContext, Particle, Ref, SimpleTypeDefinition, Term,
 };
-
 use roxmltree::Node;
 
 /// Schema Component: Element Declaration, a kind of [Term](super::shared::Term) (§3.3)

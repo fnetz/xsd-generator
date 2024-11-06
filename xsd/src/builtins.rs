@@ -1,25 +1,22 @@
+use crate::{
+    attribute_decl,
+    complex_type_def::{self, ComplexTypeDefinition},
+    constraining_facet::{
+        ConstrainingFacet, ConstrainingFacets, ExplicitTimezone, ExplicitTimezoneValue,
+        FractionDigits, Length, MinMax, Pattern, WhiteSpace, WhiteSpaceValue,
+    },
+    fundamental_facet::{CardinalityValue, FundamentalFacet, FundamentalFacetSet, OrderedValue},
+    mapping_context::RootContext,
+    model_group::Compositor,
+    particle::MaxOccurs,
+    simple_type_def::{self, SimpleTypeDefinition},
+    wildcard::{
+        DisallowedNameSet, NamespaceConstraint, NamespaceConstraintVariety, ProcessContents,
+    },
+    xstypes::QName,
+    AttributeDeclaration, ModelGroup, Particle, Sequence, Set, Term, TypeDefinition, Wildcard,
+};
 use lazy_static::lazy_static;
-
-use super::complex_type_def::{self, ComplexTypeDefinition};
-use super::constraining_facet::{
-    ConstrainingFacet, ConstrainingFacets, ExplicitTimezone, ExplicitTimezoneValue, FractionDigits,
-    Length, MinMax, Pattern, WhiteSpace, WhiteSpaceValue,
-};
-use super::fundamental_facet::{
-    CardinalityValue, FundamentalFacet, FundamentalFacetSet, OrderedValue,
-};
-use super::mapping_context::RootContext;
-use super::model_group::Compositor;
-use super::particle::MaxOccurs;
-use super::simple_type_def::{self, SimpleTypeDefinition};
-use super::wildcard::{
-    DisallowedNameSet, NamespaceConstraint, NamespaceConstraintVariety, ProcessContents,
-};
-use super::xstypes::QName;
-use super::{
-    attribute_decl, AttributeDeclaration, ModelGroup, Particle, Sequence, Set, Term,
-    TypeDefinition, Wildcard,
-};
 
 // Namespaces used by the specification (pt. 1, §1.3.1)
 pub const XS_NAMESPACE: &str = "http://www.w3.org/2001/XMLSchema";

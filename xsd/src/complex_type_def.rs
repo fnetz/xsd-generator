@@ -1,4 +1,4 @@
-use super::{
+use crate::{
     annotation::Annotation,
     assertion::Assertion,
     attribute_decl,

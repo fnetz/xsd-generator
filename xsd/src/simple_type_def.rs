@@ -1,4 +1,4 @@
-use super::{
+use crate::{
     annotation::Annotation,
     attribute_decl::AttributeDeclaration,
     builtins::{XS_ANY_ATOMIC_TYPE_NAME, XS_ANY_SIMPLE_TYPE_NAME, XS_ANY_TYPE_NAME, XS_NAMESPACE},

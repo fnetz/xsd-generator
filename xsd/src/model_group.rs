@@ -1,4 +1,4 @@
-use super::{
+use crate::{
     annotation::Annotation, components::Component, particle::Particle, xstypes::Sequence, Ref,
 };
 

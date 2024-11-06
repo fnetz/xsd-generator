@@ -1,16 +1,15 @@
-use super::simple_type_def::Context as SimpleContext;
-use super::{
+use crate::{
     builtins::XS_ANY_SIMPLE_TYPE_NAME,
     components::{AnnotatedComponent, Component, Named, NamedXml},
     error::XsdError,
     mapping_context::TopLevelMappable,
     shared,
+    simple_type_def::Context as SimpleContext,
     values::{actual_value, normalized_value},
     xstypes::{AnyURI, NCName, QName, Sequence},
     Annotation, AttributeGroupDefinition, AttributeUse, ComplexTypeDefinition, MappingContext, Ref,
     SimpleTypeDefinition, TypeDefinition,
 };
-
 use roxmltree::Node;
 
 /// Schema Component: Attribute Declaration, a kind of Annotated Component (§3.2)

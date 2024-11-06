@@ -1,4 +1,4 @@
-use super::{
+use crate::{
     annotation::Annotation,
     attribute_decl::AttributeDeclaration,
     components::{AnnotatedComponent, Component},

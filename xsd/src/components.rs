@@ -1,20 +1,17 @@
-use std::any::TypeId;
-use std::collections::HashMap;
-use std::fmt;
-use std::hash::Hash;
-use std::marker::PhantomData;
-use std::num::{NonZeroU32, NonZeroUsize};
-
-use crate::BuiltinOverwriteAction;
-
+use crate::{
+    xstypes::QName, Annotation, Assertion, AttributeDeclaration, AttributeGroupDefinition,
+    AttributeUse, BuiltinOverwriteAction, ComplexTypeDefinition, ConstrainingFacet,
+    ElementDeclaration, IdentityConstraintDefinition, ModelGroup, ModelGroupDefinition,
+    NotationDeclaration, Particle, SimpleTypeDefinition, TypeAlternative, TypeDefinition, Wildcard,
+};
 use roxmltree::Node;
-
-use super::xstypes::QName;
-use super::{
-    Annotation, Assertion, AttributeDeclaration, AttributeGroupDefinition, AttributeUse,
-    ComplexTypeDefinition, ConstrainingFacet, ElementDeclaration, IdentityConstraintDefinition,
-    ModelGroup, ModelGroupDefinition, NotationDeclaration, Particle, SimpleTypeDefinition,
-    TypeAlternative, TypeDefinition, Wildcard,
+use std::{
+    any::TypeId,
+    collections::HashMap,
+    fmt,
+    hash::Hash,
+    marker::PhantomData,
+    num::{NonZeroU32, NonZeroUsize},
 };
 
 /// Trait implemented by all concrete schema components.

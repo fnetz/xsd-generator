@@ -1,13 +1,11 @@
-use std::fmt;
-
-use roxmltree::Node;
-
-use super::{
+use crate::{
     components::{Component, ComponentTable},
     values::{actual_value, ActualValue},
     xstypes::{Sequence, Set},
     Annotation, Assertion, MappingContext, Ref,
 };
+use roxmltree::Node;
+use std::fmt;
 
 /// Constraining facet (pt. 2, §4.3)
 #[derive(Clone, Debug)]

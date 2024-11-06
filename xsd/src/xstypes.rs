@@ -1,4 +1,4 @@
-use super::error::XsdError;
+use crate::error::XsdError;
 use std::fmt;
 
 pub type NCName = String;
