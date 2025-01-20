@@ -148,7 +148,7 @@ impl meta::SimpleType for ToType {
 }
 #[derive(Debug)]
 pub struct Simple {
-    pub wildcard: Vec<()>,
+    pub wildcards: Vec<()>,
     pub r#type: Option<TypeType>,
     pub href: Option<HrefType>,
     pub role: Option<RoleType>,
@@ -205,13 +205,13 @@ impl meta::SimpleType for Lang {
 }
 #[derive(Debug)]
 pub struct TitleEltType {
-    pub wildcard: Vec<()>,
+    pub wildcards: Vec<()>,
     pub r#type: TypeType,
     pub lang: Option<Lang>,
 }
 #[derive(Debug)]
 pub struct ResourceType {
-    pub wildcard: Vec<()>,
+    pub wildcards: Vec<()>,
     pub r#type: TypeType,
     pub role: Option<RoleType>,
     pub title: Option<TitleAttrType>,
@@ -219,19 +219,19 @@ pub struct ResourceType {
 }
 #[derive(Debug)]
 pub struct LocatorType {
-    pub title: Vec<TitleEltType>,
+    pub titles: Vec<TitleEltType>,
     pub r#type: TypeType,
     pub href: HrefType,
     pub role: Option<RoleType>,
-    pub title_attr: Option<TitleAttrType>,
+    pub title: Option<TitleAttrType>,
     pub label: Option<LabelType>,
 }
 #[derive(Debug)]
 pub struct ArcType {
-    pub title: Vec<TitleEltType>,
+    pub titles: Vec<TitleEltType>,
     pub r#type: TypeType,
     pub arcrole: Option<ArcroleType>,
-    pub title_attr: Option<TitleAttrType>,
+    pub title: Option<TitleAttrType>,
     pub show: Option<ShowType>,
     pub actuate: Option<ActuateType>,
     pub from: Option<FromType>,
@@ -543,14 +543,14 @@ impl meta::SimpleType for VersionToken {
 }
 #[derive(Debug)]
 pub struct StatusEntry {
-    pub annotation: Vec<Annotation>,
+    pub annotations: Vec<Annotation>,
     pub status: Status,
     pub date: dt_builtins::Date,
     pub bugzilla: Option<BugUri>,
 }
 #[derive(Debug)]
 pub struct Ref {
-    pub annotation: Vec<Annotation>,
+    pub annotations: Vec<Annotation>,
     pub r#type: Option<TypeType>,
     pub href: Option<HrefType>,
 }
@@ -583,15 +583,15 @@ impl meta::SimpleType for Role {
 }
 #[derive(Debug)]
 pub struct SchemaDocumentRef {
-    pub annotation: Vec<Annotation>,
+    pub annotations: Vec<Annotation>,
     pub role: Option<Role>,
     pub r#type: Option<TypeType>,
     pub href: Option<HrefType>,
 }
 #[derive(Debug)]
 pub struct TestSuite {
-    pub annotation: Vec<Annotation>,
-    pub test_set_ref: Vec<Ref>,
+    pub annotations: Vec<Annotation>,
+    pub test_set_refs: Vec<Ref>,
     pub name: dt_builtins::Name,
     pub release_date: dt_builtins::Date,
     pub schema_version: String,
@@ -599,38 +599,38 @@ pub struct TestSuite {
 }
 #[derive(Debug)]
 pub struct TestSet {
-    pub annotation: Vec<Annotation>,
-    pub test_group: Vec<TestGroup>,
+    pub annotations: Vec<Annotation>,
+    pub test_groups: Vec<TestGroup>,
     pub contributor: String,
     pub name: dt_builtins::Name,
     pub version: Option<VersionInfo>,
 }
 #[derive(Debug)]
 pub struct TestGroup {
-    pub annotation: Vec<Annotation>,
-    pub documentation_reference: Vec<Ref>,
+    pub annotations: Vec<Annotation>,
+    pub documentation_references: Vec<Ref>,
     pub schema_test: Option<SchemaTest>,
-    pub instance_test: Vec<InstanceTest>,
+    pub instance_tests: Vec<InstanceTest>,
     pub name: dt_builtins::Name,
     pub version: Option<VersionInfo>,
 }
 #[derive(Debug)]
 pub struct SchemaTest {
-    pub annotation: Vec<Annotation>,
-    pub schema_document: Vec<SchemaDocumentRef>,
-    pub expected: Vec<Expected>,
+    pub annotations: Vec<Annotation>,
+    pub schema_documents: Vec<SchemaDocumentRef>,
+    pub expecteds: Vec<Expected>,
     pub current: Option<StatusEntry>,
-    pub prior: Vec<StatusEntry>,
+    pub priors: Vec<StatusEntry>,
     pub name: dt_builtins::Name,
     pub version: Option<VersionInfo>,
 }
 #[derive(Debug)]
 pub struct InstanceTest {
-    pub annotation: Vec<Annotation>,
+    pub annotations: Vec<Annotation>,
     pub instance_document: Ref,
-    pub expected: Vec<Expected>,
+    pub expecteds: Vec<Expected>,
     pub current: Option<StatusEntry>,
-    pub prior: Vec<StatusEntry>,
+    pub priors: Vec<StatusEntry>,
     pub name: dt_builtins::Name,
     pub version: Option<VersionInfo>,
 }
@@ -659,8 +659,8 @@ impl meta::SimpleType for PublicationPermission {
 }
 #[derive(Debug)]
 pub struct TestSuiteResults {
-    pub annotation: Vec<Annotation>,
-    pub test_result: Vec<TestResult>,
+    pub annotations: Vec<Annotation>,
+    pub test_results: Vec<TestResult>,
     pub suite: dt_builtins::Name,
     pub processor: String,
     pub submit_date: dt_builtins::Date,
@@ -668,7 +668,7 @@ pub struct TestSuiteResults {
 }
 #[derive(Debug)]
 pub struct TestResult {
-    pub annotation: Vec<Annotation>,
+    pub annotations: Vec<Annotation>,
     pub validity: TestOutcome,
     pub set: dt_builtins::Name,
     pub group: dt_builtins::Name,

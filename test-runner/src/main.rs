@@ -113,7 +113,7 @@ fn main() {
     let mut count_skip = 0;
     let mut count_impl = 0;
 
-    for test_set_ref in suite.test_set_ref {
+    for test_set_ref in suite.test_set_refs {
         if test_set_ref.r#type.unwrap() != TypeType::Locator {
             eprintln!("Unsupported test set ref type");
             continue;
@@ -135,7 +135,7 @@ fn main() {
             continue;
         }
 
-        for group in test_set.test_group {
+        for group in test_set.test_groups {
             eprintln!("    TEST GROUP {:?}", group.name.0);
 
             let apply_test_group = group
@@ -151,9 +151,9 @@ fn main() {
             let mut schemata = Vec::new();
 
             if let Some(schema_test) = group.schema_test {
-                let expected_result = compute_expected_outcome(&schema_test.expected);
+                let expected_result = compute_expected_outcome(&schema_test.expecteds);
                 let mut ok = true;
-                for schema in schema_test.schema_document {
+                for schema in schema_test.schema_documents {
                     let base_path = path.parent().unwrap();
                     let href = (schema.href.unwrap().0).0;
                     eprintln!("      SCHEMA {href}");
@@ -203,7 +203,7 @@ fn main() {
                 }
             }
 
-            for instance_test in group.instance_test {
+            for instance_test in group.instance_tests {
                 eprintln!("      INSTANCE TEST {:?}", instance_test.name.0);
                 if schemata.len() != 1 {
                     eprintln!("        SKIPPED");
@@ -260,7 +260,7 @@ fn main() {
                     Err(_) => ExpectedResult::Undefined,
                 };
 
-                let expected_result = compute_expected_outcome(&instance_test.expected);
+                let expected_result = compute_expected_outcome(&instance_test.expecteds);
 
                 if expected_result == ExpectedResult::Undefined {
                     count_impl += 1;

@@ -19,7 +19,7 @@ impl Annotation {
 impl Ref {
     pub fn from_xml(node: Node) -> Self {
         let mut result = Ref {
-            annotation: vec![],
+            annotations: vec![],
             r#type: node
                 .attribute((XLINK, "type"))
                 .map(|t| TypeType::from_string(t).unwrap())
@@ -31,7 +31,7 @@ impl Ref {
         };
         for child in node.children().filter(|n| n.is_element()) {
             match child.tag_name().name() {
-                "annotation" => result.annotation.push(Annotation::from_xml(child)),
+                "annotation" => result.annotations.push(Annotation::from_xml(child)),
                 _ => unimplemented!("unexpected tag: {}", child.tag_name().name()),
             }
         }
@@ -42,8 +42,8 @@ impl Ref {
 impl TestSuite {
     pub fn from_xml(node: Node) -> Self {
         let mut result = TestSuite {
-            annotation: vec![],
-            test_set_ref: vec![],
+            annotations: vec![],
+            test_set_refs: vec![],
             name: dt_builtins::Name::from_string(node.attribute("name").unwrap()).unwrap(),
             release_date: dt_builtins::Date::from_string(node.attribute("releaseDate").unwrap())
                 .unwrap(),
@@ -63,11 +63,11 @@ impl TestSuite {
         for child in node.children().filter(|n| n.is_element()) {
             match (state, child.tag_name().name()) {
                 (State::Annotation, "annotation") => {
-                    result.annotation.push(Annotation::from_xml(child))
+                    result.annotations.push(Annotation::from_xml(child))
                 }
                 (State::Annotation | State::TestSetRef, "testSetRef") => {
                     state = State::TestSetRef;
-                    result.test_set_ref.push(Ref::from_xml(child))
+                    result.test_set_refs.push(Ref::from_xml(child))
                 }
                 _ => unimplemented!(
                     "unexpected tag: {} (in state {state:?})",
@@ -96,7 +96,7 @@ impl Expected {
 impl StatusEntry {
     pub fn from_xml(node: Node) -> Self {
         let mut result = StatusEntry {
-            annotation: vec![],
+            annotations: vec![],
             status: Status::from_string(node.attribute("status").unwrap()).unwrap(),
             date: dt_builtins::Date::from_string(node.attribute("date").unwrap()).unwrap(),
             bugzilla: node
@@ -105,7 +105,7 @@ impl StatusEntry {
         };
         for child in node.children().filter(|n| n.is_element()) {
             match child.tag_name().name() {
-                "annotation" => result.annotation.push(Annotation::from_xml(child)),
+                "annotation" => result.annotations.push(Annotation::from_xml(child)),
                 _ => unimplemented!("unexpected tag: {}", child.tag_name().name()),
             }
         }
@@ -116,7 +116,7 @@ impl StatusEntry {
 impl SchemaDocumentRef {
     pub fn from_xml(node: Node) -> Self {
         let mut result = SchemaDocumentRef {
-            annotation: vec![],
+            annotations: vec![],
             role: node
                 .attribute("role")
                 .map(|r| Role::from_string(r).unwrap()),
@@ -130,7 +130,7 @@ impl SchemaDocumentRef {
         };
         for child in node.children().filter(|n| n.is_element()) {
             match child.tag_name().name() {
-                "annotation" => result.annotation.push(Annotation::from_xml(child)),
+                "annotation" => result.annotations.push(Annotation::from_xml(child)),
                 _ => unimplemented!("unexpected tag: {}", child.tag_name().name()),
             }
         }
@@ -141,11 +141,11 @@ impl SchemaDocumentRef {
 impl SchemaTest {
     pub fn from_xml(node: Node) -> Self {
         let mut result = SchemaTest {
-            annotation: vec![],
-            schema_document: vec![],
-            expected: vec![],
+            annotations: vec![],
+            schema_documents: vec![],
+            expecteds: vec![],
             current: None,
-            prior: vec![],
+            priors: vec![],
             name: dt_builtins::Name::from_string(node.attribute("name").unwrap()).unwrap(),
             version: node
                 .attribute("version")
@@ -165,17 +165,17 @@ impl SchemaTest {
         for child in node.children().filter(|n| n.is_element()) {
             match (state, child.tag_name().name()) {
                 (State::Annotation, "annotation") => {
-                    result.annotation.push(Annotation::from_xml(child))
+                    result.annotations.push(Annotation::from_xml(child))
                 }
                 (State::Annotation | State::SchemaDocument, "schemaDocument") => {
                     state = State::SchemaDocument;
                     result
-                        .schema_document
+                        .schema_documents
                         .push(SchemaDocumentRef::from_xml(child))
                 }
                 (State::SchemaDocument | State::Expected, "expected") => {
                     state = State::Expected;
-                    result.expected.push(Expected::from_xml(child))
+                    result.expecteds.push(Expected::from_xml(child))
                 }
                 (State::SchemaDocument | State::Expected, "current") => {
                     state = State::Current;
@@ -186,7 +186,7 @@ impl SchemaTest {
                     "prior",
                 ) => {
                     state = State::Prior;
-                    result.prior.push(StatusEntry::from_xml(child))
+                    result.priors.push(StatusEntry::from_xml(child))
                 }
                 _ => unimplemented!(
                     "unexpected tag: {} (in state {state:?})",
@@ -200,11 +200,11 @@ impl SchemaTest {
 
 impl InstanceTest {
     pub fn from_xml(node: Node) -> Self {
-        let mut annotation = vec![];
+        let mut annotations = vec![];
         let mut instance_document = None;
-        let mut expected = vec![];
+        let mut expecteds = vec![];
         let mut current = None;
-        let mut prior = vec![];
+        let mut priors = vec![];
 
         #[derive(Copy, Clone, Debug)]
         enum State {
@@ -217,14 +217,14 @@ impl InstanceTest {
         let mut state = State::Annotation;
         for child in node.children().filter(|n| n.is_element()) {
             match (state, child.tag_name().name()) {
-                (State::Annotation, "annotation") => annotation.push(Annotation::from_xml(child)),
+                (State::Annotation, "annotation") => annotations.push(Annotation::from_xml(child)),
                 (State::Annotation, "instanceDocument") => {
                     state = State::InstanceDocument;
                     instance_document = Some(Ref::from_xml(child));
                 }
                 (State::InstanceDocument | State::Expected, "expected") => {
                     state = State::Expected;
-                    expected.push(Expected::from_xml(child));
+                    expecteds.push(Expected::from_xml(child));
                 }
                 (State::InstanceDocument | State::Expected, "current") => {
                     state = State::Current;
@@ -235,7 +235,7 @@ impl InstanceTest {
                     "prior",
                 ) => {
                     state = State::Prior;
-                    prior.push(StatusEntry::from_xml(child));
+                    priors.push(StatusEntry::from_xml(child));
                 }
                 _ => unimplemented!(
                     "unexpected tag: {} (in state {state:?})",
@@ -245,11 +245,11 @@ impl InstanceTest {
         }
 
         let result = InstanceTest {
-            annotation,
+            annotations,
             instance_document: instance_document.unwrap(),
-            expected,
+            expecteds,
             current,
-            prior,
+            priors,
             name: dt_builtins::Name::from_string(node.attribute("name").unwrap()).unwrap(),
             version: node
                 .attribute("version")
@@ -264,10 +264,10 @@ impl InstanceTest {
 impl TestGroup {
     pub fn from_xml(node: Node) -> Self {
         let mut result = TestGroup {
-            annotation: vec![],
-            documentation_reference: vec![],
+            annotations: vec![],
+            documentation_references: vec![],
             schema_test: None,
-            instance_test: vec![],
+            instance_tests: vec![],
             name: dt_builtins::Name(node.attribute("name").unwrap().into()),
             version: node
                 .attribute("version")
@@ -286,11 +286,11 @@ impl TestGroup {
         for child in node.children().filter(|n| n.is_element()) {
             match (state, child.tag_name().name()) {
                 (State::Annotation, "annotation") => {
-                    result.annotation.push(Annotation::from_xml(child))
+                    result.annotations.push(Annotation::from_xml(child))
                 }
                 (State::Annotation | State::DocumentationReference, "documentationReference") => {
                     state = State::DocumentationReference;
-                    result.documentation_reference.push(Ref::from_xml(child))
+                    result.documentation_references.push(Ref::from_xml(child))
                 }
                 (State::Annotation | State::DocumentationReference, "schemaTest") => {
                     state = State::SchemaTest;
@@ -304,7 +304,7 @@ impl TestGroup {
                     "instanceTest",
                 ) => {
                     state = State::InstanceTest;
-                    result.instance_test.push(InstanceTest::from_xml(child))
+                    result.instance_tests.push(InstanceTest::from_xml(child))
                 }
                 _ => unimplemented!(
                     "unexpected tag: {} (in state {state:?})",
@@ -319,8 +319,8 @@ impl TestGroup {
 impl TestSet {
     pub fn from_xml(node: Node) -> Self {
         let mut result = TestSet {
-            annotation: vec![],
-            test_group: vec![],
+            annotations: vec![],
+            test_groups: vec![],
             contributor: node.attribute("contributor").unwrap().into(),
             name: dt_builtins::Name::from_string(node.attribute("name").unwrap()).unwrap(),
             version: node
@@ -338,11 +338,11 @@ impl TestSet {
         for child in node.children().filter(|n| n.is_element()) {
             match (state, child.tag_name().name()) {
                 (State::Annotation, "annotation") => {
-                    result.annotation.push(Annotation::from_xml(child))
+                    result.annotations.push(Annotation::from_xml(child))
                 }
                 (State::Annotation | State::TestGroup, "testGroup") => {
                     state = State::TestGroup;
-                    result.test_group.push(TestGroup::from_xml(child))
+                    result.test_groups.push(TestGroup::from_xml(child))
                 }
                 _ => unimplemented!(
                     "unexpected tag: {} (in state {state:?})",
