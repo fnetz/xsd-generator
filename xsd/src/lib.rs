@@ -23,6 +23,7 @@ pub mod shared;
 pub mod simple_type_def;
 pub mod state_machine;
 pub mod type_alternative;
+pub mod validation;
 pub mod wildcard;
 pub mod xstypes;
 
