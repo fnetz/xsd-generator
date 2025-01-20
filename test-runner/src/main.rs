@@ -73,10 +73,10 @@ fn compute_expected_outcome(expected: &[Expected]) -> ExpectedResult {
         eprintln!("No expected outcome for this version");
         return ExpectedResult::Undefined;
     };
-    assert!(
-        validities.next().is_none(),
-        "Multiple conflicting expected outcomes"
-    );
+    if validities.next().is_some() {
+        eprintln!("Multiple conflicting expected outcomes");
+        return ExpectedResult::Undefined;
+    }
 
     match validity.validity {
         ExpectedOutcome::TestOutcome(outcome) => match outcome {
@@ -148,6 +148,8 @@ fn main() {
                 continue;
             }
 
+            let mut schemata = Vec::new();
+
             if let Some(schema_test) = group.schema_test {
                 let expected_result = compute_expected_outcome(&schema_test.expected);
                 let mut ok = true;
@@ -173,8 +175,13 @@ fn main() {
                             &import_resolvers,
                         )
                     });
-                    if matches!(res, Err(_) | Ok(Err(_))) {
-                        ok = false;
+                    match res {
+                        Err(_) | Ok(Err(_)) => {
+                            ok = false;
+                        }
+                        Ok(Ok(schema)) => {
+                            schemata.push(schema);
+                        }
                     }
                 }
                 eprint!("        ");
@@ -198,8 +205,73 @@ fn main() {
 
             for instance_test in group.instance_test {
                 eprintln!("      INSTANCE TEST {:?}", instance_test.name.0);
-                eprintln!("        SKIPPED");
-                count_skip += 1;
+                if schemata.len() != 1 {
+                    eprintln!("        SKIPPED");
+                    count_skip += 1;
+                    continue;
+                }
+
+                let (schema, components) = &schemata[0];
+
+                let base_path = path.parent().unwrap();
+                let href = (instance_test.instance_document.href.unwrap().0).0;
+
+                if href.ends_with("mgG014.xml") {
+                    // TODO: Tries to allocate a lot using maxOccurs 999999999
+                    eprintln!("        SKIPPED");
+                    count_skip += 1;
+                    continue;
+                }
+
+                let schema_path = base_path.join(href);
+                let Ok(buf) = std::fs::read(&schema_path) else {
+                    eprintln!("        FILE NOT FOUND");
+                    count_fail += 1;
+                    continue;
+                };
+                let (decoded, _, _) = Encoding::decode(UTF_8, &buf);
+
+                let xml = roxmltree::Document::parse(&decoded);
+                let Ok(xml) = xml else {
+                    eprintln!("        INVALID XML");
+                    count_fail += 1;
+                    continue;
+                };
+
+                let e = xml.root_element();
+                let ged = schema.find_element_by_name(
+                    e.tag_name().namespace(),
+                    e.tag_name().name(),
+                    components,
+                );
+
+                let res = std::panic::catch_unwind(|| {
+                    dt_xsd::validation::element_locally_valid_element(
+                        &e,
+                        ged.map(|g| g.get(components)),
+                        &components,
+                    )
+                });
+
+                // TODO: treat panic separately
+                let actual_result = match res {
+                    Ok(true) => ExpectedResult::Valid,
+                    Ok(false) => ExpectedResult::Invalid,
+                    Err(_) => ExpectedResult::Undefined,
+                };
+
+                let expected_result = compute_expected_outcome(&instance_test.expected);
+
+                if expected_result == ExpectedResult::Undefined {
+                    count_impl += 1;
+                    eprintln!("        IMPLEMENTATION-SPECIFIC - got {actual_result:?}");
+                } else if actual_result == expected_result {
+                    count_ok += 1;
+                    eprintln!("        OK (expected {expected_result:?}, got {actual_result:?})");
+                } else {
+                    count_fail += 1;
+                    eprintln!("        FAIL (expected {expected_result:?}, got {actual_result:?})");
+                }
             }
         }
     }
