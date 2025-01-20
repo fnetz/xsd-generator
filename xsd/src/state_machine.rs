@@ -335,7 +335,7 @@ pub fn create_state_machine(particle: &Particle, components: &SchemaComponentTab
                         out_transitions
                             .entry(*label)
                             .or_default()
-                            .extend(&epsilon_closure[&to]);
+                            .extend(&epsilon_closure[to]);
                     }
                     EpsilonOr::Epsilon => {}
                 }
@@ -374,7 +374,7 @@ pub fn verify_upa_satisfied(dfa: &Dfa, components: &SchemaComponentTable) -> boo
 
     // 3. M2 violates the UPA if it is non-deterministic ignoring term identity, that is, if there
     //    is any state in M2 which has two outgoing edges such that any of the following hold: [1]
-    for (_state, transitions) in dfa.transitions.iter().enumerate() {
+    for transitions in &dfa.transitions {
         // NOTE: This is O(n^2) for now, but usually the number of transitions is small enough.
         for (ti_a, transition_a) in transitions.keys().enumerate() {
             for transition_b in transitions.keys().skip(ti_a + 1) {

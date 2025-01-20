@@ -344,13 +344,12 @@ impl meta::SimpleType for ExpectedOutcome {
 #[derive(Debug)]
 pub struct VersionInfo(pub Vec<VersionToken>);
 impl meta::SimpleType for VersionInfo {
-    const FACET_WHITE_SPACE: Option<meta::Whitespace> = Some(
-        dt_builtins::meta::Whitespace::Collapse,
-    );
+    const FACET_WHITE_SPACE: Option<meta::Whitespace> =
+        Some(dt_builtins::meta::Whitespace::Collapse);
     fn from_literal(normalized: &str) -> Result<Self, meta::Error> {
         let list = normalized
             .split(' ')
-            .map(|s| { VersionToken::from_literal(s) })
+            .map(|s| VersionToken::from_literal(s))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(Self(list))
     }
