@@ -211,7 +211,7 @@ impl RustVisitor {
         ctx: &mut GeneratorContext,
         particle: &Particle,
     ) -> (Type, String) {
-        let (name, type_) = match particle.term {
+        let (type_, name) = match particle.term {
             Term::ElementDeclaration(element_ref) => {
                 let element = element_ref.get(ctx.table);
                 if element.scope.variety() == ScopeVariety::Local {
@@ -221,22 +221,23 @@ impl RustVisitor {
                 let name = element.name.to_snake_case();
                 let type_ = Self::compute_type_name_path(element.type_definition, ctx.table);
                 let type_ = parse_quote!(#type_);
-                (name, type_)
+                (type_, name)
             }
             Term::ModelGroup(model_group) => {
                 let model_group = model_group.get(ctx.table);
-                let type_ = match model_group.compositor {
+                match model_group.compositor {
                     Compositor::All | Compositor::Sequence => {
                         let mut members = Vec::new();
                         for particle in model_group.particles.iter().copied() {
                             let particle = particle.get(ctx.table);
-                            let (type_, _) = self.visit_particle(ctx, particle);
-                            members.push(type_);
+                            let particle = self.visit_particle(ctx, particle);
+                            members.push(particle);
                         }
                         if members.len() == 1 {
                             members.pop().unwrap()
                         } else {
-                            parse_quote! { (#(#members),*) }
+                            let members = members.into_iter().map(|(ty, _)| ty);
+                            (parse_quote! { (#(#members),*) }, "anon_sequence".into())
                         }
                     }
                     Compositor::Choice => {
@@ -262,24 +263,23 @@ impl RustVisitor {
                             }
                         };
                         self.output_items.push(choice_enum.into());
-                        parse_quote! { #choice_name }
+                        (parse_quote! { #choice_name }, "anon_choice".into())
                     }
-                };
-                ("anon".into(), type_)
+                }
             }
-            Term::Wildcard(_) => ("wildcard".into(), parse_quote! { () }), //todo!(),
+            Term::Wildcard(_) => (parse_quote! { () }, "wildcard".into()), //todo!(),
         };
 
-        let type_ = if matches!(particle.max_occurs, MaxOccurs::Count(1)) {
+        let (type_, name) = if matches!(particle.max_occurs, MaxOccurs::Count(1)) {
             if particle.min_occurs == 0 {
-                parse_quote!(Option<#type_>)
+                (parse_quote!(Option<#type_>), name)
             } else if particle.min_occurs == 1 {
-                type_
+                (type_, name)
             } else {
                 unreachable!("minOccurs > maxOccurs");
             }
         } else {
-            parse_quote!(Vec<#type_>)
+            (parse_quote!(Vec<#type_>), format!("{}s", name))
         };
 
         (type_, name)
