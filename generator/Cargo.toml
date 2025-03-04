@@ -12,7 +12,7 @@ default = ["generator-rust", "generator-typescript"]
 
 [dependencies]
 dt-xsd = { path = "../xsd" }
-clap = { version = "4.0", features = ["derive", "wrap_help"] }
+clap = { version = "4.5", features = ["derive", "wrap_help"] }
 reqwest = { version = "0.12", features = ["blocking"] }
 roxmltree = "0.20"
 
