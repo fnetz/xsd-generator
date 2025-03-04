@@ -20,7 +20,7 @@ pub enum TypeType {
 impl meta::SimpleType for TypeType {
     const FACET_WHITE_SPACE: Option<meta::Whitespace> = Some(meta::Whitespace::Collapse);
     fn from_literal(normalized: &str) -> Result<Self, meta::Error> {
-        let value = dt_builtins::String::from_literal(normalized)?;
+        let value = dt_builtins::PrimitiveType::<String>::from_literal(normalized)?.into_inner();
         match value.as_str() {
             "simple" => Ok(Self::Simple),
             "extended" => Ok(Self::Extended),
@@ -64,7 +64,7 @@ pub struct TitleAttrType(pub String);
 impl meta::SimpleType for TitleAttrType {
     const FACET_WHITE_SPACE: Option<meta::Whitespace> = Some(meta::Whitespace::Collapse);
     fn from_literal(normalized: &str) -> Result<Self, meta::Error> {
-        let value = dt_builtins::String::from_literal(normalized)?;
+        let value = dt_builtins::PrimitiveType::<String>::from_literal(normalized)?.into_inner();
         Ok(Self(value))
     }
 }
@@ -84,7 +84,7 @@ pub enum ShowType {
 impl meta::SimpleType for ShowType {
     const FACET_WHITE_SPACE: Option<meta::Whitespace> = Some(meta::Whitespace::Collapse);
     fn from_literal(normalized: &str) -> Result<Self, meta::Error> {
-        let value = dt_builtins::String::from_literal(normalized)?;
+        let value = dt_builtins::PrimitiveType::<String>::from_literal(normalized)?.into_inner();
         match value.as_str() {
             "new" => Ok(Self::New),
             "replace" => Ok(Self::Replace),
@@ -109,7 +109,7 @@ pub enum ActuateType {
 impl meta::SimpleType for ActuateType {
     const FACET_WHITE_SPACE: Option<meta::Whitespace> = Some(meta::Whitespace::Collapse);
     fn from_literal(normalized: &str) -> Result<Self, meta::Error> {
-        let value = dt_builtins::String::from_literal(normalized)?;
+        let value = dt_builtins::PrimitiveType::<String>::from_literal(normalized)?.into_inner();
         match value.as_str() {
             "onLoad" => Ok(Self::OnLoad),
             "onRequest" => Ok(Self::OnRequest),
@@ -124,7 +124,7 @@ pub struct LabelType(pub String);
 impl meta::SimpleType for LabelType {
     const FACET_WHITE_SPACE: Option<meta::Whitespace> = Some(meta::Whitespace::Collapse);
     fn from_literal(normalized: &str) -> Result<Self, meta::Error> {
-        let value = dt_builtins::String::from_literal(normalized)?;
+        let value = dt_builtins::PrimitiveType::<String>::from_literal(normalized)?.into_inner();
         Ok(Self(value))
     }
 }
@@ -133,7 +133,7 @@ pub struct FromType(pub String);
 impl meta::SimpleType for FromType {
     const FACET_WHITE_SPACE: Option<meta::Whitespace> = Some(meta::Whitespace::Collapse);
     fn from_literal(normalized: &str) -> Result<Self, meta::Error> {
-        let value = dt_builtins::String::from_literal(normalized)?;
+        let value = dt_builtins::PrimitiveType::<String>::from_literal(normalized)?.into_inner();
         Ok(Self(value))
     }
 }
@@ -142,7 +142,7 @@ pub struct ToType(pub String);
 impl meta::SimpleType for ToType {
     const FACET_WHITE_SPACE: Option<meta::Whitespace> = Some(meta::Whitespace::Collapse);
     fn from_literal(normalized: &str) -> Result<Self, meta::Error> {
-        let value = dt_builtins::String::from_literal(normalized)?;
+        let value = dt_builtins::PrimitiveType::<String>::from_literal(normalized)?.into_inner();
         Ok(Self(value))
     }
 }
@@ -179,7 +179,7 @@ pub enum LangInner {
 impl meta::SimpleType for LangInner {
     const FACET_WHITE_SPACE: Option<meta::Whitespace> = Some(meta::Whitespace::Collapse);
     fn from_literal(normalized: &str) -> Result<Self, meta::Error> {
-        let value = dt_builtins::String::from_literal(normalized)?;
+        let value = dt_builtins::PrimitiveType::<String>::from_literal(normalized)?.into_inner();
         match value.as_str() {
             "" => Ok(Self::Empty),
             _ => Err(meta::Error::ValueNotInEnumeration(value.to_string())),
@@ -255,7 +255,7 @@ pub enum Status {
 impl meta::SimpleType for Status {
     const FACET_WHITE_SPACE: Option<meta::Whitespace> = Some(meta::Whitespace::Collapse);
     fn from_literal(normalized: &str) -> Result<Self, meta::Error> {
-        let value = dt_builtins::String::from_literal(normalized)?;
+        let value = dt_builtins::PrimitiveType::<String>::from_literal(normalized)?.into_inner();
         match value.as_str() {
             "submitted" => Ok(Self::Submitted),
             "accepted" => Ok(Self::Accepted),
@@ -290,7 +290,7 @@ pub enum TestOutcome {
 impl meta::SimpleType for TestOutcome {
     const FACET_WHITE_SPACE: Option<meta::Whitespace> = Some(meta::Whitespace::Collapse);
     fn from_literal(normalized: &str) -> Result<Self, meta::Error> {
-        let value = dt_builtins::String::from_literal(normalized)?;
+        let value = dt_builtins::PrimitiveType::<String>::from_literal(normalized)?.into_inner();
         match value.as_str() {
             "valid" => Ok(Self::Valid),
             "invalid" => Ok(Self::Invalid),
@@ -314,7 +314,7 @@ pub enum ExpectedOutcomeInner {
 impl meta::SimpleType for ExpectedOutcomeInner {
     const FACET_WHITE_SPACE: Option<meta::Whitespace> = Some(meta::Whitespace::Collapse);
     fn from_literal(normalized: &str) -> Result<Self, meta::Error> {
-        let value = dt_builtins::String::from_literal(normalized)?;
+        let value = dt_builtins::PrimitiveType::<String>::from_literal(normalized)?.into_inner();
         match value.as_str() {
             "implementation-defined" => Ok(Self::ImplementationDefined),
             "implementation-dependent" => Ok(Self::ImplementationDependent),
@@ -364,7 +364,7 @@ pub enum KnownXsdVersion {
 impl meta::SimpleType for KnownXsdVersion {
     const FACET_WHITE_SPACE: Option<meta::Whitespace> = Some(meta::Whitespace::Collapse);
     fn from_literal(normalized: &str) -> Result<Self, meta::Error> {
-        let value = dt_builtins::String::from_literal(normalized)?;
+        let value = dt_builtins::PrimitiveType::<String>::from_literal(normalized)?.into_inner();
         match value.as_str() {
             "1.0" => Ok(Self::_10),
             "1.1" => Ok(Self::_11),
@@ -382,7 +382,7 @@ pub enum Xsd10Editions {
 impl meta::SimpleType for Xsd10Editions {
     const FACET_WHITE_SPACE: Option<meta::Whitespace> = Some(meta::Whitespace::Collapse);
     fn from_literal(normalized: &str) -> Result<Self, meta::Error> {
-        let value = dt_builtins::String::from_literal(normalized)?;
+        let value = dt_builtins::PrimitiveType::<String>::from_literal(normalized)?.into_inner();
         match value.as_str() {
             "1.0-1e" => Ok(Self::_101e),
             "1.0-2e" => Ok(Self::_102e),
@@ -404,7 +404,7 @@ pub enum XmlSubstrate {
 impl meta::SimpleType for XmlSubstrate {
     const FACET_WHITE_SPACE: Option<meta::Whitespace> = Some(meta::Whitespace::Collapse);
     fn from_literal(normalized: &str) -> Result<Self, meta::Error> {
-        let value = dt_builtins::String::from_literal(normalized)?;
+        let value = dt_builtins::PrimitiveType::<String>::from_literal(normalized)?.into_inner();
         match value.as_str() {
             "XML-1.0" => Ok(Self::Xml10),
             "XML-1.0-1e-4e" => Ok(Self::Xml101e4e),
@@ -424,7 +424,7 @@ pub enum UnicodeVersions {
 impl meta::SimpleType for UnicodeVersions {
     const FACET_WHITE_SPACE: Option<meta::Whitespace> = Some(meta::Whitespace::Collapse);
     fn from_literal(normalized: &str) -> Result<Self, meta::Error> {
-        let value = dt_builtins::String::from_literal(normalized)?;
+        let value = dt_builtins::PrimitiveType::<String>::from_literal(normalized)?.into_inner();
         match value.as_str() {
             "Unicode_4.0.0" => Ok(Self::Unicode400),
             "Unicode_6.0.0" => Ok(Self::Unicode600),
@@ -444,7 +444,7 @@ pub enum RuntimeSchemaError {
 impl meta::SimpleType for RuntimeSchemaError {
     const FACET_WHITE_SPACE: Option<meta::Whitespace> = Some(meta::Whitespace::Collapse);
     fn from_literal(normalized: &str) -> Result<Self, meta::Error> {
-        let value = dt_builtins::String::from_literal(normalized)?;
+        let value = dt_builtins::PrimitiveType::<String>::from_literal(normalized)?.into_inner();
         match value.as_str() {
             "CTR-all-compile" => Ok(Self::CtrAllCompile),
             "CTR-all-runtime" => Ok(Self::CtrAllRuntime),
@@ -463,7 +463,7 @@ pub enum XpathInCta {
 impl meta::SimpleType for XpathInCta {
     const FACET_WHITE_SPACE: Option<meta::Whitespace> = Some(meta::Whitespace::Collapse);
     fn from_literal(normalized: &str) -> Result<Self, meta::Error> {
-        let value = dt_builtins::String::from_literal(normalized)?;
+        let value = dt_builtins::PrimitiveType::<String>::from_literal(normalized)?.into_inner();
         match value.as_str() {
             "restricted-xpath-in-CTA" => Ok(Self::RestrictedXpathInCta),
             "full-xpath-in-CTA" => Ok(Self::FullXpathInCta),
@@ -481,7 +481,7 @@ pub enum XdmFiltering {
 impl meta::SimpleType for XdmFiltering {
     const FACET_WHITE_SPACE: Option<meta::Whitespace> = Some(meta::Whitespace::Collapse);
     fn from_literal(normalized: &str) -> Result<Self, meta::Error> {
-        let value = dt_builtins::String::from_literal(normalized)?;
+        let value = dt_builtins::PrimitiveType::<String>::from_literal(normalized)?.into_inner();
         match value.as_str() {
             "comments-and-PIs-excluded" => Ok(Self::CommentsAndPIsExcluded),
             "comments-and-PIs-included" => Ok(Self::CommentsAndPIsIncluded),
@@ -570,7 +570,7 @@ pub enum Role {
 impl meta::SimpleType for Role {
     const FACET_WHITE_SPACE: Option<meta::Whitespace> = Some(meta::Whitespace::Collapse);
     fn from_literal(normalized: &str) -> Result<Self, meta::Error> {
-        let value = dt_builtins::String::from_literal(normalized)?;
+        let value = dt_builtins::PrimitiveType::<String>::from_literal(normalized)?.into_inner();
         match value.as_str() {
             "principal" => Ok(Self::Principal),
             "imported" => Ok(Self::Imported),
@@ -649,7 +649,7 @@ pub enum PublicationPermission {
 impl meta::SimpleType for PublicationPermission {
     const FACET_WHITE_SPACE: Option<meta::Whitespace> = Some(meta::Whitespace::Collapse);
     fn from_literal(normalized: &str) -> Result<Self, meta::Error> {
-        let value = dt_builtins::String::from_literal(normalized)?;
+        let value = dt_builtins::PrimitiveType::<String>::from_literal(normalized)?.into_inner();
         match value.as_str() {
             "W3C members" => Ok(Self::W3cMembers),
             "public" => Ok(Self::Public),
