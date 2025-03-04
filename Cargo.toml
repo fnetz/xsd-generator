@@ -6,6 +6,7 @@ members = [
     "test-runner",
     "validator",
 ]
+exclude = ["output-test"]
 resolver = "2"
 
 [workspace.package]
