@@ -1,4 +1,5 @@
 use crate::{
+    MappingContext, Particle, Ref,
     annotation::Annotation,
     components::{AnnotatedComponent, Component, Named, NamedXml},
     element_decl,
@@ -7,7 +8,6 @@ use crate::{
     model_group::ModelGroup,
     values::actual_value,
     xstypes::{AnyURI, NCName, QName, Sequence},
-    MappingContext, Particle, Ref,
 };
 use roxmltree::Node;
 

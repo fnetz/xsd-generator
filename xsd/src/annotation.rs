@@ -1,4 +1,4 @@
-use crate::{components::Component, xstypes::Sequence, MappingContext, Ref};
+use crate::{MappingContext, Ref, components::Component, xstypes::Sequence};
 use roxmltree::Node;
 
 /// Schema Component: Annotation, a kind of Component (§3.15)

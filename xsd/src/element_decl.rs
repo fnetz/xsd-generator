@@ -1,4 +1,5 @@
 use crate::{
+    MappingContext, Particle, Ref, SimpleTypeDefinition, Term,
     annotation::Annotation,
     builtins::{XS_ANY_TYPE_NAME, XS_STRING_NAME},
     complex_type_def::{self, ComplexTypeDefinition, ContentType},
@@ -11,9 +12,8 @@ use crate::{
     shared::{self, TypeDefinition},
     simple_type_def::Context as SimpleContext,
     type_alternative::TypeAlternative,
-    values::{actual_value, ActualValue},
+    values::{ActualValue, actual_value},
     xstypes::{AnyURI, NCName, QName, Sequence, Set},
-    MappingContext, Particle, Ref, SimpleTypeDefinition, Term,
 };
 use roxmltree::Node;
 

@@ -1,4 +1,5 @@
 use crate::{
+    MappingContext, Ref,
     annotation::Annotation,
     attribute_decl::{self, AttributeDeclaration},
     attribute_use::AttributeUse,
@@ -8,7 +9,6 @@ use crate::{
     values::actual_value,
     wildcard::Wildcard,
     xstypes::{AnyURI, NCName, QName, Sequence, Set},
-    MappingContext, Ref,
 };
 use roxmltree::Node;
 

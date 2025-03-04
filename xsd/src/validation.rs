@@ -1,10 +1,10 @@
 use crate::{
+    ComplexTypeDefinition, ElementDeclaration, Particle, SchemaComponentTable,
+    SimpleTypeDefinition, TypeDefinition,
     builtins::XSI_NAMESPACE,
     complex_type_def::{ContentType, ContentTypeVariety, OpenContent, OpenContentMode},
     shared::ValueConstraintVariety,
     state_machine::Transition,
-    ComplexTypeDefinition, ElementDeclaration, Particle, SchemaComponentTable,
-    SimpleTypeDefinition, TypeDefinition,
 };
 
 /// 3.9.4.2 Element Sequence Locally Valid (Particle)

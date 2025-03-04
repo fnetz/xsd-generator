@@ -1,4 +1,5 @@
 use crate::{
+    Annotation, Ref,
     complex_type_def::ComplexTypeDefinition,
     components::{ComponentTable, IsBuiltinRef, Named, RefNamed},
     element_decl::ElementDeclaration,
@@ -6,7 +7,6 @@ use crate::{
     simple_type_def::SimpleTypeDefinition,
     wildcard::Wildcard,
     xstypes::QName,
-    Annotation, Ref,
 };
 
 /// Common type for [attribute_decl::ScopeVariety](super::attribute_decl::ScopeVariety) and

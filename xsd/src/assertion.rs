@@ -1,9 +1,9 @@
 use crate::{
+    MappingContext, Ref,
     annotation::Annotation,
     components::{AnnotatedComponent, Component},
     values::actual_value,
     xstypes::{AnyURI, NCName, Sequence, Set},
-    MappingContext, Ref,
 };
 use roxmltree::Node;
 

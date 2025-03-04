@@ -1,4 +1,5 @@
 use crate::{
+    Ref,
     annotation::Annotation,
     assertion::XPathExpression,
     components::{AnnotatedComponent, Component, Named, NamedXml},
@@ -6,7 +7,6 @@ use crate::{
     mapping_context::{MappingContext, TopLevelMappable},
     values::actual_value,
     xstypes::{AnyURI, NCName, QName, Sequence},
-    Ref,
 };
 use roxmltree::Node;
 

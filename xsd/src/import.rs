@@ -1,4 +1,4 @@
-use crate::{error::XsdError, mapping_context::RootContext, values::actual_value, Schema};
+use crate::{Schema, error::XsdError, mapping_context::RootContext, values::actual_value};
 use roxmltree::Node;
 use thiserror::Error;
 

@@ -1,5 +1,5 @@
 use crate::{
-    annotation::Annotation, components::Component, particle::Particle, xstypes::Sequence, Ref,
+    Ref, annotation::Annotation, components::Component, particle::Particle, xstypes::Sequence,
 };
 
 /// Schema Component: Model Group, a kind of Term (§3.8)

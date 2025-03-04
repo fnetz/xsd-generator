@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 
 use dt_xsd::{
-    import::{ImportError, ImportResolver},
     BuiltinOverwriteAction, RegisterBuiltins, Schema,
+    import::{ImportError, ImportResolver},
 };
 use encoding_rs::{Encoding, UTF_8};
 use generated::{

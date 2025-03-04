@@ -1,8 +1,8 @@
 use crate::{
-    components::{Component, ComponentTable},
-    values::{actual_value, ActualValue},
-    xstypes::{Sequence, Set},
     Annotation, Assertion, MappingContext, Ref,
+    components::{Component, ComponentTable},
+    values::{ActualValue, actual_value},
+    xstypes::{Sequence, Set},
 };
 use roxmltree::Node;
 use std::fmt;
@@ -408,7 +408,7 @@ macro_rules! access_methods {
         $(
             pub fn $name<'a>(&self, components: &'a impl ComponentTable) -> Option<&'a $typ> {
                 self.facets.iter().find_map(|f| match f.get(components) {
-                    ConstrainingFacet::$variant(ref c) => Some(c),
+                    ConstrainingFacet::$variant(c) => Some(c),
                     _ => None,
                 })
             }

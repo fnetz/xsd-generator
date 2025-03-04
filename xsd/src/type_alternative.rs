@@ -1,10 +1,10 @@
 use crate::{
+    Ref,
     annotation::Annotation,
     assertion::XPathExpression,
     components::{AnnotatedComponent, Component},
     shared::TypeDefinition,
     xstypes::Sequence,
-    Ref,
 };
 use roxmltree::Node;
 

@@ -5,8 +5,8 @@ mod ist;
 use clap::Parser;
 
 use dt_xsd::{
-    import::{Import, ImportError, ImportResolver},
     RootContext, Schema,
+    import::{Import, ImportError, ImportResolver},
 };
 
 struct HttpImportResolver;

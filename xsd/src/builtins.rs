@@ -1,4 +1,5 @@
 use crate::{
+    AttributeDeclaration, ModelGroup, Particle, Sequence, Set, Term, TypeDefinition, Wildcard,
     attribute_decl,
     complex_type_def::{self, ComplexTypeDefinition},
     constraining_facet::{
@@ -14,7 +15,6 @@ use crate::{
         DisallowedNameSet, NamespaceConstraint, NamespaceConstraintVariety, ProcessContents,
     },
     xstypes::QName,
-    AttributeDeclaration, ModelGroup, Particle, Sequence, Set, Term, TypeDefinition, Wildcard,
 };
 use lazy_static::lazy_static;
 

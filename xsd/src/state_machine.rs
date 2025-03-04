@@ -1,7 +1,7 @@
 //! https://www.cogsci.ed.ac.uk/~ht/XML_Europe_2003.html
 use crate::{
-    model_group::Compositor, ElementDeclaration, Particle, Ref, SchemaComponentTable, Term,
-    Wildcard,
+    ElementDeclaration, Particle, Ref, SchemaComponentTable, Term, Wildcard,
+    model_group::Compositor,
 };
 use std::{
     borrow::Borrow,
@@ -256,10 +256,9 @@ impl<L: std::hash::Hash + std::cmp::Eq> LabeledDfa<L> {
     }
 
     fn get_or_create(&mut self, label: L) -> (u32, bool) {
-        if let Some(&state) = self.get(&label) {
-            (state, true)
-        } else {
-            (self.create_state(label), false)
+        match self.get(&label) {
+            Some(&state) => (state, true),
+            None => (self.create_state(label), false),
         }
     }
 

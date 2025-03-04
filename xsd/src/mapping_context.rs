@@ -2,6 +2,9 @@ use roxmltree::{Node, NodeId};
 use std::collections::{HashMap, HashSet};
 
 use super::{
+    AttributeDeclaration, AttributeGroupDefinition, ComplexTypeDefinition, ElementDeclaration,
+    IdentityConstraintDefinition, ModelGroupDefinition, NotationDeclaration, Ref, Schema,
+    SimpleTypeDefinition,
     components::{
         Component, ComponentResolver, ComponentTraits, ConstructionComponentTable, DynamicRef,
         HasArenaContainer, Lookup, LookupTables, RefNamed,
@@ -9,9 +12,6 @@ use super::{
     error::XsdError,
     import::{Import, ImportResolver},
     xstypes::QName,
-    AttributeDeclaration, AttributeGroupDefinition, ComplexTypeDefinition, ElementDeclaration,
-    IdentityConstraintDefinition, ModelGroupDefinition, NotationDeclaration, Ref, Schema,
-    SimpleTypeDefinition,
 };
 use crate::BuiltinOverwriteAction;
 

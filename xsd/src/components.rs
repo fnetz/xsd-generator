@@ -1,8 +1,8 @@
 use crate::{
-    xstypes::QName, Annotation, Assertion, AttributeDeclaration, AttributeGroupDefinition,
-    AttributeUse, BuiltinOverwriteAction, ComplexTypeDefinition, ConstrainingFacet,
-    ElementDeclaration, IdentityConstraintDefinition, ModelGroup, ModelGroupDefinition,
-    NotationDeclaration, Particle, SimpleTypeDefinition, TypeAlternative, TypeDefinition, Wildcard,
+    Annotation, Assertion, AttributeDeclaration, AttributeGroupDefinition, AttributeUse,
+    BuiltinOverwriteAction, ComplexTypeDefinition, ConstrainingFacet, ElementDeclaration,
+    IdentityConstraintDefinition, ModelGroup, ModelGroupDefinition, NotationDeclaration, Particle,
+    SimpleTypeDefinition, TypeAlternative, TypeDefinition, Wildcard, xstypes::QName,
 };
 use roxmltree::Node;
 use std::{

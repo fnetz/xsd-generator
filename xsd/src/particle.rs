@@ -1,4 +1,5 @@
 use crate::{
+    ElementDeclaration, MappingContext, ModelGroup, ModelGroupDefinition, Ref, Wildcard,
     annotation::Annotation,
     components::{Component, ComponentTable},
     element_decl,
@@ -7,7 +8,6 @@ use crate::{
     shared::Term,
     values::actual_value,
     xstypes::{QName, Sequence},
-    ElementDeclaration, MappingContext, ModelGroup, ModelGroupDefinition, Ref, Wildcard,
 };
 use roxmltree::Node;
 

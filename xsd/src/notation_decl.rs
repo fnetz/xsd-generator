@@ -1,11 +1,11 @@
 use crate::{
+    MappingContext, Ref,
     annotation::Annotation,
     components::{AnnotatedComponent, Component, Named, NamedXml},
     error::XsdError,
     mapping_context::TopLevelMappable,
     values::actual_value,
     xstypes::{AnyURI, NCName, QName, Sequence},
-    MappingContext, Ref,
 };
 use roxmltree::Node;
 

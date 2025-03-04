@@ -1,11 +1,13 @@
 use std::collections::BTreeSet;
 
 use syn::{
-    Field, Ident, Item, ItemEnum, Type, __private::Span, parse_quote, Arm, Expr, ExprIf,
-    FieldMutability, Fields, Token, TypePath, Variant,
+    __private::Span, Arm, Expr, ExprIf, Field, FieldMutability, Fields, Ident, Item, ItemEnum,
+    Token, Type, TypePath, Variant, parse_quote,
 };
 
 use dt_xsd::{
+    AttributeUse, ComplexTypeDefinition, ElementDeclaration, Particle, Ref, RefNamed, Schema,
+    SchemaComponentTable, SimpleTypeDefinition, Term, TypeDefinition,
     attribute_decl::ScopeVariety,
     complex_type_def::{self, ContentType},
     components::{IsBuiltinRef, Named},
@@ -13,8 +15,6 @@ use dt_xsd::{
     model_group::Compositor,
     particle::MaxOccurs,
     simple_type_def::Variety as SimpleVariety,
-    AttributeUse, ComplexTypeDefinition, ElementDeclaration, Particle, Ref, RefNamed, Schema,
-    SchemaComponentTable, SimpleTypeDefinition, Term, TypeDefinition,
 };
 
 use super::common::{ComponentVisitor, GeneratorContext};

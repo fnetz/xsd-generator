@@ -1,10 +1,10 @@
 use crate::{
+    Ref,
     annotation::Annotation,
     attribute_decl::AttributeDeclaration,
     components::{AnnotatedComponent, Component},
     shared,
     xstypes::Sequence,
-    Ref,
 };
 
 /// Schema Component: Attribute Use, a kind of Annotated Component (§3.5)

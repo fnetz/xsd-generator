@@ -1,4 +1,6 @@
 use crate::{
+    Annotation, AttributeGroupDefinition, AttributeUse, ComplexTypeDefinition, MappingContext, Ref,
+    SimpleTypeDefinition, TypeDefinition,
     builtins::XS_ANY_SIMPLE_TYPE_NAME,
     components::{AnnotatedComponent, Component, Named, NamedXml},
     error::XsdError,
@@ -7,8 +9,6 @@ use crate::{
     simple_type_def::Context as SimpleContext,
     values::{actual_value, normalized_value},
     xstypes::{AnyURI, NCName, QName, Sequence},
-    Annotation, AttributeGroupDefinition, AttributeUse, ComplexTypeDefinition, MappingContext, Ref,
-    SimpleTypeDefinition, TypeDefinition,
 };
 use roxmltree::Node;
 

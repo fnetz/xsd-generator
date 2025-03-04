@@ -2,12 +2,12 @@ use roxmltree::Node;
 use std::{collections::HashSet, fmt};
 
 use super::{
+    Ref,
     annotation::Annotation,
     components::Component,
     mapping_context::MappingContext,
-    values::{actual_value, ActualValue},
+    values::{ActualValue, actual_value},
     xstypes::{AnyURI, QName, Sequence, Set},
-    Ref,
 };
 
 /// Schema Component: Wildcard, a kind of [Term](super::shared::Term) (§3.10)

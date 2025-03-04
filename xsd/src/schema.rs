@@ -1,4 +1,5 @@
 use crate::{
+    ComplexTypeDefinition, MappingContext, Ref, SimpleTypeDefinition,
     annotation::Annotation,
     attribute_decl::AttributeDeclaration,
     attribute_group_def::AttributeGroupDefinition,
@@ -15,7 +16,6 @@ use crate::{
     shared::TypeDefinition,
     values::actual_value,
     xstypes::{Sequence, Set},
-    ComplexTypeDefinition, MappingContext, Ref, SimpleTypeDefinition,
 };
 use roxmltree::Node;
 
@@ -165,7 +165,7 @@ impl Schema {
                 _ => {
                     return Err(crate::error::XsdError::UnknownTopLevelElement(
                         top_level_element.tag_name().name().into(),
-                    ))
+                    ));
                 }
             }
 

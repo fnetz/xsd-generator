@@ -1,4 +1,5 @@
 use crate::{
+    AttributeDeclaration, AttributeGroupDefinition, MappingContext, ModelGroup, Ref, Term,
     annotation::Annotation,
     assertion::Assertion,
     attribute_decl,
@@ -13,10 +14,9 @@ use crate::{
     particle::{MaxOccurs, Particle},
     shared::TypeDefinition,
     simple_type_def::SimpleTypeDefinition,
-    values::{actual_value, ActualValue},
+    values::{ActualValue, actual_value},
     wildcard::{self, DisallowedNameSet, Wildcard},
     xstypes::{AnyURI, NCName, QName, Sequence, Set},
-    AttributeDeclaration, AttributeGroupDefinition, MappingContext, ModelGroup, Ref, Term,
 };
 use roxmltree::Node;
 
@@ -1229,11 +1229,10 @@ impl TopLevelMappable for ComplexTypeDefinition {
 #[cfg(test)]
 mod tests {
     use crate::{
-        builtins,
+        BuiltinOverwriteAction, ComplexTypeDefinition, RootContext, builtins,
         complex_type_def::ContentType,
         mapping_context::{MappingContext, TopLevel},
         xstypes::QName,
-        BuiltinOverwriteAction, ComplexTypeDefinition, RootContext,
     };
     use roxmltree::Document;
 

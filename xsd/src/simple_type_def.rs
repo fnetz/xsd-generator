@@ -1,4 +1,5 @@
 use crate::{
+    Ref,
     annotation::Annotation,
     attribute_decl::AttributeDeclaration,
     builtins::{XS_ANY_ATOMIC_TYPE_NAME, XS_ANY_SIMPLE_TYPE_NAME, XS_ANY_TYPE_NAME, XS_NAMESPACE},
@@ -12,7 +13,6 @@ use crate::{
     shared::TypeDefinition,
     values::actual_value,
     xstypes::{AnyURI, NCName, QName, Sequence, Set},
-    Ref,
 };
 use roxmltree::Node;
 
