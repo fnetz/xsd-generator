@@ -52,10 +52,7 @@ impl NotationDeclaration {
 
         let self_ref = tlref.unwrap_or_else(|| context.reserve());
 
-        let QName {
-            local_name: name,
-            namespace_name: target_namespace,
-        } = Self::get_name_from_xml(notation, schema);
+        let (target_namespace, name) = Self::get_name_from_xml(notation, schema).into_parts();
 
         // {system identifier}
         //   The ·actual value· of the system [attribute], if present, otherwise ·absent·.

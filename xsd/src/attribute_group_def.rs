@@ -53,10 +53,8 @@ impl AttributeGroupDefinition {
     ) -> Result<Ref<Self>, XsdError> {
         let attrib_group_ref = attrib_group_ref.unwrap_or_else(|| context.reserve());
 
-        let QName {
-            local_name: name,
-            namespace_name: target_namespace,
-        } = Self::get_name_from_xml(attribute_group, schema);
+        let (target_namespace, name) =
+            Self::get_name_from_xml(attribute_group, schema).into_parts();
 
         // {attribute uses}
         //     The union of the set of attribute uses corresponding to the <attribute> [children],

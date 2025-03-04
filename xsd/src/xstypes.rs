@@ -1,13 +1,13 @@
 use crate::error::XsdError;
-use std::fmt;
+use std::{borrow::Cow, fmt};
 
 pub type NCName = String;
 pub type AnyURI = String;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct QName {
-    pub namespace_name: Option<AnyURI>,
-    pub local_name: NCName,
+    pub namespace_name: Option<Cow<'static, str>>,
+    pub local_name: Cow<'static, str>,
 }
 
 impl fmt::Display for QName {
@@ -28,6 +28,16 @@ impl QName {
         Self::with_optional_namespace(Some(namespace_name), local_name)
     }
 
+    pub(crate) const fn with_ns_const(
+        namespace_name: &'static str,
+        local_name: &'static str,
+    ) -> Self {
+        Self {
+            namespace_name: Some(Cow::Borrowed(namespace_name)),
+            local_name: Cow::Borrowed(local_name),
+        }
+    }
+
     pub fn without_namespace(local_name: impl Into<String>) -> Self {
         Self::with_optional_namespace(None::<String>, local_name)
     }
@@ -37,9 +47,17 @@ impl QName {
         local_name: impl Into<String>,
     ) -> Self {
         Self {
-            namespace_name: namespace_name.map(Into::into),
-            local_name: local_name.into(),
+            namespace_name: namespace_name.map(Into::into).map(Cow::Owned),
+            local_name: Cow::Owned(local_name.into()),
         }
+    }
+
+    /// Consumes the QName and returns its parts as a tuple `(namespace_name, local_name)`.
+    pub fn into_parts(self) -> (Option<String>, String) {
+        (
+            self.namespace_name.map(Cow::into_owned),
+            self.local_name.into_owned(),
+        )
     }
 
     pub fn qualified(
@@ -76,6 +94,14 @@ impl QName {
         } else {
             Ok(Self::unqualified(source, context))
         }
+    }
+
+    pub fn namespace_name(&self) -> Option<&str> {
+        self.namespace_name.as_deref()
+    }
+
+    pub fn local_name(&self) -> &str {
+        &self.local_name
     }
 }
 

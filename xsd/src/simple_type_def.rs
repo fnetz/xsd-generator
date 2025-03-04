@@ -241,8 +241,8 @@ impl SimpleTypeDefinition {
             //   <simpleType> element maps to no component at all (but is not in error solely on
             //   account of the presence of the unknown element).
             ChildType::Restriction => {
-                if target_namespace == XS_ANY_SIMPLE_TYPE_NAME.namespace_name
-                    && name.as_ref() == Some(&XS_ANY_SIMPLE_TYPE_NAME.local_name)
+                if target_namespace.as_deref() == XS_ANY_SIMPLE_TYPE_NAME.namespace_name()
+                    && name.as_deref() == Some(XS_ANY_SIMPLE_TYPE_NAME.local_name())
                 {
                     // Special handling for xs:anySimpleType, in case it is ever loaded via this
                     // route and not as builtin: As the base is complex and anySimpleType doesn't
@@ -325,8 +325,8 @@ impl SimpleTypeDefinition {
             ChildType::List => Some(Variety::List),
             ChildType::Union => Some(Variety::Union),
             ChildType::Restriction => {
-                if target_namespace == XS_ANY_ATOMIC_TYPE_NAME.namespace_name
-                    && name.as_ref() == Some(&XS_ANY_ATOMIC_TYPE_NAME.local_name)
+                if target_namespace.as_deref() == XS_ANY_ATOMIC_TYPE_NAME.namespace_name()
+                    && name.as_deref() == Some(XS_ANY_ATOMIC_TYPE_NAME.local_name())
                 {
                     // The type ·xs:anyAtomicType· is an exception because its {base type
                     // definition} is ·xs:anySimpleType·, whose {variety} is ·absent·.

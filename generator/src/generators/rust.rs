@@ -62,7 +62,7 @@ impl RustVisitor {
 
     fn get_builtin_source_name(name: dt_xsd::xstypes::QName) -> (BuiltinSource, &'static str) {
         use BuiltinSource::*;
-        let (source, name) = match name.local_name.as_str() {
+        let (source, name) = match name.local_name.as_ref() {
             "boolean" => (RustPrimitive, "bool"),
             "double" => (RustPrimitive, "f64"),
             "float" => (RustPrimitive, "f32"),

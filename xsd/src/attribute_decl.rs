@@ -77,10 +77,7 @@ impl AttributeDeclaration {
     ) -> Result<Ref<Self>, XsdError> {
         assert_eq!(attribute.tag_name().name(), Self::TAG_NAME);
 
-        let QName {
-            local_name: name,
-            namespace_name: target_namespace,
-        } = Self::get_name_from_xml(attribute, schema);
+        let (target_namespace, name) = Self::get_name_from_xml(attribute, schema).into_parts();
 
         // {type definition}
         //   The simple type definition corresponding to the <simpleType> element information item

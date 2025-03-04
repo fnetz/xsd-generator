@@ -82,10 +82,7 @@ impl IdentityConstraintDefinition {
         schema: Node,
         self_ref: Ref<Self>,
     ) -> Result<Ref<Self>, XsdError> {
-        let QName {
-            local_name: name,
-            namespace_name: target_namespace,
-        } = Self::get_name_from_xml(icd, schema);
+        let (target_namespace, name) = Self::get_name_from_xml(icd, schema).into_parts();
 
         // {identity-constraint category}
         //   One of key, keyref or unique, depending on the item.

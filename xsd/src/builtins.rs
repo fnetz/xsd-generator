@@ -16,25 +16,24 @@ use crate::{
     },
     xstypes::QName,
 };
-use lazy_static::lazy_static;
 
 // Namespaces used by the specification (pt. 1, §1.3.1)
 pub const XS_NAMESPACE: &str = "http://www.w3.org/2001/XMLSchema";
 pub const XSI_NAMESPACE: &str = "http://www.w3.org/2001/XMLSchema-instance";
 
-lazy_static! {
-    /// The `xs:anyType` qualified name
-    pub static ref XS_ANY_TYPE_NAME: QName = QName::with_namespace(XS_NAMESPACE, "anyType");
-    /// The `xs:anySimpleType` qualified name
-    pub static ref XS_ANY_SIMPLE_TYPE_NAME: QName = QName::with_namespace(XS_NAMESPACE, "anySimpleType");
-    /// The `xs:anyAtomicType` qualified name
-    pub static ref XS_ANY_ATOMIC_TYPE_NAME: QName = QName::with_namespace(XS_NAMESPACE, "anyAtomicType");
-    pub static ref XS_QNAME_NAME: QName = QName::with_namespace(XS_NAMESPACE, "QName");
-    pub static ref XS_ANY_URI_NAME: QName = QName::with_namespace(XS_NAMESPACE, "anyURI");
-    pub static ref XS_BOOLEAN_NAME: QName = QName::with_namespace(XS_NAMESPACE, "boolean");
-    pub static ref XS_DECIMAL_NAME: QName = QName::with_namespace(XS_NAMESPACE, "decimal");
-    pub static ref XS_STRING_NAME: QName = QName::with_namespace(XS_NAMESPACE, "string");
-}
+/// The `xs:anyType` qualified name
+pub const XS_ANY_TYPE_NAME: QName = QName::with_ns_const(XS_NAMESPACE, "anyType");
+/// The `xs:anySimpleType` qualified name
+///
+/// Currently static for internal use, but might be changed to const in the future.
+pub static XS_ANY_SIMPLE_TYPE_NAME: QName = QName::with_ns_const(XS_NAMESPACE, "anySimpleType");
+/// The `xs:anyAtomicType` qualified name
+pub const XS_ANY_ATOMIC_TYPE_NAME: QName = QName::with_ns_const(XS_NAMESPACE, "anyAtomicType");
+pub const XS_QNAME_NAME: QName = QName::with_ns_const(XS_NAMESPACE, "QName");
+pub const XS_ANY_URI_NAME: QName = QName::with_ns_const(XS_NAMESPACE, "anyURI");
+pub const XS_BOOLEAN_NAME: QName = QName::with_ns_const(XS_NAMESPACE, "boolean");
+pub const XS_DECIMAL_NAME: QName = QName::with_ns_const(XS_NAMESPACE, "decimal");
+pub const XS_STRING_NAME: QName = QName::with_ns_const(XS_NAMESPACE, "string");
 
 pub(super) fn register_builtins(context: &mut RootContext) {
     register_xs_any_type(context);
@@ -1010,12 +1009,16 @@ fn register_builtin_attribute_decls(context: &mut RootContext) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::BuiltinOverwriteAction;
+    use crate::{BuiltinOverwriteAction, Ref};
 
     #[test]
     fn registers_builtins_without_crashing() {
         let mut root_context = RootContext::new(BuiltinOverwriteAction::Deny, &[]);
 
         register_builtins(&mut root_context);
+
+        root_context
+            .resolve::<Ref<SimpleTypeDefinition>>(&XS_DECIMAL_NAME)
+            .expect("xs:decimal should be registered");
     }
 }

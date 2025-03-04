@@ -50,10 +50,7 @@ impl ModelGroupDefinition {
     ) -> Result<Ref<Self>, XsdError> {
         // {name}, {target namespace}
         //   [see `get_name_from_xml()` above.]
-        let QName {
-            local_name: name,
-            namespace_name: target_namespace,
-        } = Self::get_name_from_xml(group, schema);
+        let (target_namespace, name) = Self::get_name_from_xml(group, schema).into_parts();
 
         let self_ref = tlref.unwrap_or_else(|| context.reserve());
 
