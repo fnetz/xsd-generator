@@ -639,6 +639,25 @@ pub struct Expected {
     pub validity: ExpectedOutcome,
     pub version: Option<VersionInfo>,
 }
+impl meta::ComplexType for Expected {
+    type Node<'a> = roxmltree::Node<'a, 'a>;
+    fn from_node(node: &Self::Node<'_>) -> Result<Self, meta::Error> {
+        if node.children().any(|n| n.is_element() || n.is_text()) {
+            return Err(meta::Error::ElementOrCharacterInEmptyContentType);
+        }
+        Ok(Self {
+            validity: node
+                .attribute("validity")
+                .map(ExpectedOutcome::from_string)
+                .transpose()?
+                .ok_or(meta::Error::MissingAttribute("validity"))?,
+            version: node
+                .attribute("version")
+                .map(VersionInfo::from_string)
+                .transpose()?,
+        })
+    }
+}
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum PublicationPermission {
     ///Enumeration value for `` W3C members ``

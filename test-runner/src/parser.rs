@@ -1,5 +1,5 @@
 use super::generated::*;
-use dt_builtins::meta::SimpleType as _;
+use dt_builtins::meta::{ComplexType as _, SimpleType as _};
 use roxmltree::Node;
 
 const XLINK: &str = "http://www.w3.org/1999/xlink";
@@ -75,20 +75,6 @@ impl TestSuite {
                 ),
             }
         }
-        result
-    }
-}
-
-impl Expected {
-    pub fn from_xml(node: Node) -> Self {
-        let result = Expected {
-            validity: ExpectedOutcome::from_string(node.attribute("validity").unwrap()).unwrap(),
-            version: node
-                .attribute("version")
-                .map(VersionInfo::from_string)
-                .transpose()
-                .unwrap(),
-        };
         result
     }
 }
@@ -175,7 +161,7 @@ impl SchemaTest {
                 }
                 (State::SchemaDocument | State::Expected, "expected") => {
                     state = State::Expected;
-                    result.expecteds.push(Expected::from_xml(child))
+                    result.expecteds.push(Expected::from_node(&child).unwrap())
                 }
                 (State::SchemaDocument | State::Expected, "current") => {
                     state = State::Current;
@@ -224,7 +210,7 @@ impl InstanceTest {
                 }
                 (State::InstanceDocument | State::Expected, "expected") => {
                     state = State::Expected;
-                    expecteds.push(Expected::from_xml(child));
+                    expecteds.push(Expected::from_node(&child).unwrap());
                 }
                 (State::InstanceDocument | State::Expected, "current") => {
                     state = State::Current;
