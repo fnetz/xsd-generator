@@ -28,6 +28,7 @@ struct RustVisitor {
     unnamed_enums: usize,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum BuiltinSource {
     RustPrimitive,
     HelperType,
@@ -535,6 +536,49 @@ impl ComponentVisitor for RustVisitor {
                     #[derive(Debug)]
                     pub struct #name(#simple_type_name);
                 });
+
+                let from_string: Expr = if simple_type_definition.is_builtin(ctx.table) {
+                    // TODO: dedup
+                    let (source, _) = Self::get_builtin_source_name(
+                        simple_type_definition.get(ctx.table).name().unwrap(),
+                    );
+
+                    match source {
+                        BuiltinSource::RustPrimitive => parse_quote! {
+                            dt_builtins::PrimitiveType::<#simple_type_name>::from_string(&initial_value)?.into_inner()
+                        },
+                        BuiltinSource::HelperType => {
+                            parse_quote! { #simple_type_name::from_string(&initial_value)? }
+                        }
+                    }
+                } else {
+                    parse_quote! { #simple_type_name::from_string(&initial_value)? }
+                };
+
+                // [T]he initial value of an element information item is the string composed of, in
+                // order, the [character code] of each character information item in the [children]
+                // of that element information item.
+                // - Pt. 1, 3.1.4 White Space Normalization during Validation
+                //
+                // node.text() returns "a first text child" for elements, which is not what we want.
+                // TODO: is CDATA handled correctly?
+                self.output_items.push(parse_quote! {
+                    impl meta::ComplexType for #name {
+                        type Node<'a> = roxmltree::Node<'a, 'a>;
+                        fn from_node(node: &Self::Node<'_>) -> Result<Self, meta::Error> {
+                            debug_assert!(node.is_element());
+                            if node.children().any(|n| n.is_element()) {
+                                return Err(meta::Error::ElementInSimpleContentType);
+                            }
+                            let initial_value = node.children()
+                                .filter(|n| n.is_text())
+                                .map(|n| n.text().unwrap())
+                                .collect::<String>();
+                            let value = #from_string;
+                            Ok(Self(value))
+                        }
+                    }
+                });
             }
         }
     }
@@ -588,7 +632,16 @@ impl ComponentVisitor for RustVisitor {
                     WhiteSpaceValue::Replace => parse_quote!(Replace),
                     WhiteSpaceValue::Collapse => parse_quote!(Collapse),
                 };
-                let prim_name_raw = Ident::new(prim_name_raw, Span::call_site());
+                // let prim_name_raw = Ident::new(prim_name_raw, Span::call_site());
+
+                let from_literal: Expr = match prim_source {
+                    BuiltinSource::RustPrimitive => parse_quote! {
+                        dt_builtins::PrimitiveType::<#prim_name>::from_literal(normalized)?.into_inner()
+                    },
+                    BuiltinSource::HelperType => {
+                        parse_quote! { #prim_name::from_literal(normalized)? }
+                    }
+                };
 
                 if let Some(enumeration) = simple_type
                     .facets
@@ -629,7 +682,7 @@ impl ComponentVisitor for RustVisitor {
                             const FACET_WHITE_SPACE: Option<meta::Whitespace>
                                 = Some(meta::Whitespace::#whitespace_ident);
                             fn from_literal(normalized: &str) -> Result<Self, meta::Error> {
-                                let value = dt_builtins::#prim_name_raw::from_literal(normalized)?;
+                                let value = #from_literal;
                                 match value.as_str() {
                                     #(#match_arms)*
                                     _ => Err(meta::Error::ValueNotInEnumeration(value.to_string())),
@@ -644,18 +697,20 @@ impl ComponentVisitor for RustVisitor {
                         #[derive(Debug)]
                         pub struct #name(pub #prim_name);
                     };
+
                     // Relevant sections:
                     // - Pt. 1, 3.16.4 Simple Type Definition Validation Rules; Validation Rule: String Valid
                     // - Pt. 2, 4.1.4 Simple Type Definition Validation Rules; Validation Rule: Datatype Valid
                     //   - 1 pattern valid (TODO)
                     //   - 2.1 (atomic variety)
                     //   - 3 facet valid (TODO)
+                    // let value = dt_builtins::#prim_name_raw::from_literal(normalized)?;
                     let impl_block: Item = parse_quote! {
                         impl meta::SimpleType for #name {
                             const FACET_WHITE_SPACE: Option<meta::Whitespace>
                                 = Some(meta::Whitespace::#whitespace_ident);
                             fn from_literal(normalized: &str) -> Result<Self, meta::Error> {
-                                let value = dt_builtins::#prim_name_raw::from_literal(normalized)?;
+                                let value = #from_literal;
                                 Ok(Self(value))
                             }
                         }

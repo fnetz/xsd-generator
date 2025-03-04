@@ -452,10 +452,39 @@ impl meta::SimpleType for DateTimeStamp {
 }
 
 // Built-in types defined using native rust types, only used for literal mapping
+#[deprecated]
 pub struct String(());
 
 impl String {
     pub fn from_literal(literal: &str) -> Result<StdString, meta::Error> {
         Ok(literal.to_string())
+    }
+}
+
+pub struct PrimitiveType<T>(T);
+
+impl<T> PrimitiveType<T> {
+    pub fn into_inner(self) -> T {
+        self.0
+    }
+}
+
+impl meta::SimpleType for PrimitiveType<StdString> {
+    const FACET_WHITE_SPACE: Option<meta::Whitespace> = Some(meta::Whitespace::Preserve);
+    fn from_literal(literal: &str) -> Result<Self, meta::Error> {
+        Ok(Self(literal.to_string()))
+    }
+}
+
+impl meta::SimpleType for PrimitiveType<bool> {
+    const FACET_WHITE_SPACE: Option<meta::Whitespace> = Some(meta::Whitespace::Collapse);
+    fn from_literal(literal: &str) -> Result<Self, meta::Error> {
+        // Corresponds to ·booleanLexicalMap· (LEX) → boolean
+        // Also checks if the value is a valid boolean lexical value (booleanRep)
+        match literal {
+            "true" | "1" => Ok(Self(true)),
+            "false" | "0" => Ok(Self(false)),
+            _ => Err(meta::Error::NotBoolean),
+        }
     }
 }

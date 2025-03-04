@@ -6,6 +6,17 @@ pub enum Error {
     NoValidBranch,
     NotPatternValid { pattern: String, value: String },
     ErrorTypeCanNotBeInstantiated,
+    ElementInSimpleContentType,
+    NotBoolean,
+}
+
+impl Error {
+    fn constraint_name(&self) -> Option<&str> {
+        match self {
+            Self::ElementInSimpleContentType => Some("cvc-complex-type.1.2"),
+            _ => None,
+        }
+    }
 }
 
 impl fmt::Display for Error {
@@ -18,13 +29,18 @@ impl fmt::Display for Error {
             Self::NotPatternValid {
                 ref pattern,
                 ref value,
-            } => {
-                write!(f, "Value {value:?} does not match pattern {pattern:?}")
-            }
-            Self::ErrorTypeCanNotBeInstantiated => {
-                write!(f, "xs:error can not be instantiated")
-            }
+            } => write!(f, "Value {value:?} does not match pattern {pattern:?}"),
+            Self::ErrorTypeCanNotBeInstantiated => write!(f, "xs:error can not be instantiated"),
+            Self::ElementInSimpleContentType => write!(
+                f,
+                "Element information item in complex type with simple content"
+            ),
+            Self::NotBoolean => write!(f, "Value is not a boolean"),
+        }?;
+        if let Some(constraint_name) = self.constraint_name() {
+            write!(f, " ({} violation)", constraint_name)?;
         }
+        Ok(())
     }
 }
 
@@ -70,4 +86,10 @@ pub trait SimpleType: Sized {
             .unwrap_or_else(|| Cow::Borrowed(value));
         Self::from_literal(&normalized)
     }
+}
+
+pub trait ComplexType: Sized {
+    type Node<'a>;
+
+    fn from_node(node: &Self::Node<'_>) -> Result<Self, Error>;
 }
