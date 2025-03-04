@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
 
 use syn::{
-    __private::Span, Arm, Expr, ExprIf, Field, FieldMutability, Fields, Ident, Item, ItemEnum,
-    Token, Type, TypePath, Variant, parse_quote,
+    __private::Span, Arm, Expr, ExprIf, Field, FieldMutability, FieldValue, Fields, Ident, Item,
+    ItemEnum, Member, Token, Type, TypePath, Variant, Visibility, parse_quote,
 };
 
 use dt_xsd::{
@@ -378,22 +378,75 @@ impl ComponentVisitor for RustVisitor {
 
         let complex_type = complex_type.get(ctx.table);
 
+        let attribute_fields =
+            self.generate_fields_for_attribute_uses(ctx, &complex_type.attribute_uses);
+
+        let attribute_values = complex_type.attribute_uses.iter().map(|attr| {
+            let attr = attr.get(ctx.table);
+            let name = attr
+                .attribute_declaration
+                .get(ctx.table)
+                .name
+                .to_snake_case();
+            let name = Self::name_to_ident(&name);
+            let decl = attr.attribute_declaration.get(ctx.table);
+            let attr_type = Self::compute_type_name_path(
+                TypeDefinition::Simple(decl.type_definition),
+                ctx.table,
+            );
+            let raw_name = &decl.name;
+            let expr = parse_quote! {
+                node.attribute(#raw_name).map(#attr_type::from_string).transpose()?
+            };
+            let expr = if attr.required {
+                parse_quote!(#expr.ok_or(meta::Error::MissingAttribute(#raw_name))?)
+            } else {
+                expr
+            };
+            FieldValue {
+                attrs: vec![],
+                member: Member::Named(name),
+                colon_token: Some(Token![:](Span::call_site())),
+                expr,
+            }
+        });
+
         match complex_type.content_type {
             ContentType::Empty => {
-                if !complex_type.attribute_uses.is_empty() {
-                    let fields =
-                        self.generate_fields_for_attribute_uses(ctx, &complex_type.attribute_uses);
+                let final_value: Expr = if !attribute_fields.is_empty() {
                     self.output_items.push(parse_quote! {
                         #[derive(Debug)]
                         pub struct #name {
-                            #(#fields),*
+                            #(#attribute_fields),*
                         }
                     });
+                    parse_quote! {
+                        Self {
+                            #(#attribute_values),*
+                        }
+                    }
                 } else {
                     self.output_items.push(parse_quote! {
                         pub type #name = ();
                     });
-                }
+                    parse_quote! {
+                        Self
+                    }
+                };
+
+                // 3.4.4.2 Element Locally Valid (Complex Type)
+                //  1.1 [...] E has no character or element information item [children].
+                self.output_items.push(parse_quote! {
+                    impl meta::ComplexType for #name {
+                        type Node<'a> = roxmltree::Node<'a, 'a>;
+                        fn from_node(node: &Self::Node<'_>) -> Result<Self, meta::Error> {
+                            if node.children().any(|n| n.is_element() || n.is_text()) {
+                                return Err(meta::Error::ElementOrCharacterInEmptyContentType);
+                            }
+                            Ok(#final_value)
+                        }
+                    }
+                });
             }
             ContentType::Mixed { particle, .. } | ContentType::ElementOnly { particle, .. } => {
                 let particle = particle.get(ctx.table);
@@ -401,21 +454,17 @@ impl ComponentVisitor for RustVisitor {
                 let item_: Item = match &particle.term {
                     Term::ElementDeclaration(_) => {
                         let (content, _) = self.visit_particle(ctx, particle);
-                        if complex_type.attribute_uses.is_empty() {
+                        if attribute_fields.is_empty() {
                             parse_quote! {
                                 #[derive(Debug)]
                                 pub struct #name(#content)
                             }
                         } else {
-                            let fields = self.generate_fields_for_attribute_uses(
-                                ctx,
-                                &complex_type.attribute_uses,
-                            );
                             parse_quote! {
                                 #[derive(Debug)]
                                 pub struct #name {
                                     inner: #content,
-                                    #(#fields),*
+                                    #(#attribute_fields),*
                                 }
                             }
                         }
@@ -443,26 +492,19 @@ impl ComponentVisitor for RustVisitor {
                                     .iter()
                                     .map(|f| f.ident.as_ref().unwrap().clone())
                                     .collect::<BTreeSet<_>>();
-                                fields.extend(
-                                    self.generate_fields_for_attribute_uses(
-                                        ctx,
-                                        &complex_type.attribute_uses,
-                                    )
-                                    .into_iter()
-                                    .map(|f| {
-                                        if names.contains(f.ident.as_ref().unwrap()) {
-                                            Field {
-                                                ident: Some(Ident::new(
-                                                    &(f.ident.unwrap().to_string() + "_attr"),
-                                                    Span::call_site(),
-                                                )),
-                                                ..f
-                                            }
-                                        } else {
-                                            f
+                                fields.extend(attribute_fields.into_iter().map(|f| {
+                                    if names.contains(f.ident.as_ref().unwrap()) {
+                                        Field {
+                                            ident: Some(Ident::new(
+                                                &(f.ident.unwrap().to_string() + "_attr"),
+                                                Span::call_site(),
+                                            )),
+                                            ..f
                                         }
-                                    }),
-                                );
+                                    } else {
+                                        f
+                                    }
+                                }));
                                 parse_quote! {
                                     #[derive(Debug)]
                                     pub struct #name {
@@ -502,15 +544,11 @@ impl ComponentVisitor for RustVisitor {
                                     };
                                     self.output_items.push(inner_enum.into());
 
-                                    let fields = self.generate_fields_for_attribute_uses(
-                                        ctx,
-                                        &complex_type.attribute_uses,
-                                    );
                                     parse_quote! {
                                         #[derive(Debug)]
                                         pub struct #name {
                                             inner: #inner_name,
-                                            #(#fields),*
+                                            #(#attribute_fields),*
                                         }
                                     }
                                 }
@@ -532,11 +570,6 @@ impl ComponentVisitor for RustVisitor {
                     ctx.table,
                 );
 
-                self.output_items.push(parse_quote! {
-                    #[derive(Debug)]
-                    pub struct #name(#simple_type_name);
-                });
-
                 let from_string: Expr = if simple_type_definition.is_builtin(ctx.table) {
                     // TODO: dedup
                     let (source, _) = Self::get_builtin_source_name(
@@ -553,6 +586,31 @@ impl ComponentVisitor for RustVisitor {
                     }
                 } else {
                     parse_quote! { #simple_type_name::from_string(&initial_value)? }
+                };
+
+                let final_value: Expr = if attribute_fields.is_empty() {
+                    self.output_items.push(parse_quote! {
+                        #[derive(Debug)]
+                        pub struct #name(#simple_type_name);
+                    });
+
+                    parse_quote! {
+                        Self(value)
+                    }
+                } else {
+                    self.output_items.push(parse_quote! {
+                        #[derive(Debug)]
+                        pub struct #name {
+                            pub inner: #simple_type_name,
+                            #(#attribute_fields),*
+                        }
+                    });
+                    parse_quote! {
+                        Self {
+                            inner: value,
+                            #(#attribute_values),*
+                        }
+                    }
                 };
 
                 // [T]he initial value of an element information item is the string composed of, in
@@ -575,7 +633,7 @@ impl ComponentVisitor for RustVisitor {
                                 .map(|n| n.text().unwrap())
                                 .collect::<String>();
                             let value = #from_string;
-                            Ok(Self(value))
+                            Ok(#final_value)
                         }
                     }
                 });

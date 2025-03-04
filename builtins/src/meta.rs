@@ -7,7 +7,9 @@ pub enum Error {
     NotPatternValid { pattern: String, value: String },
     ErrorTypeCanNotBeInstantiated,
     ElementInSimpleContentType,
+    ElementOrCharacterInEmptyContentType,
     NotBoolean,
+    MissingAttribute(&'static str),
 }
 
 impl Error {
@@ -35,7 +37,14 @@ impl fmt::Display for Error {
                 f,
                 "Element information item in complex type with simple content"
             ),
+            Self::ElementOrCharacterInEmptyContentType => {
+                write!(
+                    f,
+                    "Element or character information item in empty content type"
+                )
+            }
             Self::NotBoolean => write!(f, "Value is not a boolean"),
+            Self::MissingAttribute(name) => write!(f, "Missing attribute {name:?}"),
         }?;
         if let Some(constraint_name) = self.constraint_name() {
             write!(f, " ({} violation)", constraint_name)?;
