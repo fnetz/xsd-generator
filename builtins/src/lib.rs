@@ -451,16 +451,7 @@ impl meta::SimpleType for DateTimeStamp {
     }
 }
 
-// Built-in types defined using native rust types, only used for literal mapping
-#[deprecated]
-pub struct String(());
-
-impl String {
-    pub fn from_literal(literal: &str) -> Result<StdString, meta::Error> {
-        Ok(literal.to_string())
-    }
-}
-
+/// Built-in types defined using native rust types, only used for literal mapping
 pub struct PrimitiveType<T>(T);
 
 impl<T> PrimitiveType<T> {
