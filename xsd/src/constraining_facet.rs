@@ -425,7 +425,7 @@ impl ConstrainingFacets {
         self.facets.iter()
     }
 
-    pub fn inter_resolved<'a, 'b: 'a>(
+    pub fn iter_resolved<'a, 'b: 'a>(
         &'a self,
         components: &'b impl ComponentTable,
     ) -> impl Iterator<Item = &'b ConstrainingFacet> + 'a {
