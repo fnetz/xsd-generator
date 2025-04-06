@@ -401,6 +401,25 @@ impl ConstrainingFacet {
     pub fn is_of_same_kind_as(&self, other: &Self) -> bool {
         std::mem::discriminant(self) == std::mem::discriminant(other)
     }
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            ConstrainingFacet::Length(_) => "length",
+            ConstrainingFacet::MinLength(_) => "minLength",
+            ConstrainingFacet::MaxLength(_) => "maxLength",
+            ConstrainingFacet::Pattern(_) => "pattern",
+            ConstrainingFacet::Enumeration(_) => "enumeration",
+            ConstrainingFacet::WhiteSpace(_) => "whiteSpace",
+            ConstrainingFacet::MaxInclusive(_) => "maxInclusive",
+            ConstrainingFacet::MaxExclusive(_) => "maxExclusive",
+            ConstrainingFacet::MinExclusive(_) => "minExclusive",
+            ConstrainingFacet::MinInclusive(_) => "minInclusive",
+            ConstrainingFacet::TotalDigits(_) => "totalDigits",
+            ConstrainingFacet::FractionDigits(_) => "fractionDigits",
+            ConstrainingFacet::Assertions(_) => "assertions",
+            ConstrainingFacet::ExplicitTimezone(_) => "explicitTimezone",
+        }
+    }
 }
 
 macro_rules! access_methods {

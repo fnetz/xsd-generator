@@ -43,7 +43,7 @@ pub struct ComplexTypeDefinition {
     pub is_builtin: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum Context {
     Element(Ref<ElementDeclaration>),
     ComplexType(Ref<ComplexTypeDefinition>),
@@ -147,6 +147,15 @@ impl ContentType {
             Self::Empty | Self::Simple { .. } => None,
         }
     }
+
+    pub fn simple_type_definition(&self) -> Option<Ref<SimpleTypeDefinition>> {
+        match self {
+            Self::Simple {
+                simple_type_definition,
+            } => Some(*simple_type_definition),
+            Self::Empty | Self::ElementOnly { .. } | Self::Mixed { .. } => None,
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -158,13 +167,13 @@ pub enum ContentTypeVariety {
 }
 
 /// Property Record: Open Content
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct OpenContent {
     pub mode: OpenContentMode,
     pub wildcard: Ref<Wildcard>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum OpenContentMode {
     Interleave,
     Suffix,

@@ -45,6 +45,7 @@ pub trait HasArenaContainer<R: Component>: Sized {
 }
 
 /// A reference to a [`Component`] stored in a [`ComponentTable`]
+#[repr(transparent)]
 pub struct Ref<R>(NonZeroU32, PhantomData<R>)
 where
     R: Component,
@@ -59,7 +60,7 @@ where
         Self(inner, PhantomData)
     }
 
-    const fn inner(self) -> NonZeroU32 {
+    pub const fn inner(self) -> NonZeroU32 {
         self.0
     }
 

@@ -216,7 +216,10 @@ fn main() {
                 let base_path = path.parent().unwrap();
                 let href = (instance_test.instance_document.href.unwrap().0).0;
 
-                if href.ends_with("mgG014.xml") {
+                if href.ends_with("mgG014.xml")
+                // || href.ends_with("mgJ014.xml")
+                // || href.ends_with("particlesIe003.xml")
+                {
                     // TODO: Tries to allocate a lot using maxOccurs 999999999
                     eprintln!("        SKIPPED");
                     count_skip += 1;

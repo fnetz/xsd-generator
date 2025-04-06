@@ -8,6 +8,7 @@ use dt_xsd::{
     RootContext, Schema,
     import::{Import, ImportError, ImportResolver},
 };
+use ist::{builder::IstBuildVisitor, passes::inline::InlineSettings};
 
 struct HttpImportResolver;
 
@@ -72,6 +73,44 @@ fn main() {
         &import_resolvers,
     )
     .unwrap();
-    let rst = cli.generator.generate(&schema, &components);
-    print!("{rst}");
+
+    let mut ist_builder = IstBuildVisitor::new(&components, schema.target_namespace.clone());
+    ist_builder.visit_schema(&schema);
+
+    let mut ist = ist_builder.into_ist();
+
+    if cli.print_ist {
+        eprintln!("{:#?}", ist.types);
+    }
+
+    if cli.pass_inline {
+        ist::passes::inline::perform_inlining(
+            &mut ist,
+            &InlineSettings {
+                inline_quantified_into_field: true,
+            },
+        );
+
+        if cli.print_ist {
+            eprintln!("After inlining:");
+            eprintln!("{:#?}", ist.types);
+        }
+    }
+
+    if cli.pass_visibility {
+        ist::passes::visibility::reduce_effective_visibility(&mut ist);
+
+        if cli.print_ist {
+            eprintln!("After visibility pass:");
+            eprintln!("{:#?}", ist.types);
+        }
+    }
+
+    ist::passes::name_propagation::fill_unnamed_types(&mut ist, true);
+
+    let code = generators::typescript::generate_v2(&ist, &components);
+    println!("{code}");
+
+    // let rst = cli.generator.generate(&schema, &components);
+    // print!("{rst}");
 }

@@ -6,7 +6,7 @@ use crate::{
         ConstrainingFacet, ConstrainingFacets, ExplicitTimezone, ExplicitTimezoneValue,
         FractionDigits, Length, MinMax, Pattern, WhiteSpace, WhiteSpaceValue,
     },
-    fundamental_facet::{CardinalityValue, FundamentalFacet, FundamentalFacetSet, OrderedValue},
+    fundamental_facet::{CardinalityValue, FundamentalFacetSet, OrderedValue},
     mapping_context::RootContext,
     model_group::Compositor,
     particle::MaxOccurs,
@@ -268,15 +268,8 @@ fn register_builtin_primitive_types(context: &mut RootContext) {
         numeric,
     } in PRIMITIVE_TYPES
     {
-        let fundamental_facets = [
-            FundamentalFacet::Ordered(ordered),
-            FundamentalFacet::Bounded(bounded),
-            FundamentalFacet::Cardinality(cardinality),
-            FundamentalFacet::Numeric(numeric),
-        ]
-        .into_iter()
-        .collect();
-        let fundamental_facets = FundamentalFacetSet::new(fundamental_facets);
+        let fundamental_facets =
+            FundamentalFacetSet::with_values(ordered, bounded, cardinality, numeric);
 
         // Constraining facets (whiteSpace)
         let (ws_value, ws_fixed) = match name {
@@ -856,15 +849,8 @@ fn register_builtin_ordinary_types(context: &mut RootContext) {
             }
         };
 
-        let fundamental_facets = [
-            FundamentalFacet::Ordered(ordered),
-            FundamentalFacet::Bounded(bounded),
-            FundamentalFacet::Cardinality(cardinality),
-            FundamentalFacet::Numeric(numeric),
-        ]
-        .into_iter()
-        .collect();
-        let fundamental_facets = FundamentalFacetSet::new(fundamental_facets);
+        let fundamental_facets =
+            FundamentalFacetSet::with_values(ordered, bounded, cardinality, numeric);
 
         let (variety, item_type) = match variety {
             OrdinaryVariety::Atomic => (simple_type_def::Variety::Atomic, None),

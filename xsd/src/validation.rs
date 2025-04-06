@@ -1,5 +1,5 @@
 use crate::{
-    ComplexTypeDefinition, ElementDeclaration, Particle, SchemaComponentTable,
+    ComplexTypeDefinition, ElementDeclaration, Particle, Ref, SchemaComponentTable,
     SimpleTypeDefinition, TypeDefinition,
     builtins::XSI_NAMESPACE,
     complex_type_def::{ContentType, ContentTypeVariety, OpenContent, OpenContentMode},
@@ -12,14 +12,14 @@ use crate::{
 fn element_sequence_locally_valid_particle(
     _e: &roxmltree::Node,
     s: &[roxmltree::Node],
-    particle: &Particle,
+    particle: Ref<Particle>,
     _open_content: &Option<OpenContent>,
     components: &SchemaComponentTable,
 ) -> bool {
     // TODO: cache
     let state_machine = crate::state_machine::create_state_machine(particle, &components);
-    let upa = crate::state_machine::verify_upa_satisfied(&state_machine, &components);
-    assert!(upa);
+    // let upa = crate::state_machine::verify_upa_satisfied(&state_machine, &components);
+    // assert!(upa);
 
     let mut current_state = state_machine.start_state.unwrap();
 
@@ -27,7 +27,7 @@ fn element_sequence_locally_valid_particle(
     for el in s {
         let ts = state_machine.get_transitions(current_state);
         let mut found = false;
-        for (label, to) in ts {
+        for (label, (to, _)) in ts {
             match label {
                 Transition::ElementDeclaration(label) => {
                     let element = label.get(components);
@@ -52,6 +52,7 @@ fn element_sequence_locally_valid_particle(
                     let _wildcard = label.get(components);
                     todo!()
                 }
+                Transition::Eof => todo!(),
             }
         }
 
@@ -67,7 +68,7 @@ fn element_sequence_locally_valid_particle(
 fn element_sequence_locally_valid_complex_content(
     e: &roxmltree::Node,
     s: &[roxmltree::Node],
-    particle: &Particle,
+    particle: Ref<Particle>,
     open_content: &Option<OpenContent>,
     components: &SchemaComponentTable,
 ) -> bool {
@@ -166,11 +167,11 @@ fn element_locally_valid_complex_type(
                 //   T.{content type}, as defined in Element Sequence Locally Valid (Complex
                 //   Content) (§3.4.4.3).
                 let s = e.children().filter(|c| c.is_element()).collect::<Vec<_>>();
-                let particle = particle.get(components);
+                // let particle = particle.get(components);
                 if !element_sequence_locally_valid_complex_content(
                     e,
                     &s,
-                    particle,
+                    *particle,
                     open_content,
                     components,
                 ) {

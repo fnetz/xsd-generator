@@ -3,7 +3,7 @@ mod common;
 #[cfg(feature = "generator-rust")]
 mod rust;
 #[cfg(feature = "generator-typescript")]
-mod typescript;
+pub mod typescript;
 
 #[cfg(not(any(feature = "generator-rust", feature = "generator-typescript")))]
 compile_error!("At least one generator must be enabled");
@@ -25,7 +25,7 @@ impl Generator {
             #[cfg(feature = "generator-rust")]
             Self::Rust => rust::generate(schema, table),
             #[cfg(feature = "generator-typescript")]
-            Self::Typescript => typescript::generate(schema, table),
+            Self::Typescript => todo!(), // typescript::generate(schema, table),
         }
     }
 }

@@ -20,7 +20,7 @@ pub struct Particle {
     pub(crate) annotations: Option<Sequence<Ref<Annotation>>>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum MaxOccurs {
     Unbounded,
     Count(u64), // TODO NonZeroU64

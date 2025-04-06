@@ -8,7 +8,7 @@ use crate::{
     constraining_facet::{ConstrainingFacet, ConstrainingFacets, WhiteSpace, WhiteSpaceValue},
     element_decl::ElementDeclaration,
     error::XsdError,
-    fundamental_facet::{CardinalityValue, FundamentalFacet, FundamentalFacetSet, OrderedValue},
+    fundamental_facet::{CardinalityValue, FundamentalFacetSet, OrderedValue},
     mapping_context::{MappingContext, TopLevelMappable},
     shared::TypeDefinition,
     values::actual_value,
@@ -65,7 +65,7 @@ pub enum DerivationMethod {
     Union,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum Context {
     Attribute(Ref<AttributeDeclaration>),
     Element(Ref<ElementDeclaration>),
@@ -659,12 +659,7 @@ impl SimpleTypeDefinition {
                 }
             };
 
-            FundamentalFacetSet::new(vec![
-                FundamentalFacet::Ordered(ordered),
-                FundamentalFacet::Bounded(bounded),
-                FundamentalFacet::Cardinality(cardinality),
-                FundamentalFacet::Numeric(numeric),
-            ])
+            FundamentalFacetSet::with_values(ordered, bounded, cardinality, numeric)
         };
 
         ctx.insert(

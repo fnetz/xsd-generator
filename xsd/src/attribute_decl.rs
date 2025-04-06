@@ -33,7 +33,7 @@ pub type Scope = shared::Scope<ScopeParent>;
 
 pub use shared::ScopeVariety;
 
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum ScopeParent {
     ComplexType(Ref<ComplexTypeDefinition>),
     AttributeGroup(Ref<AttributeGroupDefinition>),
@@ -274,8 +274,9 @@ impl AttributeDeclaration {
             //   2 If targetNamespace is not present and one of the following is true
             //     2.1 form = qualified
             //     2.2 form is absent and the <schema> ancestor has attributeFormDefault =
-            //       qualified then the ·actual value· of the targetNamespace [attribute] of the
-            //       ancestor <schema> element information item, or ·absent· if there is none.
+            //       qualified
+            //     then the ·actual value· of the targetNamespace [attribute] of the ancestor
+            //     <schema> element information item, or ·absent· if there is none.
             //   3 otherwise ·absent·.
             let target_namespace =
                 if let Some(target_namespace) = attribute.attribute("targetNamespace") {

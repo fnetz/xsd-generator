@@ -1,20 +1,22 @@
 use std::collections::BTreeSet;
 
 use syn::{
-    __private::Span, Arm, Expr, ExprIf, Field, FieldMutability, FieldValue, Fields, Ident, Item,
-    ItemEnum, Member, Token, Type, TypePath, Variant, Visibility, parse_quote,
+    __private::Span, Arm, Block, Expr, ExprIf, ExprMatch, Field, FieldMutability, FieldValue,
+    Fields, FieldsUnnamed, Ident, Item, ItemEnum, Member, Pat, Path, Stmt, Token, Type, TypePath,
+    Variant, Visibility, parse_quote, punctuated::Punctuated, token::Paren,
 };
 
 use dt_xsd::{
     AttributeUse, ComplexTypeDefinition, ElementDeclaration, Particle, Ref, RefNamed, Schema,
     SchemaComponentTable, SimpleTypeDefinition, Term, TypeDefinition,
     attribute_decl::ScopeVariety,
-    complex_type_def::{self, ContentType},
+    complex_type_def::ContentType,
     components::{IsBuiltinRef, Named},
     constraining_facet::WhiteSpaceValue,
     model_group::Compositor,
     particle::MaxOccurs,
     simple_type_def::Variety as SimpleVariety,
+    state_machine::{self, Action2, Transition},
 };
 
 use super::common::{ComponentVisitor, GeneratorContext};
@@ -211,6 +213,7 @@ impl RustVisitor {
         &mut self,
         ctx: &mut GeneratorContext,
         particle: &Particle,
+        path: &mut Vec<Ref<Particle>>,
     ) -> (Type, String) {
         let (type_, name) = match particle.term {
             Term::ElementDeclaration(element_ref) => {
@@ -230,8 +233,10 @@ impl RustVisitor {
                     Compositor::All | Compositor::Sequence => {
                         let mut members = Vec::new();
                         for particle in model_group.particles.iter().copied() {
+                            path.push(particle);
                             let particle = particle.get(ctx.table);
-                            let particle = self.visit_particle(ctx, particle);
+                            let particle = self.visit_particle(ctx, particle, path);
+                            path.pop();
                             members.push(particle);
                         }
                         if members.len() == 1 {
@@ -244,9 +249,11 @@ impl RustVisitor {
                     Compositor::Choice => {
                         let mut variants = Vec::new();
                         for particle in model_group.particles.iter().copied() {
+                            path.push(particle);
                             let particle = particle.get(ctx.table);
-                            let (type_, name) = self.visit_particle(ctx, particle);
+                            let (type_, name) = self.visit_particle(ctx, particle, path);
                             let name = Self::name_to_ident(&name.to_pascal_case());
+                            path.pop();
                             variants.push(Variant {
                                 attrs: vec![],
                                 ident: name,
@@ -355,6 +362,43 @@ impl RustVisitor {
             }
         }
     }
+
+    fn particle_to_type_name(&self, particle: Ref<Particle>, ctx: &GeneratorContext) -> Path {
+        parse_quote!(Todo)
+    }
+
+    fn particle_term_to_type_name(&self, particle: Ref<Particle>, ctx: &GeneratorContext) -> Path {
+        todo!()
+    }
+
+    fn particle_partial_term_to_type_name(
+        &self,
+        particle: Ref<Particle>,
+        ctx: &GeneratorContext,
+    ) -> Type {
+        let particle = particle.get(ctx.table);
+
+        match particle.term {
+            Term::ElementDeclaration(e) => {
+                let e = e.get(ctx.table);
+                let t = e.type_definition;
+                match t {
+                    TypeDefinition::Simple(t) => {
+                        let t = t.get(ctx.table);
+                        if t.target_namespace.as_deref() == Some("http://www.w3.org/2001/XMLSchema")
+                            && t.name.as_deref() == Some("string")
+                        {
+                            return parse_quote!(Option<String>);
+                        }
+                    }
+                    TypeDefinition::Complex(_) => {}
+                }
+            }
+            _ => {}
+        }
+
+        parse_quote!(TodoPartial)
+    }
 }
 
 impl ComponentVisitor for RustVisitor {
@@ -449,24 +493,362 @@ impl ComponentVisitor for RustVisitor {
                 });
             }
             ContentType::Mixed { particle, .. } | ContentType::ElementOnly { particle, .. } => {
-                let particle = particle.get(ctx.table);
+                let state_machine = state_machine::create_state_machine(particle, ctx.table);
+                let initial_state = state_machine.start_state.unwrap();
+                let initial_state_name =
+                    Ident::new(&format!("State{initial_state}"), Span::call_site());
 
-                let item_: Item = match &particle.term {
-                    Term::ElementDeclaration(_) => {
-                        let (content, _) = self.visit_particle(ctx, particle);
-                        if attribute_fields.is_empty() {
-                            parse_quote! {
-                                #[derive(Debug)]
-                                pub struct #name(#content)
+                let particle_field = |particle: Ref<Particle>| -> Field {
+                    Field {
+                        attrs: vec![],
+                        vis: Visibility::Inherited,
+                        mutability: FieldMutability::None,
+                        ident: None,
+                        colon_token: None,
+                        ty: {
+                            let type_name = self.particle_to_type_name(particle, ctx);
+                            parse_quote!(Vec<#type_name>)
+                        },
+                    }
+                };
+                let term_field = |particle: Ref<Particle>| -> Field {
+                    Field {
+                        attrs: vec![],
+                        vis: Visibility::Inherited,
+                        mutability: FieldMutability::None,
+                        ident: None,
+                        colon_token: None,
+                        ty: {
+                            let type_name = self.particle_partial_term_to_type_name(particle, ctx);
+                            parse_quote!(#type_name)
+                        },
+                    }
+                };
+
+                let state_variants =
+                    state_machine
+                        .states
+                        .iter()
+                        .enumerate()
+                        .map(|(state_index, state)| {
+                            let state_name =
+                                Ident::new(&format!("State{state_index}"), Span::call_site());
+                            Variant {
+                                attrs: vec![],
+                                ident: state_name,
+                                fields: Fields::Unnamed(FieldsUnnamed {
+                                    paren_token: Paren::default(),
+                                    unnamed: Punctuated::from_iter(
+                                        state
+                                            .context
+                                            .iter()
+                                            .copied()
+                                            .flat_map(|p| [particle_field(p), term_field(p)]),
+                                    ),
+                                }),
+                                discriminant: None,
                             }
-                        } else {
-                            parse_quote! {
-                                #[derive(Debug)]
-                                pub struct #name {
-                                    inner: #content,
-                                    #(#attribute_fields),*
+                        });
+
+                let state_enum: ItemEnum = parse_quote! {
+                    #[derive(Debug)]
+                    enum State {
+                        #( #state_variants ),*
+                    }
+                };
+
+                let mut arms = Vec::new();
+
+                for (state_index, state) in state_machine.states.iter().enumerate() {
+                    let state_name = Ident::new(&format!("State{state_index}"), Span::call_site());
+                    for (event, (target, actions)) in state.transitions.iter() {
+                        match event {
+                            Transition::ElementDeclaration(event) => {
+                                let event = event.get(ctx.table);
+                                let name = &event.name;
+                                let namespace: Pat = match &event.target_namespace {
+                                    Some(ns) => parse_quote!(Some(#ns)),
+                                    None => parse_quote!(None),
+                                };
+
+                                let mut lstk = state.context.len();
+
+                                let mut stmts = Vec::<Stmt>::new();
+
+                                for action in actions {
+                                    match action {
+                                        Action2::CommitTerm => {
+                                            let term_field_name = Ident::new(
+                                                &format!("t{}", lstk - 1),
+                                                Span::call_site(),
+                                            );
+                                            let particle_field_name = Ident::new(
+                                                &format!("p{}", lstk - 1),
+                                                Span::call_site(),
+                                            );
+                                            stmts.push(parse_quote! {
+                                        #particle_field_name.push(#term_field_name.finalize());
+                                    });
+                                            stmts.push(parse_quote! {
+                                                let #term_field_name = TodoPartial::new();
+                                            });
+                                        }
+                                        Action2::BeginParticleAndTerm(p) => {
+                                            let field_name =
+                                                Ident::new(&format!("p{lstk}"), Span::call_site());
+                                            let type_name = self.particle_to_type_name(*p, ctx);
+                                            stmts.push(parse_quote! {
+                                                let mut #field_name = Vec::<#type_name>::new();
+                                            });
+
+                                            let field_name =
+                                                Ident::new(&format!("t{lstk}"), Span::call_site());
+                                            // let type_name = self.particle_partial_term_to_type_name(p);
+                                            stmts.push(parse_quote! {
+                                                let mut #field_name = TodoPartial::new();
+                                            });
+                                            lstk += 1;
+                                        }
+                                        Action2::EndTermParticleAndStore(p, s) => {
+                                            let term_field_name = Ident::new(
+                                                &format!("t{}", lstk - 1),
+                                                Span::call_site(),
+                                            );
+                                            let particle_field_name = Ident::new(
+                                                &format!("p{}", lstk - 1),
+                                                Span::call_site(),
+                                            );
+                                            // let type_name = self.particle_partial_term_to_type_name(p);
+                                            stmts.push(parse_quote! {
+                                        #particle_field_name.push(#term_field_name.finalize());
+                                    });
+
+                                            let type_name = self.particle_to_type_name(*p, ctx);
+
+                                            lstk -= 1;
+                                            let term_field_name = Ident::new(
+                                                &format!("t{}", lstk - 1),
+                                                Span::call_site(),
+                                            );
+                                            stmts.push(parse_quote! {
+                                        #term_field_name.insert(#type_name::finalize(#particle_field_name), #s);
+                                    });
+                                        }
+                                        Action2::EndTermParticleAndTerminate(_) => unimplemented!(),
+                                        Action2::StoreEmpty(p, s) => {
+                                            let type_name = self.particle_to_type_name(*p, ctx);
+
+                                            let term_field_name = Ident::new(
+                                                &format!("f{}", lstk - 1),
+                                                Span::call_site(),
+                                            );
+                                            stmts.push(parse_quote! {
+                                        #term_field_name.insert(#type_name::finalize(vec::<#type_name>::new()), #s);
+                                    });
+                                        }
+                                        Action2::TerminateEmpty(_) => unimplemented!(),
+                                    }
                                 }
+
+                                let target_state = &state_machine.states[*target as usize];
+
+                                let mut args = Vec::<Expr>::new();
+                                for (i, particle) in target_state.context.iter().enumerate() {
+                                    let field_name =
+                                        Ident::new(&format!("p{}", i), Span::call_site());
+                                    args.push(parse_quote! { #field_name });
+
+                                    let field_name =
+                                        Ident::new(&format!("t{}", i), Span::call_site());
+                                    args.push(parse_quote! { #field_name });
+                                }
+
+                                let target_name =
+                                    Ident::new(&format!("State{target}"), Span::call_site());
+                                let arm = Arm {
+                                    attrs: vec![],
+                                    pat: parse_quote! { (State::#state_name(), #namespace, #name) },
+                                    guard: None,
+                                    fat_arrow_token: Default::default(),
+                                    body: parse_quote! { {
+                                        #(#stmts)*
+                                        State::#target_name(#(#args),*)
+                                    } },
+                                    comma: Some(Default::default()),
+                                };
+                                arms.push(arm);
                             }
+                            Transition::Wildcard(_) => {
+                                // TODO: Wildcard
+                                eprintln!("Ignoring wildcard transition");
+                                continue;
+                            }
+                            Transition::Eof => {
+                                assert!(state_machine.is_end_state(*target));
+
+                                let mut lstk = state.context.len();
+
+                                let mut stmts = Vec::<Stmt>::new();
+
+                                for action in actions {
+                                    match action {
+                                        Action2::CommitTerm => {
+                                            let term_field_name = Ident::new(
+                                                &format!("t{}", lstk - 1),
+                                                Span::call_site(),
+                                            );
+                                            let particle_field_name = Ident::new(
+                                                &format!("p{}", lstk - 1),
+                                                Span::call_site(),
+                                            );
+                                            stmts.push(parse_quote! {
+                                        #particle_field_name.push(#term_field_name.finalize());
+                                    });
+                                            stmts.push(parse_quote! {
+                                                let #term_field_name = TodoPartial::new();
+                                            });
+                                        }
+                                        Action2::BeginParticleAndTerm(p) => {
+                                            let field_name =
+                                                Ident::new(&format!("p{lstk}"), Span::call_site());
+                                            let type_name = self.particle_to_type_name(*p, ctx);
+                                            stmts.push(parse_quote! {
+                                                let mut #field_name = Vec::<#type_name>::new();
+                                            });
+
+                                            let field_name =
+                                                Ident::new(&format!("t{lstk}"), Span::call_site());
+                                            // let type_name = self.particle_partial_term_to_type_name(p);
+                                            stmts.push(parse_quote! {
+                                                let mut #field_name = TodoPartial::new();
+                                            });
+                                            lstk += 1;
+                                        }
+                                        Action2::EndTermParticleAndStore(p, s) => {
+                                            let term_field_name = Ident::new(
+                                                &format!("t{}", lstk - 1),
+                                                Span::call_site(),
+                                            );
+                                            let particle_field_name = Ident::new(
+                                                &format!("p{}", lstk - 1),
+                                                Span::call_site(),
+                                            );
+                                            // let type_name = self.particle_partial_term_to_type_name(p);
+                                            stmts.push(parse_quote! {
+                                        #particle_field_name.push(#term_field_name.finalize());
+                                    });
+
+                                            let type_name = self.particle_to_type_name(*p, ctx);
+
+                                            lstk -= 1;
+                                            let term_field_name = Ident::new(
+                                                &format!("t{}", lstk - 1),
+                                                Span::call_site(),
+                                            );
+                                            stmts.push(parse_quote! {
+                                        #term_field_name.insert(#type_name::finalize(#particle_field_name), #s);
+                                    });
+                                        }
+                                        Action2::EndTermParticleAndTerminate(p) => {
+                                            let term_field_name = Ident::new(
+                                                &format!("t{}", lstk - 1),
+                                                Span::call_site(),
+                                            );
+                                            let particle_field_name = Ident::new(
+                                                &format!("p{}", lstk - 1),
+                                                Span::call_site(),
+                                            );
+                                            // let type_name = self.particle_partial_term_to_type_name(p);
+                                            stmts.push(parse_quote! {
+                                        #particle_field_name.push(#term_field_name.finalize());
+                                    });
+
+                                            let type_name = self.particle_to_type_name(*p, ctx);
+                                            stmts.push(parse_quote! {
+                                        return Ok(#type_name::finalize(#particle_field_name));
+                                    });
+                                        }
+                                        Action2::StoreEmpty(p, s) => {
+                                            let type_name = self.particle_to_type_name(*p, ctx);
+
+                                            let term_field_name = Ident::new(
+                                                &format!("f{}", lstk - 1),
+                                                Span::call_site(),
+                                            );
+                                            stmts.push(parse_quote! {
+                                        #term_field_name.insert(#type_name::finalize(vec::<#type_name>::new()), #s);
+                                    });
+                                        }
+                                        Action2::TerminateEmpty(p) => {
+                                            let type_name = self.particle_to_type_name(*p, ctx);
+
+                                            stmts.push(parse_quote! {
+                                        return Ok(#type_name::finalize(vec::<#type_name>::new()));
+                                    });
+                                        }
+                                    }
+                                }
+
+                                let arm = Arm {
+                                    attrs: vec![],
+                                    pat: parse_quote! { (State::#state_name(), None, None) },
+                                    guard: None,
+                                    fat_arrow_token: Default::default(),
+                                    body: parse_quote! { {
+                                        #(#stmts)*
+                                    } },
+                                    comma: Some(Default::default()),
+                                };
+                                arms.push(arm);
+                            }
+                        }
+                    }
+                }
+
+                arms.push(parse_quote! {
+                    (_, _, _) => return Err(meta::Error::NoValidBranch),
+                });
+
+                let tt: ExprMatch = parse_quote! {
+                    match (state, namespace_name, name) {
+                        #(#arms)*
+                    }
+                };
+
+                let mut path = Vec::new();
+
+                let particle = particle.get(ctx.table);
+                let (type_item, impl_block): (Item, Block) = match &particle.term {
+                    Term::ElementDeclaration(_) => {
+                        let (content, _) = self.visit_particle(ctx, particle, &mut path);
+                        if attribute_fields.is_empty() {
+                            (
+                                parse_quote! {
+                                    #[derive(Debug)]
+                                    pub struct #name(#content)
+                                },
+                                parse_quote! { {
+                                    let value = #content::from_node(node)?;
+                                    Ok(Self(value))
+                                } },
+                            )
+                        } else {
+                            (
+                                parse_quote! {
+                                    #[derive(Debug)]
+                                    pub struct #name {
+                                        inner: #content,
+                                        #(#attribute_fields),*
+                                    }
+                                },
+                                parse_quote! { {
+                                    let value = #content::from_node(node)?;
+                                    Ok(Self {
+                                        inner: value,
+                                        #(#attribute_values),*
+                                    })
+                                } },
+                            )
                         }
                     }
                     Term::ModelGroup(group) => {
@@ -476,7 +858,8 @@ impl ComponentVisitor for RustVisitor {
                                 let mut fields = Vec::new();
                                 for particle in group.particles.iter().copied() {
                                     let particle = particle.get(ctx.table);
-                                    let (type_, name) = self.visit_particle(ctx, particle);
+                                    let (type_, name) =
+                                        self.visit_particle(ctx, particle, &mut path);
                                     let name = Self::name_to_ident(&name);
                                     let field: Field = Field {
                                         attrs: vec![],
@@ -505,18 +888,31 @@ impl ComponentVisitor for RustVisitor {
                                         f
                                     }
                                 }));
-                                parse_quote! {
-                                    #[derive(Debug)]
-                                    pub struct #name {
-                                        #(#fields),*
-                                    }
-                                }
+                                (
+                                    parse_quote! {
+                                        #[derive(Debug)]
+                                        pub struct #name {
+                                            #(#fields),*
+                                        }
+                                    },
+                                    parse_quote! { {
+                                        #state_enum
+                                        let mut state = State::#initial_state_name;
+                                        for element in node.children().filter(|n| n.is_element()) {
+                                            let name = element.tag_name().name();
+                                            let namespace_name = element.tag_name().namespace();
+                                            state = #tt;
+                                        }
+                                        todo!()
+                                    } },
+                                )
                             }
                             Compositor::Choice => {
                                 let mut variants = Vec::new();
                                 for particle in group.particles.iter().copied() {
                                     let particle = particle.get(ctx.table);
-                                    let (type_, name) = self.visit_particle(ctx, particle);
+                                    let (type_, name) =
+                                        self.visit_particle(ctx, particle, &mut path);
                                     let name = Self::name_to_ident(&name.to_pascal_case());
                                     variants.push(Variant {
                                         attrs: vec![],
@@ -527,12 +923,15 @@ impl ComponentVisitor for RustVisitor {
                                 }
 
                                 if complex_type.attribute_uses.is_empty() {
-                                    parse_quote! {
-                                        #[derive(Debug)]
-                                        pub enum #name {
-                                            #(#variants),*
-                                        }
-                                    }
+                                    (
+                                        parse_quote! {
+                                            #[derive(Debug)]
+                                            pub enum #name {
+                                                #(#variants),*
+                                            }
+                                        },
+                                        parse_quote! {{ todo!() }},
+                                    )
                                 } else {
                                     let inner_name = format!("{}Inner", name);
                                     let inner_name = Self::name_to_ident(&inner_name);
@@ -544,20 +943,30 @@ impl ComponentVisitor for RustVisitor {
                                     };
                                     self.output_items.push(inner_enum.into());
 
-                                    parse_quote! {
-                                        #[derive(Debug)]
-                                        pub struct #name {
-                                            inner: #inner_name,
-                                            #(#attribute_fields),*
-                                        }
-                                    }
+                                    (
+                                        parse_quote! {
+                                            #[derive(Debug)]
+                                            pub struct #name {
+                                                inner: #inner_name,
+                                                #(#attribute_fields),*
+                                            }
+                                        },
+                                        parse_quote! {{ todo!() }},
+                                    )
                                 }
                             }
                         }
                     }
                     Term::Wildcard(_) => todo!(),
                 };
-                self.output_items.push(item_);
+                self.output_items.push(type_item);
+                self.output_items.push(parse_quote! {
+                    impl meta::ComplexType for #name {
+                        type Node<'a> = roxmltree::Node<'a, 'a>;
+                        fn from_node(node: &Self::Node<'_>) -> Result<Self, meta::Error>
+                            #impl_block
+                    }
+                });
             }
             ContentType::Simple {
                 simple_type_definition,

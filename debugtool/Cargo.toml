@@ -1,0 +1,10 @@
+[package]
+name = "xsd-debugtool"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+clap = { version = "4.5.32", features = ["derive"] }
+dt-xsd = { version = "0.1.0", path = "../xsd" }
+roxmltree = "0.20.0"

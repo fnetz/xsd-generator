@@ -41,4 +41,13 @@ pub struct Cli {
     /// Whether to register the builtin types and attributes
     #[clap(long, default_value = "yes", value_enum)]
     pub register_builtins: RegisterBuiltins,
+
+    #[clap(long)]
+    pub print_ist: bool,
+
+    #[clap(long)]
+    pub pass_inline: bool,
+
+    #[clap(long)]
+    pub pass_visibility: bool,
 }
