@@ -505,10 +505,10 @@ impl<'a> IstBuildVisitor<'a> {
             // global: element.scope.variety() == ScopeVariety::Global,
             owner: match element.scope {
                 Scope::Global => None,
-                Scope::Local(p) => Some(match p {
-                    ElementScopeParent::ComplexType(c) => TypeIndex::ComplexType(c),
-                    ElementScopeParent::Group(g) => todo!(),
-                }),
+                Scope::Local(p) => match p {
+                    ElementScopeParent::ComplexType(c) => Some(TypeIndex::ComplexType(c)),
+                    ElementScopeParent::Group(g) => None, // TODO
+                },
             },
             documentation: None,
             inline: element.scope.variety() == ScopeVariety::Local,
@@ -624,7 +624,7 @@ impl<'a> IstBuildVisitor<'a> {
                 }),
             },
             documentation: None,
-            inline: false,
+            inline: attribute_decl.scope.variety() == ScopeVariety::Local,
             visibility: match attribute_decl.scope.variety() {
                 ScopeVariety::Global => Visibility::Public,
                 ScopeVariety::Local => Visibility::Intermediate,

@@ -54,7 +54,7 @@ fn inline_field(
             // inline the field
             if q.quant == Quant::exactly_one() || settings.inline_quantified_into_field {
                 new_fields.push(Field {
-                    name: field.name.clone(),
+                    name: field_type.name.clone(), // TODO
                     type_: q.type_.clone(),
                     source: field.source.clone().inlined(),
                     documentation: field.documentation.clone(),
@@ -73,7 +73,7 @@ fn inline_field(
     }
 }
 
-pub fn perform_inlining(ist: &mut IstBuilder, settings: &InlineSettings) {
+pub fn do_inlining_step(ist: &mut IstBuilder, settings: &InlineSettings) {
     for k in ist.types.keys().cloned().collect::<Vec<_>>() {
         let outer = &ist.types[&k];
         match outer.type_ {
@@ -84,6 +84,11 @@ pub fn perform_inlining(ist: &mut IstBuilder, settings: &InlineSettings) {
                 let mut new_fields = Vec::new();
 
                 for field in s.fields.iter() {
+                    // Don't inline fields containing the current type
+                    if field.type_.as_internal() == Some(k) {
+                        continue;
+                    }
+
                     if !inline_field(field, &mut new_fields, ist, settings) {
                         new_fields.push(field.clone());
                     }
@@ -102,9 +107,19 @@ pub fn perform_inlining(ist: &mut IstBuilder, settings: &InlineSettings) {
                     continue;
                 };
 
+                // Don't inline if the type is the same as the outer type
+                if *inner_type == k {
+                    continue;
+                }
+
                 let inner_type: &TypeBinding = &ist.types[&inner_type];
 
                 if !inner_type.inline {
+                    continue;
+                }
+
+                // Skip for now if the inner type has a name to prevent loss of information
+                if inner_type.name.is_some() {
                     continue;
                 }
 
@@ -132,8 +147,50 @@ pub fn perform_inlining(ist: &mut IstBuilder, settings: &InlineSettings) {
                     _ => {}
                 }
             }
+            Type::Union(ref outer) => {
+                if !outer
+                    .variants
+                    .iter()
+                    .any(|f| f.type_.wants_inlining(&ist.types))
+                {
+                    continue;
+                }
+
+                // let mut new_variants = Vec::new();
+
+                for member in outer.variants.iter() {
+                    let TypeRef::Internal(ref inner_type) = member.type_ else {
+                        continue;
+                    };
+
+                    // Don't inline members containing the current type
+                    if *inner_type == k {
+                        continue;
+                    }
+
+                    let inner_type: &TypeBinding = &ist.types[&inner_type];
+
+                    if !inner_type.inline {
+                        continue;
+                    }
+
+                    // Skip for now if the inner type has a name to prevent loss of information
+                    if inner_type.name.is_some() {
+                        continue;
+                    }
+
+                    // TODO
+                }
+            }
             _ => {}
         }
+    }
+}
+
+pub fn perform_inlining(ist: &mut IstBuilder, settings: &InlineSettings) {
+    // TODO: This is horrible.
+    for _ in 0..ist.types.len() {
+        do_inlining_step(ist, settings);
     }
 }
 
@@ -189,7 +246,7 @@ mod tests {
         let settings = InlineSettings {
             inline_quantified_into_field: false,
         };
-        perform_inlining(&mut ist, &settings);
+        do_inlining_step(&mut ist, &settings);
 
         // Check that the field was inlined
         let b = ist.types.get(&_b).unwrap();
@@ -244,7 +301,7 @@ mod tests {
             inline_quantified_into_field: false,
         };
         println!("Inlining with settings: {:?}", settings);
-        perform_inlining(&mut ist, &settings);
+        do_inlining_step(&mut ist, &settings);
 
         // Check that the field was not inlined
         let t = ist.types.get(&t).unwrap();
@@ -301,7 +358,7 @@ mod tests {
         let settings = InlineSettings {
             inline_quantified_into_field: false,
         };
-        perform_inlining(&mut ist, &settings);
+        do_inlining_step(&mut ist, &settings);
 
         // Check that the field was inlined
         let b = ist.types.get(&_b).unwrap();
