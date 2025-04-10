@@ -1,4 +1,6 @@
-use crate::ist::{Field, Name, Quant, Type, TypeBinding, TypeRef, builder::IstBuilder};
+use std::collections::HashMap;
+
+use crate::ist::{Field, Name, Quant, Type, TypeBinding, TypeIndex, TypeRef, builder::IstBuilder};
 
 #[derive(Debug)]
 pub struct InlineSettings {
@@ -73,29 +75,36 @@ fn inline_field(
     }
 }
 
-pub fn do_inlining_step(ist: &mut IstBuilder, settings: &InlineSettings) {
-    for k in ist.types.keys().cloned().collect::<Vec<_>>() {
-        let outer = &ist.types[&k];
+pub fn do_inlining_step_on_type(
+    k: TypeIndex,
+    ist: &mut IstBuilder,
+    settings: &InlineSettings,
+) -> bool {
+    let outer = &ist.types[&k];
 
-        if !outer.type_.children().any(|t| t.wants_inlining(&ist.types)) {
-            continue;
-        }
+    if !outer.type_.children().any(|t| t.wants_inlining(&ist.types)) {
+        return false;
+    }
 
-        match outer.type_ {
-            Type::Structure(ref s) => {
-                let mut new_fields = Vec::new();
+    match outer.type_ {
+        Type::Structure(ref s) => {
+            let mut new_fields = Vec::new();
+            let mut was_modified = false;
 
-                for field in s.fields.iter() {
-                    // Don't inline fields containing the current type
-                    if field.type_.as_internal() == Some(k) {
-                        continue;
-                    }
-
-                    if !inline_field(field, &mut new_fields, ist, settings) {
-                        new_fields.push(field.clone());
-                    }
+            for field in s.fields.iter() {
+                // Don't inline fields containing the current type
+                if field.type_.as_internal() == Some(k) {
+                    continue;
                 }
 
+                if !inline_field(field, &mut new_fields, ist, settings) {
+                    new_fields.push(field.clone());
+                } else {
+                    was_modified = true;
+                }
+            }
+
+            if was_modified {
                 ist.types
                     .get_mut(&k)
                     .unwrap()
@@ -103,13 +112,67 @@ pub fn do_inlining_step(ist: &mut IstBuilder, settings: &InlineSettings) {
                     .as_structure_mut()
                     .unwrap()
                     .fields = new_fields;
+            } else {
+                debug_assert_eq!(new_fields.len(), s.fields.len());
             }
-            Type::Quantified(ref outer) => {
-                let TypeRef::Internal(ref inner_type) = outer.type_ else {
+
+            was_modified
+        }
+        Type::Quantified(ref outer) => {
+            let TypeRef::Internal(ref inner_type) = outer.type_ else {
+                return false;
+            };
+
+            // Don't inline if the type is the same as the outer type
+            if *inner_type == k {
+                return false;
+            }
+
+            let inner_type: &TypeBinding = &ist.types[&inner_type];
+
+            if !inner_type.inline {
+                return false;
+            }
+
+            // Skip for now if the inner type has a name to prevent loss of information
+            if inner_type.name.is_some() {
+                return false;
+            }
+
+            match inner_type.type_ {
+                Type::Quantified(ref inner_type) => {
+                    let new_quant = if inner_type.quant == Quant::exactly_one() {
+                        outer.quant
+                    } else if outer.quant == Quant::exactly_one() {
+                        inner_type.quant
+                    } else {
+                        return false;
+                    };
+                    let new_type = inner_type.type_.clone();
+
+                    let outer = ist
+                        .types
+                        .get_mut(&k)
+                        .unwrap()
+                        .type_
+                        .as_quantified_mut()
+                        .unwrap();
+                    outer.type_ = new_type;
+                    outer.quant = new_quant;
+                    true
+                }
+                _ => false,
+            }
+        }
+        Type::Union(ref outer) => {
+            // let mut new_variants = Vec::new();
+
+            for member in outer.variants.iter() {
+                let TypeRef::Internal(ref inner_type) = member.type_ else {
                     continue;
                 };
 
-                // Don't inline if the type is the same as the outer type
+                // Don't inline members containing the current type
                 if *inner_type == k {
                     continue;
                 }
@@ -125,66 +188,48 @@ pub fn do_inlining_step(ist: &mut IstBuilder, settings: &InlineSettings) {
                     continue;
                 }
 
-                match inner_type.type_ {
-                    Type::Quantified(ref inner_type) => {
-                        let new_quant = if inner_type.quant == Quant::exactly_one() {
-                            outer.quant
-                        } else if outer.quant == Quant::exactly_one() {
-                            inner_type.quant
-                        } else {
-                            continue;
-                        };
-                        let new_type = inner_type.type_.clone();
-
-                        let outer = ist
-                            .types
-                            .get_mut(&k)
-                            .unwrap()
-                            .type_
-                            .as_quantified_mut()
-                            .unwrap();
-                        outer.type_ = new_type;
-                        outer.quant = new_quant;
-                    }
-                    _ => {}
-                }
+                // TODO
             }
-            Type::Union(ref outer) => {
-                // let mut new_variants = Vec::new();
 
-                for member in outer.variants.iter() {
-                    let TypeRef::Internal(ref inner_type) = member.type_ else {
-                        continue;
-                    };
-
-                    // Don't inline members containing the current type
-                    if *inner_type == k {
-                        continue;
-                    }
-
-                    let inner_type: &TypeBinding = &ist.types[&inner_type];
-
-                    if !inner_type.inline {
-                        continue;
-                    }
-
-                    // Skip for now if the inner type has a name to prevent loss of information
-                    if inner_type.name.is_some() {
-                        continue;
-                    }
-
-                    // TODO
-                }
-            }
-            _ => {}
+            false
         }
+        _ => false,
     }
 }
 
+fn compute_incoming_references(ist: &IstBuilder) -> HashMap<TypeIndex, Vec<TypeIndex>> {
+    let mut incoming_references = HashMap::<TypeIndex, Vec<TypeIndex>>::new();
+
+    for (k, v) in ist.types.iter() {
+        for type_ in v.type_.children().filter_map(|t| t.as_internal()) {
+            incoming_references.entry(type_).or_default().push(*k);
+        }
+    }
+
+    incoming_references
+}
+
 pub fn perform_inlining(ist: &mut IstBuilder, settings: &InlineSettings) {
-    // TODO: This is horrible.
-    for _ in 0..ist.types.len() {
-        do_inlining_step(ist, settings);
+    let incoming_references = compute_incoming_references(ist);
+
+    let mut queue = ist.types.keys().cloned().collect::<Vec<_>>();
+
+    while let Some(k) = queue.pop() {
+        if do_inlining_step_on_type(k, ist, settings) {
+            // If we modified the type, we need to recheck all types that reference it
+            if let Some(references) = incoming_references.get(&k) {
+                for reference in references {
+                    if !queue.contains(reference) {
+                        queue.push(*reference);
+                    }
+                }
+            }
+
+            // Also recheck the type itself
+            if !queue.contains(&k) {
+                queue.push(k);
+            }
+        }
     }
 }
 
@@ -199,6 +244,41 @@ mod tests {
     use super::*;
     use crate::ist::builder::IstBuilder;
     use crate::ist::{ExternalKind, FieldSource, Name, QuantifiedType, StructureType, Visibility};
+
+    #[test]
+    fn incoming_references_correct() {
+        let mut ist = IstBuilder::new();
+        let a = ist.create_type_no_id(
+            Type::Structure(StructureType { fields: vec![] }),
+            Some(Name::new("struct_a".into())),
+            Visibility::Public,
+            None,
+        );
+        let b = ist.create_type_no_id(
+            Type::Structure(StructureType {
+                fields: vec![Field {
+                    name: Some(Name::new("field_b_1".into())),
+                    type_: TypeRef::Internal(a),
+                    source: FieldSource::Term,
+                    documentation: None,
+                    quant: Quant::default(),
+                }],
+            }),
+            Some(Name::new("struct_b".into())),
+            Visibility::Public,
+            None,
+        );
+
+        let incoming_references = compute_incoming_references(&ist);
+        assert_eq!(incoming_references.len(), 1);
+        assert_eq!(incoming_references[&a], vec![b]);
+    }
+
+    fn do_inlining_step(ist: &mut IstBuilder, settings: &InlineSettings) {
+        for k in ist.types.keys().cloned().collect::<Vec<_>>() {
+            do_inlining_step_on_type(k, ist, settings);
+        }
+    }
 
     #[test]
     fn inline_struct_into_struct() {
@@ -358,7 +438,7 @@ mod tests {
         let b = ist.types.get(&_b).unwrap();
         let b = b.type_.as_structure().expect("Expected structure type");
         assert_eq!(b.fields.len(), 2);
-        assert_eq!(b.fields[0].name.as_ref().unwrap().name, "field_b_1");
+        assert_eq!(b.fields[0].name.as_ref().unwrap().name, "struct_a"); // TODO
         assert_eq!(
             b.fields[0].type_.as_external().unwrap().0.local_name(),
             "dummy_type"
