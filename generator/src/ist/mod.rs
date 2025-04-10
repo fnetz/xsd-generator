@@ -13,23 +13,11 @@ use dt_xsd::{
 #[derive(Debug, Clone)]
 pub struct Name {
     pub name: String,
-    // pub scope: NameScope,
-    pub generation: u32,
 }
 
 impl Name {
     pub fn new(name: String) -> Self {
-        Self {
-            name,
-            generation: 0,
-        }
-    }
-
-    pub fn clone_new_generation(&self) -> Self {
-        Self {
-            name: self.name.clone(),
-            generation: self.generation + 1,
-        }
+        Self { name }
     }
 }
 
@@ -132,7 +120,7 @@ impl TypeRef {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct StructureType {
     pub fields: Vec<Field>,
 }
@@ -239,23 +227,23 @@ impl FieldSource {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EnumType {
     pub variants: Vec<EnumVariant>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EnumVariant {
     pub name: Name,
     pub documentation: Documentation,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UnionType {
     pub variants: Vec<UnionVariant>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UnionVariant {
     pub name: Option<Name>,
     pub type_: TypeRef,
@@ -263,7 +251,7 @@ pub struct UnionVariant {
     pub documentation: Documentation,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum UnionVariantSource {
     ModelGroupParticle(usize),
     SimpleTypeMember(usize),
@@ -312,7 +300,7 @@ impl Quant {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Type {
     Structure(StructureType),
     Enum(EnumType),

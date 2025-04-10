@@ -1,23 +1,31 @@
-use std::collections::HashMap;
+use std::{borrow::Cow, collections::HashMap};
 
-use crate::ist::{Field, Name, Quant, Type, TypeBinding, TypeIndex, TypeRef, builder::IstBuilder};
+use crate::ist::{
+    Field, Name, Quant, StructureType, Type, TypeBinding, TypeIndex, TypeRef, builder::IstBuilder,
+};
 
 #[derive(Debug)]
 pub struct InlineSettings {}
 
 fn merge_inlined_name(replaced_field: &Field, inlined_field: &Field) -> Option<Name> {
     // TODO: Expand logic
-    match (replaced_field.name.as_ref(), inlined_field.name.as_ref()) {
-        (Some(name), Some(inlined_name)) => {
-            if name.name == inlined_name.name {
-                Some(name.clone())
-            } else {
-                Some(Name::new(format!("{}_{}", name.name, inlined_name.name)))
-            }
-        }
-        (Some(name), None) | (None, Some(name)) => Some(name.clone()),
+    merge_names(replaced_field.name.as_ref(), inlined_field.name.as_ref())
+}
+
+fn merge_names_str<'a>(left: Option<&'a str>, right: Option<&'a str>) -> Option<Cow<'a, str>> {
+    match (left, right) {
+        (Some(left), Some(right)) => Some(format!("{}_{}", left, right).into()),
+        (Some(single), None) | (None, Some(single)) => Some(single.into()),
         (None, None) => None,
     }
+}
+
+fn merge_names(left: Option<&Name>, right: Option<&Name>) -> Option<Name> {
+    merge_names_str(
+        left.map(|n| n.name.as_str()),
+        right.map(|n| n.name.as_str()),
+    )
+    .map(|name| Name::new(name.into()))
 }
 
 /// Tries to inline a field into the parent structure, returning true if the field was inlined, and
@@ -26,7 +34,7 @@ fn inline_field(
     field: &Field,
     new_fields: &mut Vec<Field>,
     ist: &IstBuilder,
-    settings: &InlineSettings,
+    _settings: &InlineSettings,
 ) -> bool {
     let TypeRef::Internal(ref field_type) = field.type_ else {
         return false;
@@ -37,27 +45,115 @@ fn inline_field(
         return false;
     }
 
-    match field_type.type_ {
-        Type::Structure(ref sub) => {
-            if field.quant != Quant::default() {
-                // If the field is already quantified, we can't inline it (yet)
-                return false;
+    let Type::Structure(ref sub_struct) = field_type.type_ else {
+        // If the field is not a structure, we can't inline it here
+        return false;
+    };
+
+    if sub_struct.is_thin() {
+        // thin -> has single field
+        let sub_field = sub_struct.fields.first().unwrap();
+
+        let quant = if sub_field.quant == Quant::default() {
+            field.quant
+        } else if field.quant == Quant::default() {
+            sub_field.quant
+        } else {
+            // Can't inline if both fields are quantified
+            return false;
+        };
+
+        let name = match (&field.name, &field_type.name, &sub_field.name) {
+            // trivial, no name -> no name
+            (None, None, None) => None,
+
+            // mostly trivial, single name -> keep the name
+            (Some(single), None, None)
+            | (None, Some(single), None)
+            | (None, None, Some(single)) => Some(single.clone()),
+
+            // field type AND sub field name -> merge
+            // (not that common)
+            (None, Some(field_type_name), Some(sub_field_name)) => {
+                merge_names(Some(field_type_name), Some(sub_field_name))
             }
 
-            new_fields.extend(sub.fields.iter().map(|sub_field| Field {
-                name: merge_inlined_name(field, sub_field),
-                type_: sub_field.type_.clone(),
-                source: field.source.clone().inlined(),
-                documentation: field.documentation.clone(),
-                quant: sub_field.quant,
-            }));
-            true
+            // inlined field name AND sub field name -> merge
+            // (also not that common)
+            (Some(inlined_field_name), None, Some(sub_field_name)) => {
+                merge_names(Some(inlined_field_name), Some(sub_field_name))
+            }
+
+            // inlined field name AND field type -> don't inline at all
+            // (not inlining is usually better in this case, since this is pretty much the target state anyway)
+            (Some(_inlined_field_name), Some(_field_type_name), None | Some(_)) => {
+                return false;
+            }
+        };
+
+        new_fields.push(Field {
+            name,
+            type_: sub_field.type_.clone(),
+            source: field.source.clone().inlined(),
+            documentation: field.documentation.clone(),
+            quant,
+        });
+    } else {
+        if field.quant != Quant::default() {
+            // If the field is already quantified and the substructure is not single-fielded,
+            // we can't inline it (yet)
+            return false;
         }
-        _ => {
-            // For other types, we just add the field as is
-            false
+
+        if field.name.is_some() {
+            // We don't want to replace a named field with a multi-fielded structure.
+            return false;
         }
+
+        new_fields.extend(sub_struct.fields.iter().map(|sub_field| Field {
+            name: merge_names(field_type.name.as_ref(), sub_field.name.as_ref()),
+            type_: sub_field.type_.clone(),
+            source: field.source.clone().inlined(),
+            documentation: field.documentation.clone(),
+            quant: sub_field.quant,
+        }));
     }
+
+    true
+}
+
+fn try_replace_whole_type(
+    sup_index: TypeIndex,
+    sup: &StructureType,
+    ist: &IstBuilder,
+) -> Option<Type> {
+    if !sup.is_thin() {
+        return None;
+    }
+    let single_field = sup.fields.first().unwrap();
+
+    if single_field.quant != Quant::default() {
+        // We wont't inline a quantified field
+        return None;
+    }
+
+    let TypeRef::Internal(inf) = single_field.type_ else {
+        return None;
+    };
+
+    if inf == sup_index {
+        // We don't want to inline a type into itself
+        return None;
+    }
+
+    let inf = &ist.types[&inf];
+
+    if !inf.inline || inf.name.is_some() {
+        // We only want to replace types with unnamed, inlineable inferior types
+        return None;
+    }
+
+    Some(inf.type_.clone())
 }
 
 pub fn do_inlining_step_on_type(
@@ -65,14 +161,20 @@ pub fn do_inlining_step_on_type(
     ist: &mut IstBuilder,
     settings: &InlineSettings,
 ) -> bool {
-    let outer = &ist.types[&k];
+    let sup = &ist.types[&k];
 
-    if !outer.type_.children().any(|t| t.wants_inlining(&ist.types)) {
+    if !sup.type_.children().any(|t| t.wants_inlining(&ist.types)) {
         return false;
     }
 
-    match outer.type_ {
+    match sup.type_ {
         Type::Structure(ref s) => {
+            // First, check if the type is viable for replacement
+            if let Some(replacement) = try_replace_whole_type(k, s, ist) {
+                ist.types.get_mut(&k).unwrap().type_ = replacement;
+                return true;
+            }
+
             let mut new_fields = Vec::new();
             let mut was_modified = false;
 
