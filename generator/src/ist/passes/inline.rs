@@ -41,6 +41,11 @@ fn inline_field(
 
     match field_type.type_ {
         Type::Structure(ref sub) => {
+            if field.quant != Quant::default() {
+                // If the field is already quantified, we can't inline it (yet)
+                return false;
+            }
+
             new_fields.extend(sub.fields.iter().map(|sub_field| Field {
                 name: merge_inlined_name(field, sub_field),
                 type_: sub_field.type_.clone(),
@@ -51,16 +56,25 @@ fn inline_field(
             true
         }
         Type::Quantified(ref q) => {
+            let quant = if field.quant == Quant::default() {
+                q.quant
+            } else if q.quant == Quant::default() {
+                field.quant
+            } else {
+                // If both the field and the type are quantified, we can't inline it (yet)
+                return false;
+            };
+
             // If the type is a quantified type and has range 1..1, or if the
             // target supports inlining of non-default quantified types, we can
             // inline the field
-            if q.quant == Quant::exactly_one() || settings.inline_quantified_into_field {
+            if quant == Quant::exactly_one() || settings.inline_quantified_into_field {
                 new_fields.push(Field {
                     name: field_type.name.clone(), // TODO
                     type_: q.type_.clone(),
                     source: field.source.clone().inlined(),
                     documentation: field.documentation.clone(),
-                    quant: q.quant,
+                    quant,
                 });
                 true
             } else {
