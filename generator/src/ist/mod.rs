@@ -360,11 +360,12 @@ impl From<QuantifiedType> for Type {
 }
 
 impl Type {
-    pub const fn create_newtype(type_: TypeRef) -> Self {
-        Type::Quantified(QuantifiedType {
-            type_,
-            quant: Quant::exactly_one(),
-        })
+    pub fn create_quantified(type_: TypeRef, quant: Quant) -> Self {
+        QuantifiedType::new(type_, quant).into()
+    }
+
+    pub fn create_newtype(type_: TypeRef) -> Self {
+        Self::create_quantified(type_, Quant::exactly_one())
     }
 
     pub fn as_structure(&self) -> Option<&StructureType> {

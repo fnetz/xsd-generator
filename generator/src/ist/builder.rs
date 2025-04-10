@@ -15,8 +15,8 @@ use dt_xsd::{
 };
 
 use crate::ist::{
-    Field, FieldSource, QuantifiedType, StructureType, Type, TypeBinding, TypeIndex, TypeRef,
-    UnionType, UnionVariant, UnionVariantSource,
+    Field, FieldSource, StructureType, Type, TypeBinding, TypeIndex, TypeRef, UnionType,
+    UnionVariant, UnionVariantSource,
 };
 
 use super::{ExternalKind, Name, Quant, Visibility};
@@ -65,10 +65,7 @@ impl IstBuilder {
 
     fn create_quant(&mut self, type_: TypeRef, min: u64, max: MaxOccurs) -> TypeIndex {
         self.create_type_no_id(
-            Type::Quantified(QuantifiedType {
-                type_,
-                quant: Quant::new(min, max),
-            }),
+            Type::create_quantified(type_, Quant::new(min, max)),
             None,
             Visibility::Intermediate,
             None,
@@ -288,11 +285,7 @@ impl<'a> IstBuildVisitor<'a> {
 
                 let item_type = self.visit_simple_type(item_type);
 
-                QuantifiedType {
-                    type_: item_type,
-                    quant: Quant::zero_or_more(),
-                }
-                .into()
+                Type::create_quantified(item_type, Quant::zero_or_more())
             }
             Variety::Union => {
                 let member_types = simple_type
@@ -383,10 +376,8 @@ impl<'a> IstBuildVisitor<'a> {
 
         self.builder.insert_binding(type_index_term, type_binding);
 
-        let quantifier = Type::Quantified(QuantifiedType {
-            type_: TypeRef::Internal(type_index_term),
-            quant: Quant::new(particle.min_occurs, particle.max_occurs),
-        });
+        let quant = Quant::new(particle.min_occurs, particle.max_occurs);
+        let quantifier = Type::create_quantified(TypeRef::Internal(type_index_term), quant);
 
         let type_binding = TypeBinding {
             xml_name: None,
@@ -490,7 +481,7 @@ impl<'a> IstBuildVisitor<'a> {
         };
 
         let type_ = if element.nillable {
-            QuantifiedType::new(content_type, Quant::zero_or_one()).into()
+            Type::create_quantified(content_type, Quant::zero_or_one())
         } else {
             Type::create_newtype(content_type)
         };
@@ -563,10 +554,7 @@ impl<'a> IstBuildVisitor<'a> {
         let type_ = if attribute_use.required {
             Type::create_newtype(type_)
         } else {
-            Type::Quantified(QuantifiedType {
-                type_,
-                quant: Quant::zero_or_one(),
-            })
+            Type::create_quantified(type_, Quant::zero_or_one())
         };
 
         let type_binding = TypeBinding {
