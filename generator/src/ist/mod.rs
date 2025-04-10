@@ -2,7 +2,7 @@ pub mod builder;
 pub mod passes;
 pub mod xsd_visitor;
 
-use std::collections::HashMap;
+use std::{collections::HashMap, iter::FusedIterator};
 
 use dt_xsd::{
     AttributeDeclaration, AttributeUse, ComplexTypeDefinition, ElementDeclaration, ModelGroup,
@@ -66,7 +66,7 @@ impl TypeIndex {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ExternalKind {
     TypeDefinition,
     AttributeDeclaration,
@@ -422,7 +422,50 @@ impl Type {
             _ => None,
         }
     }
+
+    pub fn children(&self) -> Children {
+        match self {
+            Type::Structure(s) => Children::Structure(s.fields.iter().map(|f| &f.type_)),
+            Type::Union(u) => Children::Union(u.variants.iter().map(|v| &v.type_)),
+            Type::Enum(_e) => Children::Enum(std::iter::empty()), // e.variants.iter().map(|v| v.type_)),
+            Type::Quantified(q) => Children::Quantified(std::iter::once(&q.type_)),
+        }
+    }
 }
+
+type StructureChildren<'a> =
+    std::iter::Map<std::slice::Iter<'a, Field>, fn(&'a Field) -> &'a TypeRef>;
+
+type UnionChildren<'a> =
+    std::iter::Map<std::slice::Iter<'a, UnionVariant>, fn(&'a UnionVariant) -> &'a TypeRef>;
+
+type EnumChildren<'a> = std::iter::Empty<&'a TypeRef>;
+//     std::iter::Map<std::slice::Iter<'static, EnumVariant>, fn(&'static EnumVariant) -> TypeRef>;
+
+type QuantifiedChildren<'a> = std::iter::Once<&'a TypeRef>;
+
+/// Iterator over the children of a [`Type`].
+pub enum Children<'a> {
+    Structure(StructureChildren<'a>),
+    Union(UnionChildren<'a>),
+    Enum(EnumChildren<'a>),
+    Quantified(QuantifiedChildren<'a>),
+}
+
+impl<'a> Iterator for Children<'a> {
+    type Item = &'a TypeRef;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Children::Structure(iter) => iter.next(),
+            Children::Union(iter) => iter.next(),
+            Children::Enum(iter) => iter.next(),
+            Children::Quantified(iter) => iter.next(),
+        }
+    }
+}
+
+impl FusedIterator for Children<'_> {}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Visibility {
@@ -464,4 +507,116 @@ pub struct TypeBinding {
     pub owner: Option<TypeIndex>,
     pub inline: bool,
     pub visibility: Visibility,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn children_iter_structure() {
+        let structure = StructureType {
+            fields: vec![
+                Field::builder(TypeRef::External(
+                    QName::without_namespace("type1"),
+                    ExternalKind::TypeDefinition,
+                ))
+                .name(Name::new("field1".to_string()))
+                .build(),
+                Field::builder(TypeRef::External(
+                    QName::without_namespace("type2"),
+                    ExternalKind::TypeDefinition,
+                ))
+                .name(Name::new("field2".to_string()))
+                .build(),
+            ],
+        };
+        let structure = Type::Structure(structure);
+
+        let mut children = structure.children();
+
+        let type1 = children.next().expect("Expected first child");
+        let type1 = type1
+            .as_external()
+            .expect("Expected first child to be external type");
+        assert_eq!(type1.0, &QName::without_namespace("type1"));
+        assert_eq!(type1.1, ExternalKind::TypeDefinition);
+
+        let type2 = children.next().expect("Expected second child");
+        let type2 = type2
+            .as_external()
+            .expect("Expected second child to be external type");
+        assert_eq!(type2.0, &QName::without_namespace("type2"));
+        assert_eq!(type2.1, ExternalKind::TypeDefinition);
+
+        assert!(children.next().is_none(), "Expected no more children");
+    }
+
+    #[test]
+    fn children_iter_union() {
+        let union = UnionType {
+            variants: vec![
+                UnionVariant {
+                    name: Some(Name::new("variant1".to_string())),
+                    type_: TypeRef::External(
+                        QName::without_namespace("type1"),
+                        ExternalKind::TypeDefinition,
+                    ),
+                    source: UnionVariantSource::ModelGroupParticle(0),
+                    documentation: None,
+                },
+                UnionVariant {
+                    name: Some(Name::new("variant2".to_string())),
+                    type_: TypeRef::External(
+                        QName::without_namespace("type2"),
+                        ExternalKind::TypeDefinition,
+                    ),
+                    source: UnionVariantSource::SimpleTypeMember(0),
+                    documentation: None,
+                },
+            ],
+        };
+        let union = Type::Union(union);
+
+        let mut children = union.children();
+
+        let variant1 = children.next().expect("Expected first child");
+        let variant1 = variant1
+            .as_external()
+            .expect("Expected first child to be external type");
+        assert_eq!(variant1.0, &QName::without_namespace("type1"));
+        assert_eq!(variant1.1, ExternalKind::TypeDefinition);
+
+        let variant2 = children.next().expect("Expected second child");
+        let variant2 = variant2
+            .as_external()
+            .expect("Expected second child to be external type");
+        assert_eq!(variant2.0, &QName::without_namespace("type2"));
+        assert_eq!(variant2.1, ExternalKind::TypeDefinition);
+
+        assert!(children.next().is_none(), "Expected no more children");
+    }
+
+    #[test]
+    fn children_iter_quantified() {
+        let quantified = QuantifiedType {
+            type_: TypeRef::External(
+                QName::without_namespace("type1"),
+                ExternalKind::TypeDefinition,
+            ),
+            quant: Quant::exactly_one(),
+        };
+        let quantified = Type::Quantified(quantified);
+
+        let mut children = quantified.children();
+
+        let child = children.next().expect("Expected child");
+        let child = child
+            .as_external()
+            .expect("Expected child to be external type");
+        assert_eq!(child.0, &QName::without_namespace("type1"));
+        assert_eq!(child.1, ExternalKind::TypeDefinition);
+
+        assert!(children.next().is_none(), "Expected no more children");
+    }
 }

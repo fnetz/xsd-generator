@@ -76,11 +76,13 @@ fn inline_field(
 pub fn do_inlining_step(ist: &mut IstBuilder, settings: &InlineSettings) {
     for k in ist.types.keys().cloned().collect::<Vec<_>>() {
         let outer = &ist.types[&k];
+
+        if !outer.type_.children().any(|t| t.wants_inlining(&ist.types)) {
+            continue;
+        }
+
         match outer.type_ {
             Type::Structure(ref s) => {
-                if !s.fields.iter().any(|f| f.type_.wants_inlining(&ist.types)) {
-                    continue;
-                }
                 let mut new_fields = Vec::new();
 
                 for field in s.fields.iter() {
@@ -148,14 +150,6 @@ pub fn do_inlining_step(ist: &mut IstBuilder, settings: &InlineSettings) {
                 }
             }
             Type::Union(ref outer) => {
-                if !outer
-                    .variants
-                    .iter()
-                    .any(|f| f.type_.wants_inlining(&ist.types))
-                {
-                    continue;
-                }
-
                 // let mut new_variants = Vec::new();
 
                 for member in outer.variants.iter() {
