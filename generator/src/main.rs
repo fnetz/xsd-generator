@@ -84,12 +84,7 @@ fn main() {
     }
 
     if cli.pass_inline {
-        ist::passes::inline::perform_inlining(
-            &mut ist,
-            &InlineSettings {
-                inline_quantified_into_field: true,
-            },
-        );
+        ist::passes::inline::perform_inlining(&mut ist, &InlineSettings {});
 
         if cli.print_ist {
             eprintln!("After inlining:");

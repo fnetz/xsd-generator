@@ -14,7 +14,7 @@ pub fn fill_unnamed_types(ist: &mut IstBuilder, skip_discarded: bool) {
                 Type::Structure(_) => "Structure",
                 Type::Enum(_) => "Enum",
                 Type::Union(_) => "Union",
-                Type::Quantified(_) => "Quantified",
+                // Type::Quantified(_) => "Quantified",
             };
             let (key_kind, key_id) = key.sort_key();
             type_.name = Some(Name::new(format!("Unnamed {suffix} k{key_kind} s{key_id}")));

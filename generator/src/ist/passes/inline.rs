@@ -3,9 +3,7 @@ use std::collections::HashMap;
 use crate::ist::{Field, Name, Quant, Type, TypeBinding, TypeIndex, TypeRef, builder::IstBuilder};
 
 #[derive(Debug)]
-pub struct InlineSettings {
-    pub inline_quantified_into_field: bool,
-}
+pub struct InlineSettings {}
 
 fn merge_inlined_name(replaced_field: &Field, inlined_field: &Field) -> Option<Name> {
     // TODO: Expand logic
@@ -54,33 +52,6 @@ fn inline_field(
                 quant: sub_field.quant,
             }));
             true
-        }
-        Type::Quantified(ref q) => {
-            let quant = if field.quant == Quant::default() {
-                q.quant
-            } else if q.quant == Quant::default() {
-                field.quant
-            } else {
-                // If both the field and the type are quantified, we can't inline it (yet)
-                return false;
-            };
-
-            // If the type is a quantified type and has range 1..1, or if the
-            // target supports inlining of non-default quantified types, we can
-            // inline the field
-            if quant == Quant::exactly_one() || settings.inline_quantified_into_field {
-                new_fields.push(Field {
-                    name: field_type.name.clone(), // TODO
-                    type_: q.type_.clone(),
-                    source: field.source.clone().inlined(),
-                    documentation: field.documentation.clone(),
-                    quant,
-                });
-                true
-            } else {
-                // Otherwise, we just add the field as is
-                false
-            }
         }
         _ => {
             // For other types, we just add the field as is
@@ -131,52 +102,6 @@ pub fn do_inlining_step_on_type(
             }
 
             was_modified
-        }
-        Type::Quantified(ref outer) => {
-            let TypeRef::Internal(ref inner_type) = outer.type_ else {
-                return false;
-            };
-
-            // Don't inline if the type is the same as the outer type
-            if *inner_type == k {
-                return false;
-            }
-
-            let inner_type: &TypeBinding = &ist.types[&inner_type];
-
-            if !inner_type.inline {
-                return false;
-            }
-
-            // Skip for now if the inner type has a name to prevent loss of information
-            if inner_type.name.is_some() {
-                return false;
-            }
-
-            match inner_type.type_ {
-                Type::Quantified(ref inner_type) => {
-                    let new_quant = if inner_type.quant == Quant::exactly_one() {
-                        outer.quant
-                    } else if outer.quant == Quant::exactly_one() {
-                        inner_type.quant
-                    } else {
-                        return false;
-                    };
-                    let new_type = inner_type.type_.clone();
-
-                    let outer = ist
-                        .types
-                        .get_mut(&k)
-                        .unwrap()
-                        .type_
-                        .as_quantified_mut()
-                        .unwrap();
-                    outer.type_ = new_type;
-                    outer.quant = new_quant;
-                    true
-                }
-                _ => false,
-            }
         }
         Type::Union(ref outer) => {
             // let mut new_variants = Vec::new();
@@ -257,7 +182,7 @@ mod tests {
 
     use super::*;
     use crate::ist::builder::IstBuilder;
-    use crate::ist::{ExternalKind, FieldSource, Name, QuantifiedType, StructureType, Visibility};
+    use crate::ist::{ExternalKind, FieldSource, Name, StructureType, Visibility};
 
     #[test]
     fn incoming_references_correct() {
@@ -331,9 +256,7 @@ mod tests {
             None,
         );
 
-        let settings = InlineSettings {
-            inline_quantified_into_field: false,
-        };
+        let settings = InlineSettings {};
         do_inlining_step(&mut ist, &settings);
 
         // Check that the field was inlined
@@ -385,9 +308,7 @@ mod tests {
             None,
         );
 
-        let settings = InlineSettings {
-            inline_quantified_into_field: false,
-        };
+        let settings = InlineSettings {};
         println!("Inlining with settings: {:?}", settings);
         do_inlining_step(&mut ist, &settings);
 
@@ -406,13 +327,13 @@ mod tests {
     fn inline_internal_quant_and_builtin_simple_into_struct() {
         let mut ist = IstBuilder::new();
         let a = ist.create_type_no_id(
-            Type::Quantified(QuantifiedType {
-                type_: TypeRef::External(
+            Type::create_quantified(
+                TypeRef::External(
                     QName::without_namespace("dummy_type"),
                     ExternalKind::AttributeDeclaration,
                 ),
-                quant: Quant::exactly_one(),
-            }),
+                Quant::exactly_one(),
+            ),
             Some(Name::new("struct_a".into())),
             Visibility::Public,
             None,
@@ -443,9 +364,7 @@ mod tests {
             None,
         );
 
-        let settings = InlineSettings {
-            inline_quantified_into_field: false,
-        };
+        let settings = InlineSettings {};
         do_inlining_step(&mut ist, &settings);
 
         // Check that the field was inlined

@@ -3,7 +3,7 @@
 
 use std::collections::HashSet;
 
-use crate::ist::{Type, TypeIndex, TypeRef, Visibility, builder::IstBuilder};
+use crate::ist::{TypeIndex, TypeRef, Visibility, builder::IstBuilder};
 
 pub fn reduce_effective_visibility(ist: &mut IstBuilder) {
     let mut keep = HashSet::with_capacity(ist.types.len());
@@ -25,21 +25,8 @@ pub fn reduce_effective_visibility(ist: &mut IstBuilder) {
     };
 
     while let Some(type_id) = queue.pop() {
-        match ist.types[&type_id].type_ {
-            Type::Structure(ref s) => {
-                for field in &s.fields {
-                    notice_type_ref(&field.type_, &mut queue);
-                }
-            }
-            Type::Union(ref u) => {
-                for member in &u.variants {
-                    notice_type_ref(&member.type_, &mut queue);
-                }
-            }
-            Type::Quantified(ref q) => {
-                notice_type_ref(&q.type_, &mut queue);
-            }
-            _ => {}
+        for child in ist.types[&type_id].type_.children() {
+            notice_type_ref(child, &mut queue);
         }
     }
 

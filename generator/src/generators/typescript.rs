@@ -152,7 +152,6 @@ impl TypescriptGenerator<'_> {
                 ist::Type::Structure(_) => "UnnamedStructure".into(),
                 ist::Type::Enum(_) => "UnnamedEnum".into(),
                 ist::Type::Union(_) => "UnnamedUnion".into(),
-                ist::Type::Quantified(_) => "UnnamedQuantified".into(),
             })
     }
 
@@ -277,6 +276,10 @@ impl TypescriptGenerator<'_> {
         binding: &TypeBinding,
         structure: &ist::StructureType,
     ) -> Stmt {
+        if structure.is_thin() {
+            return self.statement_for_thin_struct(index, binding, structure);
+        }
+
         let ts_interface = TsInterfaceDecl {
             span: self.leading_comment(
                 CommentKind::Line,
@@ -328,13 +331,15 @@ impl TypescriptGenerator<'_> {
         Decl::TsTypeAlias(Box::new(ts_type)).into()
     }
 
-    fn statement_for_quantified(
+    fn statement_for_thin_struct(
         &self,
         index: TypeIndex,
         binding: &TypeBinding,
-        quantified_: &ist::QuantifiedType,
+        structure: &ist::StructureType,
     ) -> Stmt {
-        let type_ref = self.gen_type_ref(&quantified_.type_);
+        let single_field = structure.fields.first().unwrap();
+
+        let type_ref = self.gen_type_ref(&single_field.type_);
         let ts_type = TsTypeAliasDecl {
             span: self.leading_comment(
                 CommentKind::Line,
@@ -343,7 +348,7 @@ impl TypescriptGenerator<'_> {
             declare: false,
             id: Self::new_ident(Self::binding_name(binding)),
             type_params: None,
-            type_ann: Box::new(self.quantified_type(&quantified_.quant, type_ref.into())),
+            type_ann: Box::new(self.quantified_type(&single_field.quant, type_ref.into())),
         };
         Decl::TsTypeAlias(Box::new(ts_type)).into()
     }
@@ -371,9 +376,6 @@ impl TypescriptGenerator<'_> {
                     .into(),
                 ist::Type::Enum(_enum_type) => todo!(),
                 ist::Type::Union(union_) => self.statement_for_union(index, binding, union_).into(),
-                ist::Type::Quantified(quantified) => self
-                    .statement_for_quantified(index, binding, quantified)
-                    .into(),
             })
         }
 

@@ -137,6 +137,15 @@ pub struct StructureType {
     pub fields: Vec<Field>,
 }
 
+impl StructureType {
+    /// Returns true if the structure can be "newtyped" (i.e. reduced
+    /// to a type alias or similar target construct).
+    /// This implies that the structure has exactly one field.
+    pub fn is_thin(&self) -> bool {
+        self.fields.len() == 1
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Field {
     pub name: Option<Name>,
@@ -144,13 +153,10 @@ pub struct Field {
     pub source: FieldSource,
     pub documentation: Documentation,
 
-    /// The field's quantifier. Currently, it must be set to `exactly_one()` in the XSD visitor.
+    /// The field's quantifier.
     ///
-    /// For targets that support optional fields, the inlining pass can inline a QuantifiedType's
-    /// quantifier into this field.
-    ///
-    /// This behaviour might flip in the future, so that targets that *don't* support quantified
-    /// fields must "outline" the quantifier into a separate type.
+    /// Targets that *don't* support quantified fields must "outline" the quantifier into a
+    /// separate type.
     pub quant: Quant,
 }
 
@@ -307,32 +313,10 @@ impl Quant {
 }
 
 #[derive(Debug)]
-pub struct QuantifiedType {
-    pub type_: TypeRef,
-    pub quant: Quant,
-}
-
-impl QuantifiedType {
-    pub const fn new(type_: TypeRef, quant: Quant) -> Self {
-        Self { type_, quant }
-    }
-}
-
-// #[derive(Debug)]
-// pub enum QuantifiedSource {
-//     Undefined,
-//     SimpleTypeItem,
-//     Particle(Ref<Particle>),
-//     ElementDecl(Ref<ElementDeclaration>),
-// }
-
-#[derive(Debug)]
 pub enum Type {
     Structure(StructureType),
     Enum(EnumType),
     Union(UnionType),
-    Quantified(QuantifiedType),
-    // NewType(TypeRef),
 }
 
 impl From<StructureType> for Type {
@@ -353,15 +337,11 @@ impl From<UnionType> for Type {
     }
 }
 
-impl From<QuantifiedType> for Type {
-    fn from(q: QuantifiedType) -> Self {
-        Type::Quantified(q)
-    }
-}
-
 impl Type {
     pub fn create_quantified(type_: TypeRef, quant: Quant) -> Self {
-        QuantifiedType::new(type_, quant).into()
+        Type::Structure(StructureType {
+            fields: vec![Field::builder(type_).quant(quant).build()],
+        })
     }
 
     pub fn create_newtype(type_: TypeRef) -> Self {
@@ -389,13 +369,6 @@ impl Type {
         }
     }
 
-    pub fn as_quantified(&self) -> Option<&QuantifiedType> {
-        match self {
-            Type::Quantified(q) => Some(q),
-            _ => None,
-        }
-    }
-
     pub fn as_structure_mut(&mut self) -> Option<&mut StructureType> {
         match self {
             Type::Structure(s) => Some(s),
@@ -417,19 +390,11 @@ impl Type {
         }
     }
 
-    pub fn as_quantified_mut(&mut self) -> Option<&mut QuantifiedType> {
-        match self {
-            Type::Quantified(q) => Some(q),
-            _ => None,
-        }
-    }
-
     pub fn children(&self) -> Children {
         match self {
             Type::Structure(s) => Children::Structure(s.fields.iter().map(|f| &f.type_)),
             Type::Union(u) => Children::Union(u.variants.iter().map(|v| &v.type_)),
-            Type::Enum(_e) => Children::Enum(std::iter::empty()), // e.variants.iter().map(|v| v.type_)),
-            Type::Quantified(q) => Children::Quantified(std::iter::once(&q.type_)),
+            Type::Enum(_e) => Children::Enum(std::iter::empty()),
         }
     }
 }
@@ -443,14 +408,11 @@ type UnionChildren<'a> =
 type EnumChildren<'a> = std::iter::Empty<&'a TypeRef>;
 //     std::iter::Map<std::slice::Iter<'static, EnumVariant>, fn(&'static EnumVariant) -> TypeRef>;
 
-type QuantifiedChildren<'a> = std::iter::Once<&'a TypeRef>;
-
 /// Iterator over the children of a [`Type`].
 pub enum Children<'a> {
     Structure(StructureChildren<'a>),
     Union(UnionChildren<'a>),
     Enum(EnumChildren<'a>),
-    Quantified(QuantifiedChildren<'a>),
 }
 
 impl<'a> Iterator for Children<'a> {
@@ -461,7 +423,6 @@ impl<'a> Iterator for Children<'a> {
             Children::Structure(iter) => iter.next(),
             Children::Union(iter) => iter.next(),
             Children::Enum(iter) => iter.next(),
-            Children::Quantified(iter) => iter.next(),
         }
     }
 }
@@ -594,29 +555,6 @@ mod tests {
             .expect("Expected second child to be external type");
         assert_eq!(variant2.0, &QName::without_namespace("type2"));
         assert_eq!(variant2.1, ExternalKind::TypeDefinition);
-
-        assert!(children.next().is_none(), "Expected no more children");
-    }
-
-    #[test]
-    fn children_iter_quantified() {
-        let quantified = QuantifiedType {
-            type_: TypeRef::External(
-                QName::without_namespace("type1"),
-                ExternalKind::TypeDefinition,
-            ),
-            quant: Quant::exactly_one(),
-        };
-        let quantified = Type::Quantified(quantified);
-
-        let mut children = quantified.children();
-
-        let child = children.next().expect("Expected child");
-        let child = child
-            .as_external()
-            .expect("Expected child to be external type");
-        assert_eq!(child.0, &QName::without_namespace("type1"));
-        assert_eq!(child.1, ExternalKind::TypeDefinition);
 
         assert!(children.next().is_none(), "Expected no more children");
     }
