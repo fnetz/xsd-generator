@@ -15,7 +15,7 @@ use dt_xsd::{
 };
 
 use crate::ist::{
-    Field, FieldSource, StructureType, Type, TypeBinding, TypeIndex, TypeRef, UnionType,
+    CompositeType, FieldSource, Member, Type, TypeBinding, TypeIndex, TypeRef, UnionType,
     UnionVariant, UnionVariantSource,
 };
 
@@ -103,22 +103,22 @@ impl<'a> IstBuildVisitor<'a> {
     fn generate_fields_for_attribute_uses(
         &mut self,
         attribute_uses: &[Ref<AttributeUse>],
-        fields: &mut Vec<Field>,
+        fields: &mut Vec<Member>,
     ) {
         for attribute_use in attribute_uses.iter().copied() {
             fields.push(
-                Field::builder(self.visit_attribute_use(attribute_use))
+                Member::builder(self.visit_attribute_use(attribute_use))
                     .source(FieldSource::AttributeUse)
                     .build(),
             );
         }
     }
 
-    fn generate_field_for_open_content(&mut self, open_content: OpenContent) -> Field {
+    fn generate_field_for_open_content(&mut self, open_content: OpenContent) -> Member {
         let content_type = self.visit_wildcard(open_content.wildcard);
         let quantifier = self.builder.create_unbounded_quant(content_type);
 
-        Field::builder(TypeRef::Internal(quantifier))
+        Member::builder(TypeRef::Internal(quantifier))
             .source(FieldSource::OpenContent)
             .build()
     }
@@ -181,7 +181,7 @@ impl<'a> IstBuildVisitor<'a> {
                 simple_type_definition,
             } => {
                 fields.push(
-                    Field::builder(self.visit_simple_type(simple_type_definition))
+                    Member::builder(self.visit_simple_type(simple_type_definition))
                         .source(FieldSource::SimpleContent)
                         .build(),
                 );
@@ -191,7 +191,7 @@ impl<'a> IstBuildVisitor<'a> {
                 open_content,
             } => {
                 fields.push(
-                    Field::builder(self.visit_particle(particle, type_index))
+                    Member::builder(self.visit_particle(particle, type_index))
                         .source(FieldSource::ComplexContent)
                         .build(),
                 );
@@ -205,7 +205,7 @@ impl<'a> IstBuildVisitor<'a> {
                 open_content,
             } => {
                 fields.push(
-                    Field::builder(self.visit_particle(particle, type_index))
+                    Member::builder(self.visit_particle(particle, type_index))
                         .source(FieldSource::ComplexContent)
                         .build(),
                 );
@@ -218,7 +218,7 @@ impl<'a> IstBuildVisitor<'a> {
             }
         }
 
-        let type_ = Type::Structure(StructureType { fields });
+        let type_ = Type::create_structure(fields);
 
         let type_binding = TypeBinding {
             xml_name: complex_type.name(),
@@ -293,20 +293,20 @@ impl<'a> IstBuildVisitor<'a> {
                     .as_deref()
                     .expect("Union simple types must have member types");
 
-                UnionType {
-                    variants: member_types
+                Type::create_union(
+                    member_types
                         .iter()
                         .copied()
                         .enumerate()
-                        .map(|(i, member_type)| UnionVariant {
+                        .map(|(i, member_type)| Member {
                             name: None,
                             type_: self.visit_simple_type(member_type),
-                            source: UnionVariantSource::SimpleTypeMember(i),
+                            source: FieldSource::SimpleTypeMember(i),
                             documentation: None,
+                            quant: Quant::default(),
                         })
                         .collect(),
-                }
-                .into()
+                )
             }
         };
 
@@ -416,25 +416,26 @@ impl<'a> IstBuildVisitor<'a> {
             Compositor::All | Compositor::Sequence => {
                 let fields = content_types_iter
                     .map(|(i, type_)| {
-                        Field::builder(type_)
+                        Member::builder(type_)
                             .source(FieldSource::ModelGroupParticle(i))
                             .build()
                     })
                     .collect();
 
-                StructureType { fields }.into()
+                Type::create_structure(fields)
             }
             Compositor::Choice => {
                 let variants = content_types_iter
-                    .map(|(i, type_)| UnionVariant {
+                    .map(|(i, type_)| Member {
                         name: None,
                         type_,
-                        source: UnionVariantSource::ModelGroupParticle(i),
+                        source: FieldSource::ModelGroupParticle(i),
                         documentation: None,
+                        quant: Quant::default(),
                     })
                     .collect();
 
-                UnionType { variants }.into()
+                Type::create_union(variants)
             }
         };
 
@@ -498,7 +499,7 @@ impl<'a> IstBuildVisitor<'a> {
                 Scope::Global => None,
                 Scope::Local(p) => match p {
                     ElementScopeParent::ComplexType(c) => Some(TypeIndex::ComplexType(c)),
-                    ElementScopeParent::Group(g) => None, // TODO
+                    ElementScopeParent::Group(_g) => None, // TODO
                 },
             },
             documentation: None,
@@ -523,7 +524,7 @@ impl<'a> IstBuildVisitor<'a> {
         let _wildcard = wildcard.get(self.table);
 
         // TODO:
-        let type_ = Type::Structure(StructureType { fields: Vec::new() });
+        let type_ = Type::create_structure(Vec::new());
 
         let type_binding = TypeBinding {
             xml_name: None,
@@ -606,10 +607,10 @@ impl<'a> IstBuildVisitor<'a> {
             // global: attribute_decl.scope.variety() == ScopeVariety::Global,
             owner: match attribute_decl.scope {
                 Scope::Global => None,
-                Scope::Local(p) => Some(match p {
-                    AttributeScopeParent::ComplexType(c) => TypeIndex::ComplexType(c),
-                    AttributeScopeParent::AttributeGroup(g) => todo!(),
-                }),
+                Scope::Local(p) => match p {
+                    AttributeScopeParent::ComplexType(c) => Some(TypeIndex::ComplexType(c)),
+                    AttributeScopeParent::AttributeGroup(_g) => None, // TODO
+                },
             },
             documentation: None,
             inline: attribute_decl.scope.variety() == ScopeVariety::Local,

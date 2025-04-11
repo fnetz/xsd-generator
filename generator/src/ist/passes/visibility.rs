@@ -41,7 +41,7 @@ pub fn reduce_effective_visibility(ist: &mut IstBuilder) {
 mod tests {
     use super::*;
     use crate::ist::builder::IstBuilder;
-    use crate::ist::{Field, Name, StructureType};
+    use crate::ist::{Member, Name, Type};
 
     #[test]
     fn intermediate_referenced_by_public_is_kept() {
@@ -51,16 +51,13 @@ mod tests {
         // -> both should be kept with same visibility
 
         let type1 = ist.create_type_no_id(
-            StructureType { fields: vec![] }.into(),
+            Type::create_structure(vec![]),
             Some(Name::new("t1".into())),
             Visibility::Intermediate,
             None,
         );
         let type2 = ist.create_type_no_id(
-            StructureType {
-                fields: vec![Field::builder(TypeRef::Internal(type1)).build()],
-            }
-            .into(),
+            Type::create_structure(vec![Member::builder(TypeRef::Internal(type1)).build()]),
             Some(Name::new("t2".into())),
             Visibility::Public,
             None,
@@ -80,7 +77,7 @@ mod tests {
         // -> it should be discarded
 
         let type1 = ist.create_type_no_id(
-            StructureType { fields: vec![] }.into(),
+            Type::create_structure(vec![]),
             Some(Name::new("t1".into())),
             Visibility::Intermediate,
             None,
@@ -99,16 +96,13 @@ mod tests {
         // -> both should be discarded
 
         let type1 = ist.create_type_no_id(
-            StructureType { fields: vec![] }.into(),
+            Type::create_structure(vec![]),
             Some(Name::new("t1".into())),
             Visibility::Intermediate,
             None,
         );
         let type2 = ist.create_type_no_id(
-            StructureType {
-                fields: vec![Field::builder(TypeRef::Internal(type1)).build()],
-            }
-            .into(),
+            Type::create_structure(vec![Member::builder(TypeRef::Internal(type1)).build()]),
             Some(Name::new("t2".into())),
             Visibility::Intermediate,
             None,
@@ -128,7 +122,7 @@ mod tests {
         // -> it should stay discarded
 
         let type1 = ist.create_type_no_id(
-            StructureType { fields: vec![] }.into(),
+            Type::create_structure(vec![]),
             Some(Name::new("t1".into())),
             Visibility::Discard,
             None,

@@ -11,31 +11,20 @@ pub fn fill_unnamed_types(ist: &mut IstBuilder, skip_discarded: bool) {
 
         if type_.name.is_none() {
             let suffix = match type_.type_ {
-                Type::Structure(_) => "Structure",
+                Type::Composite(_) => "Structure",
                 Type::Enum(_) => "Enum",
-                Type::Union(_) => "Union",
-                // Type::Quantified(_) => "Quantified",
             };
             let (key_kind, key_id) = key.sort_key();
             type_.name = Some(Name::new(format!("Unnamed {suffix} k{key_kind} s{key_id}")));
         }
 
         match &mut type_.type_ {
-            Type::Structure(s) => {
+            Type::Composite(s) => {
                 let mut next_field_id = 0;
-                for field in &mut s.fields {
+                for field in &mut s.members {
                     if field.name.is_none() {
-                        field.name = Some(Name::new(format!("UnnamedField{next_field_id}")));
+                        field.name = Some(Name::new(format!("UnnamedMember{next_field_id}")));
                         next_field_id += 1;
-                    }
-                }
-            }
-            Type::Union(u) => {
-                let mut next_member_id = 0;
-                for member in &mut u.variants {
-                    if member.name.is_none() {
-                        member.name = Some(Name::new(format!("UnnamedMember{next_member_id}")));
-                        next_member_id += 1;
                     }
                 }
             }

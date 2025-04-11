@@ -120,22 +120,29 @@ impl TypeRef {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct StructureType {
-    pub fields: Vec<Field>,
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum Compositor {
+    Structure,
+    Union,
 }
 
-impl StructureType {
+#[derive(Debug, Clone)]
+pub struct CompositeType {
+    pub compositor: Compositor,
+    pub members: Vec<Member>,
+}
+
+impl CompositeType {
     /// Returns true if the structure can be "newtyped" (i.e. reduced
     /// to a type alias or similar target construct).
     /// This implies that the structure has exactly one field.
     pub fn is_thin(&self) -> bool {
-        self.fields.len() == 1
+        self.members.len() == 1
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Field {
+pub struct Member {
     pub name: Option<Name>,
     pub type_: TypeRef,
     pub source: FieldSource,
@@ -148,7 +155,7 @@ pub struct Field {
     pub quant: Quant,
 }
 
-impl Field {
+impl Member {
     /// Same as [`FieldBuilder::new`].
     pub fn builder(type_: TypeRef) -> FieldBuilder {
         FieldBuilder::new(type_)
@@ -175,11 +182,11 @@ impl FieldBuilder {
         }
     }
 
-    pub fn build(self) -> Field {
-        Field {
+    pub fn build(self) -> Member {
+        Member {
             name: self.name,
             type_: self.type_,
-            source: self.source.unwrap_or(FieldSource::OpenContent),
+            source: self.source.unwrap_or(FieldSource::Undefined),
             documentation: self.documentation.unwrap_or(None),
             quant: self.quant.unwrap_or(Quant::exactly_one()),
         }
@@ -219,6 +226,7 @@ pub enum FieldSource {
     Undefined,
     // Element(Ref<ElementDeclaration>),
     // Attribute(Ref<AttributeUse>),
+    SimpleTypeMember(usize),
 }
 
 impl FieldSource {
@@ -240,7 +248,7 @@ pub struct EnumVariant {
 
 #[derive(Debug, Clone)]
 pub struct UnionType {
-    pub variants: Vec<UnionVariant>,
+    pub variants: Vec<Member>,
 }
 
 #[derive(Debug, Clone)]
@@ -302,14 +310,13 @@ impl Quant {
 
 #[derive(Debug, Clone)]
 pub enum Type {
-    Structure(StructureType),
+    Composite(CompositeType),
     Enum(EnumType),
-    Union(UnionType),
 }
 
-impl From<StructureType> for Type {
-    fn from(s: StructureType) -> Self {
-        Type::Structure(s)
+impl From<CompositeType> for Type {
+    fn from(s: CompositeType) -> Self {
+        Type::Composite(s)
     }
 }
 
@@ -319,16 +326,11 @@ impl From<EnumType> for Type {
     }
 }
 
-impl From<UnionType> for Type {
-    fn from(u: UnionType) -> Self {
-        Type::Union(u)
-    }
-}
-
 impl Type {
     pub fn create_quantified(type_: TypeRef, quant: Quant) -> Self {
-        Type::Structure(StructureType {
-            fields: vec![Field::builder(type_).quant(quant).build()],
+        Self::Composite(CompositeType {
+            compositor: Compositor::Structure,
+            members: vec![Member::builder(type_).quant(quant).build()],
         })
     }
 
@@ -336,9 +338,23 @@ impl Type {
         Self::create_quantified(type_, Quant::exactly_one())
     }
 
-    pub fn as_structure(&self) -> Option<&StructureType> {
+    pub fn create_structure(members: Vec<Member>) -> Self {
+        Self::Composite(CompositeType {
+            compositor: Compositor::Structure,
+            members,
+        })
+    }
+
+    pub fn create_union(members: Vec<Member>) -> Self {
+        Self::Composite(CompositeType {
+            compositor: Compositor::Union,
+            members,
+        })
+    }
+
+    pub fn as_structure(&self) -> Option<&CompositeType> {
         match self {
-            Type::Structure(s) => Some(s),
+            Type::Composite(s) => Some(s),
             _ => None,
         }
     }
@@ -350,16 +366,9 @@ impl Type {
         }
     }
 
-    pub fn as_union(&self) -> Option<&UnionType> {
+    pub fn as_structure_mut(&mut self) -> Option<&mut CompositeType> {
         match self {
-            Type::Union(u) => Some(u),
-            _ => None,
-        }
-    }
-
-    pub fn as_structure_mut(&mut self) -> Option<&mut StructureType> {
-        match self {
-            Type::Structure(s) => Some(s),
+            Type::Composite(s) => Some(s),
             _ => None,
         }
     }
@@ -371,35 +380,23 @@ impl Type {
         }
     }
 
-    pub fn as_union_mut(&mut self) -> Option<&mut UnionType> {
-        match self {
-            Type::Union(u) => Some(u),
-            _ => None,
-        }
-    }
-
     pub fn children(&self) -> Children {
         match self {
-            Type::Structure(s) => Children::Structure(s.fields.iter().map(|f| &f.type_)),
-            Type::Union(u) => Children::Union(u.variants.iter().map(|v| &v.type_)),
+            Type::Composite(s) => Children::Composite(s.members.iter().map(|f| &f.type_)),
             Type::Enum(_e) => Children::Enum(std::iter::empty()),
         }
     }
 }
 
-type StructureChildren<'a> =
-    std::iter::Map<std::slice::Iter<'a, Field>, fn(&'a Field) -> &'a TypeRef>;
-
-type UnionChildren<'a> =
-    std::iter::Map<std::slice::Iter<'a, UnionVariant>, fn(&'a UnionVariant) -> &'a TypeRef>;
+type CompositeChildren<'a> =
+    std::iter::Map<std::slice::Iter<'a, Member>, fn(&'a Member) -> &'a TypeRef>;
 
 type EnumChildren<'a> = std::iter::Empty<&'a TypeRef>;
 //     std::iter::Map<std::slice::Iter<'static, EnumVariant>, fn(&'static EnumVariant) -> TypeRef>;
 
 /// Iterator over the children of a [`Type`].
 pub enum Children<'a> {
-    Structure(StructureChildren<'a>),
-    Union(UnionChildren<'a>),
+    Composite(CompositeChildren<'a>),
     Enum(EnumChildren<'a>),
 }
 
@@ -408,8 +405,7 @@ impl<'a> Iterator for Children<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
-            Children::Structure(iter) => iter.next(),
-            Children::Union(iter) => iter.next(),
+            Children::Composite(iter) => iter.next(),
             Children::Enum(iter) => iter.next(),
         }
     }
@@ -459,29 +455,32 @@ pub struct TypeBinding {
     pub visibility: Visibility,
 }
 
+impl TypeBinding {
+    pub fn should_emit(&self) -> bool {
+        self.visibility != Visibility::Discard
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn children_iter_structure() {
-        let structure = StructureType {
-            fields: vec![
-                Field::builder(TypeRef::External(
-                    QName::without_namespace("type1"),
-                    ExternalKind::TypeDefinition,
-                ))
-                .name(Name::new("field1".to_string()))
-                .build(),
-                Field::builder(TypeRef::External(
-                    QName::without_namespace("type2"),
-                    ExternalKind::TypeDefinition,
-                ))
-                .name(Name::new("field2".to_string()))
-                .build(),
-            ],
-        };
-        let structure = Type::Structure(structure);
+        let structure = Type::create_structure(vec![
+            Member::builder(TypeRef::External(
+                QName::without_namespace("type1"),
+                ExternalKind::TypeDefinition,
+            ))
+            .name(Name::new("field1".to_string()))
+            .build(),
+            Member::builder(TypeRef::External(
+                QName::without_namespace("type2"),
+                ExternalKind::TypeDefinition,
+            ))
+            .name(Name::new("field2".to_string()))
+            .build(),
+        ]);
 
         let mut children = structure.children();
 
@@ -504,29 +503,28 @@ mod tests {
 
     #[test]
     fn children_iter_union() {
-        let union = UnionType {
-            variants: vec![
-                UnionVariant {
-                    name: Some(Name::new("variant1".to_string())),
-                    type_: TypeRef::External(
-                        QName::without_namespace("type1"),
-                        ExternalKind::TypeDefinition,
-                    ),
-                    source: UnionVariantSource::ModelGroupParticle(0),
-                    documentation: None,
-                },
-                UnionVariant {
-                    name: Some(Name::new("variant2".to_string())),
-                    type_: TypeRef::External(
-                        QName::without_namespace("type2"),
-                        ExternalKind::TypeDefinition,
-                    ),
-                    source: UnionVariantSource::SimpleTypeMember(0),
-                    documentation: None,
-                },
-            ],
-        };
-        let union = Type::Union(union);
+        let union = Type::create_union(vec![
+            Member {
+                name: Some(Name::new("variant1".to_string())),
+                type_: TypeRef::External(
+                    QName::without_namespace("type1"),
+                    ExternalKind::TypeDefinition,
+                ),
+                source: FieldSource::ModelGroupParticle(0),
+                documentation: None,
+                quant: Quant::default(),
+            },
+            Member {
+                name: Some(Name::new("variant2".to_string())),
+                type_: TypeRef::External(
+                    QName::without_namespace("type2"),
+                    ExternalKind::TypeDefinition,
+                ),
+                source: FieldSource::SimpleTypeMember(0),
+                documentation: None,
+                quant: Quant::default(),
+            },
+        ]);
 
         let mut children = union.children();
 

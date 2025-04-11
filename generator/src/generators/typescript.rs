@@ -13,7 +13,7 @@ use swc_ecma_ast::{
 };
 
 use crate::ist::{
-    self, ExternalKind, Field, Quant, TypeBinding, TypeIndex, Visibility, builder::IstBuilder,
+    self, Compositor, ExternalKind, Member, Quant, TypeBinding, TypeIndex, builder::IstBuilder,
 };
 
 struct TypescriptGenerator<'a> {
@@ -149,9 +149,8 @@ impl TypescriptGenerator<'_> {
             .as_ref()
             .map(|name| name.name.to_upper_camel_case().into())
             .unwrap_or_else(|| match binding.type_ {
-                ist::Type::Structure(_) => "UnnamedStructure".into(),
+                ist::Type::Composite(_) => "UnnamedComposite".into(),
                 ist::Type::Enum(_) => "UnnamedEnum".into(),
-                ist::Type::Union(_) => "UnnamedUnion".into(),
             })
     }
 
@@ -238,7 +237,7 @@ impl TypescriptGenerator<'_> {
         }
     }
 
-    fn property_for_structure_field(&self, field: &Field) -> TsTypeElement {
+    fn property_for_structure_field(&self, field: &Member) -> TsTypeElement {
         let type_ = self.gen_type_ref(&field.type_).into();
 
         // For optional fields (i.e. occurrence 0..1), we want to use `?` directly in the property
@@ -274,7 +273,7 @@ impl TypescriptGenerator<'_> {
         &self,
         index: TypeIndex,
         binding: &TypeBinding,
-        structure: &ist::StructureType,
+        structure: &ist::CompositeType,
     ) -> Stmt {
         if structure.is_thin() {
             return self.statement_for_thin_struct(index, binding, structure);
@@ -292,7 +291,7 @@ impl TypescriptGenerator<'_> {
             body: TsInterfaceBody {
                 span: Span::default(),
                 body: structure
-                    .fields
+                    .members
                     .iter()
                     .map(|field| self.property_for_structure_field(field))
                     .collect(),
@@ -305,7 +304,7 @@ impl TypescriptGenerator<'_> {
         &self,
         index: TypeIndex,
         binding: &TypeBinding,
-        union_: &ist::UnionType,
+        union_: &ist::CompositeType,
     ) -> Stmt {
         let ts_type = TsTypeAliasDecl {
             span: self.leading_comment(
@@ -319,7 +318,7 @@ impl TypescriptGenerator<'_> {
                 TsUnionType {
                     span: Span::default(),
                     types: union_
-                        .variants
+                        .members
                         .iter()
                         .map(|variant| TsType::TsTypeRef(self.gen_type_ref(&variant.type_)))
                         .map(Box::new)
@@ -335,9 +334,9 @@ impl TypescriptGenerator<'_> {
         &self,
         index: TypeIndex,
         binding: &TypeBinding,
-        structure: &ist::StructureType,
+        structure: &ist::CompositeType,
     ) -> Stmt {
-        let single_field = structure.fields.first().unwrap();
+        let single_field = structure.members.first().unwrap();
 
         let type_ref = self.gen_type_ref(&single_field.type_);
         let ts_type = TsTypeAliasDecl {
@@ -366,17 +365,18 @@ impl TypescriptGenerator<'_> {
         types.sort_by_key(|(k, _)| k.sort_key());
 
         for (index, binding) in types {
-            if binding.visibility == Visibility::Discard {
+            if !binding.should_emit() {
                 continue;
             }
 
-            items.push(match &binding.type_ {
-                ist::Type::Structure(structure) => self
-                    .statement_for_structure(index, binding, structure)
-                    .into(),
+            let stmt = match &binding.type_ {
+                ist::Type::Composite(comp) => match comp.compositor {
+                    Compositor::Structure => self.statement_for_structure(index, binding, comp),
+                    Compositor::Union => self.statement_for_union(index, binding, comp),
+                },
                 ist::Type::Enum(_enum_type) => todo!(),
-                ist::Type::Union(union_) => self.statement_for_union(index, binding, union_).into(),
-            })
+            };
+            items.push(stmt.into())
         }
 
         Program::Module(Module {

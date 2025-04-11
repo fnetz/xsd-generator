@@ -1,16 +1,11 @@
 use std::{borrow::Cow, collections::HashMap};
 
 use crate::ist::{
-    Field, Name, Quant, StructureType, Type, TypeBinding, TypeIndex, TypeRef, builder::IstBuilder,
+    CompositeType, Member, Name, Quant, Type, TypeBinding, TypeIndex, TypeRef, builder::IstBuilder,
 };
 
 #[derive(Debug)]
 pub struct InlineSettings {}
-
-fn merge_inlined_name(replaced_field: &Field, inlined_field: &Field) -> Option<Name> {
-    // TODO: Expand logic
-    merge_names(replaced_field.name.as_ref(), inlined_field.name.as_ref())
-}
 
 fn merge_names_str<'a>(left: Option<&'a str>, right: Option<&'a str>) -> Option<Cow<'a, str>> {
     match (left, right) {
@@ -31,8 +26,9 @@ fn merge_names(left: Option<&Name>, right: Option<&Name>) -> Option<Name> {
 /// Tries to inline a field into the parent structure, returning true if the field was inlined, and
 /// false otherwise.
 fn inline_field(
-    field: &Field,
-    new_fields: &mut Vec<Field>,
+    sup: &CompositeType,
+    field: &Member,
+    new_fields: &mut Vec<Member>,
     ist: &IstBuilder,
     _settings: &InlineSettings,
 ) -> bool {
@@ -45,14 +41,14 @@ fn inline_field(
         return false;
     }
 
-    let Type::Structure(ref sub_struct) = field_type.type_ else {
+    let Type::Composite(ref inf) = field_type.type_ else {
         // If the field is not a structure, we can't inline it here
         return false;
     };
 
-    if sub_struct.is_thin() {
+    if inf.is_thin() {
         // thin -> has single field
-        let sub_field = sub_struct.fields.first().unwrap();
+        let sub_field = inf.members.first().unwrap();
 
         let quant = if sub_field.quant == Quant::default() {
             field.quant
@@ -91,7 +87,7 @@ fn inline_field(
             }
         };
 
-        new_fields.push(Field {
+        new_fields.push(Member {
             name,
             type_: sub_field.type_.clone(),
             source: field.source.clone().inlined(),
@@ -99,6 +95,11 @@ fn inline_field(
             quant,
         });
     } else {
+        if inf.compositor != sup.compositor {
+            // We can't inline a field if the compositor is different
+            return false;
+        }
+
         if field.quant != Quant::default() {
             // If the field is already quantified and the substructure is not single-fielded,
             // we can't inline it (yet)
@@ -110,7 +111,7 @@ fn inline_field(
             return false;
         }
 
-        new_fields.extend(sub_struct.fields.iter().map(|sub_field| Field {
+        new_fields.extend(inf.members.iter().map(|sub_field| Member {
             name: merge_names(field_type.name.as_ref(), sub_field.name.as_ref()),
             type_: sub_field.type_.clone(),
             source: field.source.clone().inlined(),
@@ -124,16 +125,21 @@ fn inline_field(
 
 fn try_replace_whole_type(
     sup_index: TypeIndex,
-    sup: &StructureType,
+    sup: &CompositeType,
     ist: &IstBuilder,
 ) -> Option<Type> {
     if !sup.is_thin() {
         return None;
     }
-    let single_field = sup.fields.first().unwrap();
+    let single_field = sup.members.first().unwrap();
 
     if single_field.quant != Quant::default() {
         // We wont't inline a quantified field
+        return None;
+    }
+
+    if single_field.name.is_some() {
+        // We don't want to inline a named field
         return None;
     }
 
@@ -168,7 +174,7 @@ pub fn do_inlining_step_on_type(
     }
 
     match sup.type_ {
-        Type::Structure(ref s) => {
+        Type::Composite(ref s) => {
             // First, check if the type is viable for replacement
             if let Some(replacement) = try_replace_whole_type(k, s, ist) {
                 ist.types.get_mut(&k).unwrap().type_ = replacement;
@@ -178,13 +184,13 @@ pub fn do_inlining_step_on_type(
             let mut new_fields = Vec::new();
             let mut was_modified = false;
 
-            for field in s.fields.iter() {
+            for field in s.members.iter() {
                 // Don't inline fields containing the current type
                 if field.type_.as_internal() == Some(k) {
                     continue;
                 }
 
-                if !inline_field(field, &mut new_fields, ist, settings) {
+                if !inline_field(s, field, &mut new_fields, ist, settings) {
                     new_fields.push(field.clone());
                 } else {
                     was_modified = true;
@@ -198,41 +204,12 @@ pub fn do_inlining_step_on_type(
                     .type_
                     .as_structure_mut()
                     .unwrap()
-                    .fields = new_fields;
+                    .members = new_fields;
             } else {
-                debug_assert_eq!(new_fields.len(), s.fields.len());
+                debug_assert_eq!(new_fields.len(), s.members.len());
             }
 
             was_modified
-        }
-        Type::Union(ref outer) => {
-            // let mut new_variants = Vec::new();
-
-            for member in outer.variants.iter() {
-                let TypeRef::Internal(ref inner_type) = member.type_ else {
-                    continue;
-                };
-
-                // Don't inline members containing the current type
-                if *inner_type == k {
-                    continue;
-                }
-
-                let inner_type: &TypeBinding = &ist.types[&inner_type];
-
-                if !inner_type.inline {
-                    continue;
-                }
-
-                // Skip for now if the inner type has a name to prevent loss of information
-                if inner_type.name.is_some() {
-                    continue;
-                }
-
-                // TODO
-            }
-
-            false
         }
         _ => false,
     }
@@ -284,27 +261,25 @@ mod tests {
 
     use super::*;
     use crate::ist::builder::IstBuilder;
-    use crate::ist::{ExternalKind, FieldSource, Name, StructureType, Visibility};
+    use crate::ist::{ExternalKind, FieldSource, Name, Visibility};
 
     #[test]
     fn incoming_references_correct() {
         let mut ist = IstBuilder::new();
         let a = ist.create_type_no_id(
-            Type::Structure(StructureType { fields: vec![] }),
+            Type::create_structure(vec![]),
             Some(Name::new("struct_a".into())),
             Visibility::Public,
             None,
         );
         let b = ist.create_type_no_id(
-            Type::Structure(StructureType {
-                fields: vec![Field {
-                    name: Some(Name::new("field_b_1".into())),
-                    type_: TypeRef::Internal(a),
-                    source: FieldSource::Term,
-                    documentation: None,
-                    quant: Quant::default(),
-                }],
-            }),
+            Type::create_structure(vec![Member {
+                name: Some(Name::new("field_b_1".into())),
+                type_: TypeRef::Internal(a),
+                source: FieldSource::Term,
+                documentation: None,
+                quant: Quant::default(),
+            }]),
             Some(Name::new("struct_b".into())),
             Visibility::Public,
             None,
@@ -325,34 +300,31 @@ mod tests {
     fn inline_struct_into_struct() {
         let mut ist = IstBuilder::new();
         let a = ist.create_type_no_id(
-            Type::Structure(StructureType {
-                fields: vec![Field {
-                    name: Some(Name::new("field_a_1".into())),
-                    type_: TypeRef::External(
-                        QName::without_namespace("dummy_type"),
-                        ExternalKind::TypeDefinition,
-                    ),
-                    source: FieldSource::Term,
-                    documentation: None,
-                    quant: Quant::default(),
-                }],
-            }),
-            Some(Name::new("struct_a".into())),
+            Type::create_structure(vec![Member {
+                name: Some(Name::new("field_a_1".into())),
+                type_: TypeRef::External(
+                    QName::without_namespace("dummy_type"),
+                    ExternalKind::TypeDefinition,
+                ),
+                source: FieldSource::Term,
+                documentation: None,
+                quant: Quant::default(),
+            }]),
+            None,
+            // Some(Name::new("struct_a".into())),
             Visibility::Public,
             None,
         );
         ist.types.get_mut(&a).unwrap().inline = true;
 
         let _b = ist.create_type_no_id(
-            Type::Structure(StructureType {
-                fields: vec![Field {
-                    name: Some(Name::new("field_b_1".into())),
-                    type_: TypeRef::Internal(a),
-                    source: FieldSource::Term,
-                    documentation: None,
-                    quant: Quant::default(),
-                }],
-            }),
+            Type::create_structure(vec![Member {
+                name: Some(Name::new("field_b_1".into())),
+                type_: TypeRef::Internal(a),
+                source: FieldSource::Term,
+                documentation: None,
+                quant: Quant::default(),
+            }]),
             Some(Name::new("struct_b".into())),
             Visibility::Public,
             None,
@@ -364,13 +336,13 @@ mod tests {
         // Check that the field was inlined
         let b = ist.types.get(&_b).unwrap();
         let b = b.type_.as_structure().expect("Expected structure type");
-        assert_eq!(b.fields.len(), 1);
+        assert_eq!(b.members.len(), 1);
         assert_eq!(
-            b.fields[0].name.as_ref().unwrap().name,
+            b.members[0].name.as_ref().unwrap().name,
             "field_b_1_field_a_1"
         );
         assert_eq!(
-            b.fields[0].type_.as_external().unwrap().0.local_name(),
+            b.members[0].type_.as_external().unwrap().0.local_name(),
             "dummy_type"
         );
     }
@@ -396,15 +368,13 @@ mod tests {
     fn not_inlining_builtin_simple_into_struct() {
         let mut ist = IstBuilder::new();
         let t = ist.create_type_no_id(
-            Type::Structure(StructureType {
-                fields: vec![Field {
-                    name: Some(Name::new("field_a_1".into())),
-                    type_: TypeRef::Builtin(dt_xsd::TypeDefinition::Simple(dummy_ref())),
-                    source: FieldSource::Term,
-                    documentation: None,
-                    quant: Quant::default(),
-                }],
-            }),
+            Type::create_structure(vec![Member {
+                name: Some(Name::new("field_a_1".into())),
+                type_: TypeRef::Builtin(dt_xsd::TypeDefinition::Simple(dummy_ref())),
+                source: FieldSource::Term,
+                documentation: None,
+                quant: Quant::default(),
+            }]),
             Some(Name::new("struct_a".into())),
             Visibility::Public,
             None,
@@ -417,10 +387,10 @@ mod tests {
         // Check that the field was not inlined
         let t = ist.types.get(&t).unwrap();
         let t = t.type_.as_structure().expect("Expected structure type");
-        assert_eq!(t.fields.len(), 1);
-        assert_eq!(t.fields[0].name.as_ref().unwrap().name, "field_a_1");
+        assert_eq!(t.members.len(), 1);
+        assert_eq!(t.members[0].name.as_ref().unwrap().name, "field_a_1");
         assert!(matches!(
-            t.fields[0].type_,
+            t.members[0].type_,
             TypeRef::Builtin(dt_xsd::TypeDefinition::Simple(_))
         ));
     }
@@ -443,24 +413,22 @@ mod tests {
         ist.types.get_mut(&a).unwrap().inline = true;
 
         let _b = ist.create_type_no_id(
-            Type::Structure(StructureType {
-                fields: vec![
-                    Field {
-                        name: Some(Name::new("field_b_1".into())),
-                        type_: TypeRef::Internal(a),
-                        source: FieldSource::AttributeUse,
-                        documentation: None,
-                        quant: Quant::default(),
-                    },
-                    Field {
-                        name: Some(Name::new("field_b_2".into())),
-                        type_: TypeRef::Builtin(dt_xsd::TypeDefinition::Simple(dummy_ref())),
-                        source: FieldSource::SimpleContent,
-                        documentation: None,
-                        quant: Quant::default(),
-                    },
-                ],
-            }),
+            Type::create_structure(vec![
+                Member {
+                    name: None, // Some(Name::new("field_b_1".into())),
+                    type_: TypeRef::Internal(a),
+                    source: FieldSource::AttributeUse,
+                    documentation: None,
+                    quant: Quant::default(),
+                },
+                Member {
+                    name: Some(Name::new("field_b_2".into())),
+                    type_: TypeRef::Builtin(dt_xsd::TypeDefinition::Simple(dummy_ref())),
+                    source: FieldSource::SimpleContent,
+                    documentation: None,
+                    quant: Quant::default(),
+                },
+            ]),
             Some(Name::new("struct_b".into())),
             Visibility::Public,
             None,
@@ -472,15 +440,15 @@ mod tests {
         // Check that the field was inlined
         let b = ist.types.get(&_b).unwrap();
         let b = b.type_.as_structure().expect("Expected structure type");
-        assert_eq!(b.fields.len(), 2);
-        assert_eq!(b.fields[0].name.as_ref().unwrap().name, "struct_a"); // TODO
+        assert_eq!(b.members.len(), 2);
+        assert_eq!(b.members[0].name.as_ref().unwrap().name, "struct_a"); // TODO
         assert_eq!(
-            b.fields[0].type_.as_external().unwrap().0.local_name(),
+            b.members[0].type_.as_external().unwrap().0.local_name(),
             "dummy_type"
         );
-        assert_eq!(b.fields[1].name.as_ref().unwrap().name, "field_b_2");
+        assert_eq!(b.members[1].name.as_ref().unwrap().name, "field_b_2");
         assert!(matches!(
-            b.fields[1].type_,
+            b.members[1].type_,
             TypeRef::Builtin(dt_xsd::TypeDefinition::Simple(_))
         ));
     }
