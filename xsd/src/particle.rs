@@ -115,6 +115,7 @@ impl Particle {
         particle: Node,
         schema: Node,
         element_parent: element_decl::ScopeParent,
+        model_group_definition: Option<Ref<ModelGroupDefinition>>,
     ) -> Result<Ref<ModelGroup>, XsdError> {
         // {compositor}
         //   One of all, choice, sequence depending on the element information item.
@@ -158,6 +159,7 @@ impl Particle {
             compositor,
             particles,
             annotations,
+            parent: model_group_definition,
         }))
     }
 
@@ -198,7 +200,7 @@ impl Particle {
         // {term}
         //   [see `map_from_xml_model_group_term()` above.]
         let model_group =
-            Self::map_from_xml_model_group_term(context, particle, schema, element_parent)?;
+            Self::map_from_xml_model_group_term(context, particle, schema, element_parent, None)?;
         let term = Term::ModelGroup(model_group);
 
         // {annotations}

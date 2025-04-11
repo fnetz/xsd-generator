@@ -855,6 +855,7 @@ impl ContentType {
                     compositor: Compositor::Sequence,
                     particles: Sequence::new(),
                     annotations: Sequence::new(),
+                    parent: None,
                 }));
                 Some(context.create(Particle {
                     min_occurs: 1,
@@ -953,6 +954,7 @@ impl ContentType {
                     compositor: Compositor::Sequence,
                     particles: Sequence::new(),
                     annotations: Sequence::new(),
+                    parent: None,
                 }));
                 Some(context.create(Particle {
                     min_occurs: 1,
@@ -1175,6 +1177,7 @@ impl ContentType {
                     compositor: Compositor::All,
                     particles,
                     annotations: Sequence::new(),
+                    parent: None,
                 });
                 Some(
                     context.create(Particle {
@@ -1193,6 +1196,7 @@ impl ContentType {
                     compositor: Compositor::Sequence,
                     particles: vec![base_particle, effective_content.unwrap()],
                     annotations: Sequence::new(),
+                    parent: None,
                 });
                 Some(context.create(Particle {
                     min_occurs: 1,

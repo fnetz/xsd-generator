@@ -70,6 +70,7 @@ fn register_xs_any_type(context: &mut RootContext) {
         compositor: Compositor::Sequence,
         particles: vec![inner_particle],
         annotations: Sequence::new(),
+        parent: None,
     });
 
     let outer_particle = context.create(Particle {

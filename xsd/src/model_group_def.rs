@@ -69,6 +69,7 @@ impl ModelGroupDefinition {
             particle,
             schema,
             element_decl::ScopeParent::Group(self_ref),
+            Some(self_ref),
         )?;
 
         // {annotations}
