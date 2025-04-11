@@ -154,10 +154,6 @@ impl<'a> IstBuildVisitor<'a> {
 
         let type_index = TypeIndex::ComplexType(complex_type);
 
-        if !self.visited.insert(type_index) {
-            return TypeRef::Internal(type_index);
-        }
-
         let complex_type = complex_type.get(self.table);
 
         if complex_type.target_namespace != self.target_namespace {
@@ -165,6 +161,10 @@ impl<'a> IstBuildVisitor<'a> {
                 .name()
                 .expect("Unexpected missing name for type with different target namespace");
             return TypeRef::External(name, ExternalKind::TypeDefinition);
+        }
+
+        if !self.visited.insert(type_index) {
+            return TypeRef::Internal(type_index);
         }
 
         let mut fields = Vec::new();
@@ -252,10 +252,6 @@ impl<'a> IstBuildVisitor<'a> {
 
         let type_index = TypeIndex::SimpleType(simple_type);
 
-        if !self.visited.insert(type_index) {
-            return TypeRef::Internal(type_index);
-        }
-
         let simple_type = simple_type.get(self.table);
 
         if simple_type.target_namespace != self.target_namespace {
@@ -263,6 +259,10 @@ impl<'a> IstBuildVisitor<'a> {
                 .name()
                 .expect("Unexpected missing name for type with different target namespace");
             return TypeRef::External(name, ExternalKind::TypeDefinition);
+        }
+
+        if !self.visited.insert(type_index) {
+            return TypeRef::Internal(type_index);
         }
 
         // Only xs::anyAtomicType is allowed to have a variety of None
@@ -460,10 +460,6 @@ impl<'a> IstBuildVisitor<'a> {
         let type_index = TypeIndex::ElementDecl(element);
         // let quant_source = QuantifiedSource::ElementDecl(element);
 
-        if !self.visited.insert(type_index) {
-            return TypeRef::Internal(type_index);
-        }
-
         let element = element.get(self.table);
 
         // Local element declarations can be unqualified, depending on the form.
@@ -474,6 +470,10 @@ impl<'a> IstBuildVisitor<'a> {
                 .name()
                 .expect("Unexpected missing name for element with different target namespace");
             return TypeRef::External(name, ExternalKind::ElementDeclaration);
+        }
+
+        if !self.visited.insert(type_index) {
+            return TypeRef::Internal(type_index);
         }
 
         let content_type = match element.type_definition {
@@ -579,10 +579,6 @@ impl<'a> IstBuildVisitor<'a> {
     ) -> TypeRef {
         let type_index = TypeIndex::AttributeDecl(attribute_decl);
 
-        if !self.visited.insert(type_index) {
-            return TypeRef::Internal(type_index);
-        }
-
         let attribute_decl = attribute_decl.get(self.table);
 
         // Local attribute declarations can be unqualified, depending on the form.
@@ -593,6 +589,10 @@ impl<'a> IstBuildVisitor<'a> {
                 .name()
                 .expect("Unexpected missing name for attribute with different target namespace");
             return TypeRef::External(name, ExternalKind::AttributeDeclaration);
+        }
+
+        if !self.visited.insert(type_index) {
+            return TypeRef::Internal(type_index);
         }
 
         let type_ = Type::create_newtype(self.visit_simple_type(attribute_decl.type_definition));
