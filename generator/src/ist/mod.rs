@@ -6,8 +6,8 @@ use std::{collections::HashMap, iter::FusedIterator};
 
 use dt_xsd::{
     AttributeDeclaration, AttributeUse, ComplexTypeDefinition, ElementDeclaration, ModelGroup,
-    Particle, Ref, SimpleTypeDefinition, TypeDefinition, Wildcard, particle::MaxOccurs,
-    xstypes::QName,
+    ModelGroupDefinition, Particle, Ref, SimpleTypeDefinition, TypeDefinition, Wildcard,
+    particle::MaxOccurs, xstypes::QName,
 };
 
 #[derive(Debug, Clone)]
@@ -32,6 +32,7 @@ pub enum TypeIndex {
     Particle(Ref<Particle>),
     ParticleTerm(Ref<Particle>),
     ModelGroup(Ref<ModelGroup>),
+    ModelGroupDef(Ref<ModelGroupDefinition>),
     AttributeDecl(Ref<AttributeDeclaration>),
     AttributeUse(Ref<AttributeUse>),
     Generated(u32),
@@ -47,9 +48,10 @@ impl TypeIndex {
             TypeIndex::Particle(r) => (4, r.inner().get()),
             TypeIndex::ParticleTerm(r) => (5, r.inner().get()),
             TypeIndex::ModelGroup(r) => (6, r.inner().get()),
-            TypeIndex::AttributeDecl(r) => (7, r.inner().get()),
-            TypeIndex::AttributeUse(r) => (8, r.inner().get()),
-            TypeIndex::Generated(idx) => (9, *idx),
+            TypeIndex::ModelGroupDef(r) => (7, r.inner().get()),
+            TypeIndex::AttributeDecl(r) => (8, r.inner().get()),
+            TypeIndex::AttributeUse(r) => (9, r.inner().get()),
+            TypeIndex::Generated(idx) => (10, *idx),
         }
     }
 }

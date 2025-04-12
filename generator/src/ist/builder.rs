@@ -14,10 +14,7 @@ use dt_xsd::{
     simple_type_def::{Context as SimpleContext, Variety},
 };
 
-use crate::ist::{
-    CompositeType, FieldSource, Member, Type, TypeBinding, TypeIndex, TypeRef, UnionType,
-    UnionVariant, UnionVariantSource,
-};
+use crate::ist::{FieldSource, Member, Type, TypeBinding, TypeIndex, TypeRef};
 
 use super::{ExternalKind, Name, Quant, Visibility};
 
@@ -79,7 +76,6 @@ impl IstBuilder {
 
 pub struct IstBuildVisitor<'a> {
     builder: IstBuilder,
-    model_group_to_def: HashMap<Ref<ModelGroup>, Ref<ModelGroupDefinition>>,
     table: &'a SchemaComponentTable,
     target_namespace: Option<String>,
     visited: HashSet<TypeIndex>,
@@ -90,7 +86,6 @@ impl<'a> IstBuildVisitor<'a> {
         Self {
             builder: IstBuilder::new(),
             visited: HashSet::new(),
-            model_group_to_def: HashMap::new(),
             table,
             target_namespace,
         }
@@ -124,11 +119,8 @@ impl<'a> IstBuildVisitor<'a> {
     }
 
     pub fn visit_schema(&mut self, schema: &Schema) {
-        // TODO: ModelGroupDef in different schemas
-        for model_group_definition in schema.model_group_definitions.iter().copied() {
-            let mgd = model_group_definition.get(self.table);
-            self.model_group_to_def
-                .insert(mgd.model_group, model_group_definition);
+        for model_group_def in schema.model_group_definitions.iter().copied() {
+            self.visit_model_group_definition(model_group_def);
         }
 
         for element in schema.element_declarations.iter().copied() {
@@ -394,17 +386,11 @@ impl<'a> IstBuildVisitor<'a> {
         TypeRef::Internal(type_index)
     }
 
-    fn visit_model_group(&mut self, model_group_ref: Ref<ModelGroup>) -> TypeRef {
-        let type_index = TypeIndex::ModelGroup(model_group_ref);
-
-        if !self.visited.insert(type_index) {
-            return TypeRef::Internal(type_index);
-        }
-
-        let model_group = model_group_ref.get(self.table);
-
-        // TODO: Import
-
+    fn create_type_for_model_group(
+        &mut self,
+        model_group: &ModelGroup,
+        type_index: TypeIndex,
+    ) -> Type {
         let content_types_iter = model_group
             .particles
             .iter()
@@ -412,7 +398,7 @@ impl<'a> IstBuildVisitor<'a> {
             .map(|particle| self.visit_particle(particle, type_index))
             .enumerate();
 
-        let type_ = match model_group.compositor {
+        match model_group.compositor {
             Compositor::All | Compositor::Sequence => {
                 let fields = content_types_iter
                     .map(|(i, type_)| {
@@ -437,13 +423,77 @@ impl<'a> IstBuildVisitor<'a> {
 
                 Type::create_union(variants)
             }
+        }
+    }
+
+    fn visit_model_group_definition(
+        &mut self,
+        model_group_def: Ref<ModelGroupDefinition>,
+    ) -> TypeRef {
+        let type_index = TypeIndex::ModelGroupDef(model_group_def);
+
+        let model_group_def = model_group_def.get(self.table);
+
+        if model_group_def.target_namespace != self.target_namespace {
+            let name = model_group_def
+                .name()
+                .expect("Unexpected missing name for type with different target namespace");
+            return TypeRef::External(name, ExternalKind::TypeDefinition);
+        }
+
+        if !self.visited.insert(type_index) {
+            return TypeRef::Internal(type_index);
+        }
+
+        // let model_group = self.visit_model_group(model_group_def.model_group);
+
+        let type_ = self
+            .create_type_for_model_group(model_group_def.model_group.get(self.table), type_index);
+
+        let type_binding = TypeBinding {
+            xml_name: model_group_def.name(),
+            name: model_group_def
+                .name()
+                .map(|n| n.local_name().to_string())
+                .map(Name::new),
+            type_,
+            owner: None, // TODO
+            documentation: None,
+            // We try to inline model group definitions even though this might drop the name, since
+            // this reduces unneccessary depth in the generated types.
+            inline: true,
+            // Model group definitions are always global. They are split into unnamed model groups
+            // and top-level-only named model group definitions, unlike elements or attributes for
+            // some reason.
+            visibility: Visibility::Public,
+        };
+
+        self.builder.insert_binding(type_index, type_binding);
+        TypeRef::Internal(type_index)
+    }
+
+    fn visit_model_group(&mut self, model_group_ref: Ref<ModelGroup>) -> TypeRef {
+        let type_index = TypeIndex::ModelGroup(model_group_ref);
+
+        if !self.visited.insert(type_index) {
+            return TypeRef::Internal(type_index);
+        }
+
+        let model_group = model_group_ref.get(self.table);
+
+        // We generate model groups "the other way round": If the model group is a child of a
+        // (global) model group definition, we let the child type be a newtype for the parent type.
+        // This way, we preserve the name of the model group definition, and get imports instead of
+        // copied internal types.
+        let type_ = if let Some(model_group_def) = model_group.parent {
+            let type_ = self.visit_model_group_definition(model_group_def);
+            Type::create_newtype(type_)
+        } else {
+            self.create_type_for_model_group(model_group, type_index)
         };
 
         let type_binding = TypeBinding {
-            xml_name: self
-                .model_group_to_def
-                .get(&model_group_ref)
-                .and_then(|mgd| mgd.get(self.table).name()),
+            xml_name: None,
             name: None,
             type_,
             owner: None, // TODO
