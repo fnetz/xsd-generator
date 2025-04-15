@@ -1,4 +1,6 @@
-use crate::ist::{Name, Type, builder::IstBuilder};
+use std::collections::HashMap;
+
+use crate::ist::{CompositeType, Name, Type, builder::IstBuilder};
 
 /// Fills in unnamed types and fields with dummy names
 /// so the generated code is more readable.
@@ -20,15 +22,41 @@ pub fn fill_unnamed_types(ist: &mut IstBuilder, skip_discarded: bool) {
 
         match &mut type_.type_ {
             Type::Composite(s) => {
-                let mut next_field_id = 0;
-                for field in &mut s.members {
-                    if field.name.is_none() {
-                        field.name = Some(Name::new(format!("UnnamedMember{next_field_id}")));
-                        next_field_id += 1;
-                    }
-                }
+                fill_composite_fields(s);
             }
             _ => {}
+        }
+    }
+}
+
+fn fill_composite_fields(composite: &mut CompositeType) {
+    let mut names = HashMap::<String, Vec<usize>>::new();
+
+    for (i, field) in composite.members.iter().enumerate() {
+        if let Some(name) = &field.name {
+            // TODO: No clone
+            names.entry(name.name.clone()).or_default().push(i);
+        }
+    }
+
+    for (name, indices) in names.iter() {
+        if indices.len() > 1 {
+            // Conflict resolution: Lowest index gets to keep its name, others get new names
+            let min = *indices.iter().min().unwrap();
+            let mut next_field_id = 1;
+            for i in indices.iter().filter(|&&i| i != min) {
+                // TODO: Check for conflicts with existing names
+                composite.members[*i].name = Some(Name::new(format!("{name}_{next_field_id}")));
+                next_field_id += 1;
+            }
+        }
+    }
+
+    let mut next_field_id = 1;
+    for field in &mut composite.members {
+        if field.name.is_none() {
+            field.name = Some(Name::new(format!("unnamed_member_{next_field_id}")));
+            next_field_id += 1;
         }
     }
 }
