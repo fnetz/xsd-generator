@@ -52,7 +52,7 @@ enum BuiltinSource {
 fn get_builtin_source_name(name: dt_xsd::xstypes::QName) -> (BuiltinSource, &'static str) {
     use BuiltinSource::*;
     let (source, name) = match name.local_name.as_ref() {
-        "boolean" => (Primitive, "bool"),
+        "boolean" => (Primitive, "boolean"),
         "double" => (Primitive, "number"),
         "float" => (Primitive, "number"),
         "long" => (Primitive, "number"),
