@@ -8,7 +8,7 @@ use swc_common::{
 };
 use swc_ecma_ast::{
     Decl, Expr, Ident, IdentName, Module, Program, Stmt, TsArrayType, TsEntityName,
-    TsInterfaceBody, TsInterfaceDecl, TsOptionalType, TsPropertySignature, TsQualifiedName, TsType,
+    TsInterfaceBody, TsInterfaceDecl, TsPropertySignature, TsQualifiedName, TsType,
     TsTypeAliasDecl, TsTypeAnn, TsTypeElement, TsTypeRef, TsUnionType,
 };
 
@@ -220,14 +220,25 @@ impl TypescriptGenerator<'_> {
         }
     }
 
+    fn undefined_type() -> TsType {
+        TsTypeRef {
+            span: Span::default(),
+            type_name: TsEntityName::Ident(Self::new_ident("undefined")),
+            type_params: None,
+        }
+        .into()
+    }
+
     fn quantified_type(&self, quant: &Quant, type_: TsType) -> TsType {
         // TODO: Tuple type for special cases
         match quant.into_min_max() {
-            (0, MaxOccurs::Count(1)) => TsOptionalType {
-                span: Span::default(),
-                type_ann: Box::new(type_),
-            }
-            .into(),
+            (0, MaxOccurs::Count(1)) => TsType::TsUnionOrIntersectionType(
+                TsUnionType {
+                    span: Span::default(),
+                    types: vec![Box::new(type_), Box::new(Self::undefined_type())],
+                }
+                .into(),
+            ),
             (1, MaxOccurs::Count(1)) => type_,
             _ => TsArrayType {
                 span: Span::default(),
