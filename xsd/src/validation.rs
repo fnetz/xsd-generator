@@ -17,7 +17,7 @@ fn element_sequence_locally_valid_particle(
     components: &SchemaComponentTable,
 ) -> bool {
     // TODO: cache
-    let state_machine = crate::state_machine::create_state_machine(particle, &components);
+    let state_machine = crate::state_machine::create_state_machine(particle, components);
     // let upa = crate::state_machine::verify_upa_satisfied(&state_machine, &components);
     // assert!(upa);
 
@@ -379,7 +379,7 @@ pub fn element_locally_valid_element(
                 //   3.2.3.2 D has no {value constraint} with {variety} = fixed.
                 if d.value_constraint
                     .as_ref()
-                    .map_or(false, |vc| vc.variety == ValueConstraintVariety::Fixed)
+                    .is_some_and(|vc| vc.variety == ValueConstraintVariety::Fixed)
                 {
                     return false;
                 }

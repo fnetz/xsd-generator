@@ -252,7 +252,7 @@ fn main() {
                     dt_xsd::validation::element_locally_valid_element(
                         &e,
                         ged.map(|g| g.get(components)),
-                        &components,
+                        components,
                     )
                 });
 

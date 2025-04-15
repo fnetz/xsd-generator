@@ -22,11 +22,8 @@ pub fn fill_unnamed_types(ist: &mut IstBuilder, skip_discarded: bool) {
             type_.name = Some(Atom::new(format!("Unnamed {suffix} k{key_kind} s{key_id}")));
         }
 
-        match &mut type_.type_ {
-            Type::Composite(s) => {
-                fill_composite_fields(s);
-            }
-            _ => {}
+        if let Type::Composite(s) = &mut type_.type_ {
+            fill_composite_fields(s);
         }
     }
 }

@@ -82,7 +82,7 @@ impl Particle {
                     let (min, max) = if particle.term.is_model_group() {
                         particle.effective_total_range(components)
                     } else {
-                        (particle.min_occurs, particle.max_occurs.clone())
+                        (particle.min_occurs, particle.max_occurs)
                     };
                     min_acc += min;
                     max_acc = max_acc.add(&max);
@@ -98,7 +98,7 @@ impl Particle {
                     let (min, max) = if particle.term.is_model_group() {
                         particle.effective_total_range(components)
                     } else {
-                        (particle.min_occurs, particle.max_occurs.clone())
+                        (particle.min_occurs, particle.max_occurs)
                     };
                     min_acc = min_acc.min(min);
                     max_acc = max_acc.max(&max);

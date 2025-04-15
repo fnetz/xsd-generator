@@ -34,7 +34,7 @@ fn inline_field(
         return false;
     };
 
-    let field_type: &TypeBinding = &ist.types[&field_type];
+    let field_type: &TypeBinding = &ist.types[field_type];
     if !field_type.inline {
         return false;
     }

@@ -223,7 +223,7 @@ impl<'a, T: ComponentTable> Ancestors<'a, T> {
     }
 }
 
-impl<'a, T: ComponentTable> Iterator for Ancestors<'a, T> {
+impl<T: ComponentTable> Iterator for Ancestors<'_, T> {
     type Item = TypeDefinition;
 
     fn next(&mut self) -> Option<Self::Item> {

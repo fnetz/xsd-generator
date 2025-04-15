@@ -105,11 +105,11 @@ impl AttributeDeclaration {
         {
             context
                 .resolve(&type_)
-                .ok_or_else(|| XsdError::UnresolvedReference(type_))?
+                .ok_or(XsdError::UnresolvedReference(type_))?
         } else {
             let any_simple_type: TypeDefinition = context
                 .resolve(&XS_ANY_SIMPLE_TYPE_NAME)
-                .ok_or_else(|| XsdError::UnresolvedBuiltin(&XS_ANY_SIMPLE_TYPE_NAME))?;
+                .ok_or(XsdError::UnresolvedBuiltin(&XS_ANY_SIMPLE_TYPE_NAME))?;
             any_simple_type.simple().unwrap()
         };
 

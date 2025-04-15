@@ -280,7 +280,7 @@ struct Link<'a> {
     action: Action,
 }
 
-impl<'a> Link<'a> {
+impl Link<'_> {
     fn collapse(link: Option<&Self>) -> Vec<Action2> {
         let mut path = Vec::new();
         let mut hold = None;
