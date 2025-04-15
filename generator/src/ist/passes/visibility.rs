@@ -39,9 +39,11 @@ pub fn reduce_effective_visibility(ist: &mut IstBuilder) {
 
 #[cfg(test)]
 mod tests {
+    use hstr::Atom;
+
     use super::*;
     use crate::ist::builder::IstBuilder;
-    use crate::ist::{Member, Name, Type};
+    use crate::ist::{Member, Type};
 
     #[test]
     fn intermediate_referenced_by_public_is_kept() {
@@ -52,13 +54,13 @@ mod tests {
 
         let type1 = ist.create_type_no_id(
             Type::create_structure(vec![]),
-            Some(Name::new("t1".into())),
+            Some(Atom::new("t1")),
             Visibility::Intermediate,
             None,
         );
         let type2 = ist.create_type_no_id(
             Type::create_structure(vec![Member::builder(TypeRef::Internal(type1)).build()]),
-            Some(Name::new("t2".into())),
+            Some(Atom::new("t2")),
             Visibility::Public,
             None,
         );
@@ -78,7 +80,7 @@ mod tests {
 
         let type1 = ist.create_type_no_id(
             Type::create_structure(vec![]),
-            Some(Name::new("t1".into())),
+            Some(Atom::new("t1")),
             Visibility::Intermediate,
             None,
         );
@@ -97,13 +99,13 @@ mod tests {
 
         let type1 = ist.create_type_no_id(
             Type::create_structure(vec![]),
-            Some(Name::new("t1".into())),
+            Some(Atom::new("t1")),
             Visibility::Intermediate,
             None,
         );
         let type2 = ist.create_type_no_id(
             Type::create_structure(vec![Member::builder(TypeRef::Internal(type1)).build()]),
-            Some(Name::new("t2".into())),
+            Some(Atom::new("t2")),
             Visibility::Intermediate,
             None,
         );
@@ -123,7 +125,7 @@ mod tests {
 
         let type1 = ist.create_type_no_id(
             Type::create_structure(vec![]),
-            Some(Name::new("t1".into())),
+            Some(Atom::new("t1")),
             Visibility::Discard,
             None,
         );

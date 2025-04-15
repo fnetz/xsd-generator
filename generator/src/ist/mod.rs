@@ -9,17 +9,7 @@ use dt_xsd::{
     ModelGroupDefinition, Particle, Ref, SimpleTypeDefinition, TypeDefinition, Wildcard,
     particle::MaxOccurs, xstypes::QName,
 };
-
-#[derive(Debug, Clone)]
-pub struct Name {
-    pub name: String,
-}
-
-impl Name {
-    pub fn new(name: String) -> Self {
-        Self { name }
-    }
-}
+use hstr::Atom;
 
 pub type Documentation = Option<String>;
 
@@ -145,7 +135,7 @@ impl CompositeType {
 
 #[derive(Debug, Clone)]
 pub struct Member {
-    pub name: Option<Name>,
+    pub name: Option<Atom>,
     pub type_: TypeRef,
     pub source: FieldSource,
     pub documentation: Documentation,
@@ -167,7 +157,7 @@ impl Member {
 pub struct FieldBuilder {
     type_: TypeRef,
 
-    name: Option<Name>,
+    name: Option<Atom>,
     source: Option<FieldSource>,
     documentation: Option<Documentation>,
     quant: Option<Quant>,
@@ -194,7 +184,7 @@ impl FieldBuilder {
         }
     }
 
-    pub fn name(mut self, name: Name) -> Self {
+    pub fn name(mut self, name: Atom) -> Self {
         self.name = Some(name);
         self
     }
@@ -244,27 +234,8 @@ pub struct EnumType {
 
 #[derive(Debug, Clone)]
 pub struct EnumVariant {
-    pub name: Name,
+    pub name: Atom,
     pub documentation: Documentation,
-}
-
-#[derive(Debug, Clone)]
-pub struct UnionType {
-    pub variants: Vec<Member>,
-}
-
-#[derive(Debug, Clone)]
-pub struct UnionVariant {
-    pub name: Option<Name>,
-    pub type_: TypeRef,
-    pub source: UnionVariantSource,
-    pub documentation: Documentation,
-}
-
-#[derive(Debug, Clone)]
-pub enum UnionVariantSource {
-    ModelGroupParticle(usize),
-    SimpleTypeMember(usize),
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -447,7 +418,7 @@ impl Visibility {
 #[derive(Debug)]
 pub struct TypeBinding {
     pub xml_name: Option<QName>,
-    pub name: Option<Name>,
+    pub name: Option<Atom>,
     pub type_: Type,
     // pub global: bool,
     pub documentation: Documentation,
@@ -474,13 +445,13 @@ mod tests {
                 QName::without_namespace("type1"),
                 ExternalKind::TypeDefinition,
             ))
-            .name(Name::new("field1".to_string()))
+            .name(Atom::new("field1"))
             .build(),
             Member::builder(TypeRef::External(
                 QName::without_namespace("type2"),
                 ExternalKind::TypeDefinition,
             ))
-            .name(Name::new("field2".to_string()))
+            .name(Atom::new("field2"))
             .build(),
         ]);
 
@@ -507,7 +478,7 @@ mod tests {
     fn children_iter_union() {
         let union = Type::create_union(vec![
             Member {
-                name: Some(Name::new("variant1".to_string())),
+                name: Some(Atom::new("variant1")),
                 type_: TypeRef::External(
                     QName::without_namespace("type1"),
                     ExternalKind::TypeDefinition,
@@ -517,7 +488,7 @@ mod tests {
                 quant: Quant::default(),
             },
             Member {
-                name: Some(Name::new("variant2".to_string())),
+                name: Some(Atom::new("variant2".to_string())),
                 type_: TypeRef::External(
                     QName::without_namespace("type2"),
                     ExternalKind::TypeDefinition,

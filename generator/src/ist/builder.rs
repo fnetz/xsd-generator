@@ -13,10 +13,11 @@ use dt_xsd::{
     shared::{Scope, ScopeVariety},
     simple_type_def::{Context as SimpleContext, Variety},
 };
+use hstr::Atom;
 
 use crate::ist::{FieldSource, Member, Type, TypeBinding, TypeIndex, TypeRef};
 
-use super::{ExternalKind, Name, Quant, Visibility};
+use super::{ExternalKind, Quant, Visibility};
 
 pub struct IstBuilder {
     pub types: HashMap<TypeIndex, TypeBinding>,
@@ -34,7 +35,7 @@ impl IstBuilder {
     pub fn create_type_no_id(
         &mut self,
         type_: Type,
-        name: Option<Name>,
+        name: Option<Atom>,
         visibility: Visibility,
         owner: Option<TypeIndex>,
     ) -> TypeIndex {
@@ -214,10 +215,7 @@ impl<'a> IstBuildVisitor<'a> {
 
         let type_binding = TypeBinding {
             xml_name: complex_type.name(),
-            name: complex_type
-                .name()
-                .map(|n| n.local_name().to_string())
-                .map(Name::new),
+            name: complex_type.name().map(|n| Atom::new(n.local_name())),
             type_,
             // global: complex_type.name.is_some(),
             owner: complex_type.context.map(|c| match c {
@@ -304,10 +302,7 @@ impl<'a> IstBuildVisitor<'a> {
 
         let type_binding = TypeBinding {
             xml_name: simple_type.name(),
-            name: simple_type
-                .name()
-                .map(|n| n.local_name().to_string())
-                .map(Name::new),
+            name: simple_type.name().map(|n| Atom::new(n.local_name())),
             type_,
             // global: simple_type.name.is_some(),
             owner: simple_type.context.map(|c| match c {
@@ -452,10 +447,7 @@ impl<'a> IstBuildVisitor<'a> {
 
         let type_binding = TypeBinding {
             xml_name: model_group_def.name(),
-            name: model_group_def
-                .name()
-                .map(|n| n.local_name().to_string())
-                .map(Name::new),
+            name: model_group_def.name().map(|n| Atom::new(n.local_name())),
             type_,
             owner: None, // TODO
             documentation: None,
@@ -539,10 +531,7 @@ impl<'a> IstBuildVisitor<'a> {
 
         let type_binding = TypeBinding {
             xml_name: element.name(),
-            name: element
-                .name()
-                .map(|n| n.local_name().to_string())
-                .map(Name::new),
+            name: element.name().map(|n| Atom::new(n.local_name())),
             type_,
             // global: element.scope.variety() == ScopeVariety::Global,
             owner: match element.scope {
@@ -649,10 +638,7 @@ impl<'a> IstBuildVisitor<'a> {
 
         let type_binding = TypeBinding {
             xml_name: attribute_decl.name(),
-            name: attribute_decl
-                .name()
-                .map(|n| n.local_name().to_string())
-                .map(Name::new),
+            name: attribute_decl.name().map(|n| Atom::new(n.local_name())),
             type_,
             // global: attribute_decl.scope.variety() == ScopeVariety::Global,
             owner: match attribute_decl.scope {

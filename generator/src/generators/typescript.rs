@@ -147,7 +147,7 @@ impl TypescriptGenerator<'_> {
         binding
             .name
             .as_ref()
-            .map(|name| name.name.to_upper_camel_case().into())
+            .map(|name| name.to_upper_camel_case().into())
             .unwrap_or_else(|| match binding.type_ {
                 ist::Type::Composite(_) => "UnnamedComposite".into(),
                 ist::Type::Enum(_) => "UnnamedEnum".into(),
@@ -266,7 +266,7 @@ impl TypescriptGenerator<'_> {
             key: Box::new(Expr::Ident(Ident::new_no_ctxt(
                 field.name.as_ref().map_or_else(
                     || "unnamedField".into(),
-                    |name| name.name.to_lower_camel_case().into(),
+                    |name| name.to_lower_camel_case().into(),
                 ),
                 Span::default(),
             ))),

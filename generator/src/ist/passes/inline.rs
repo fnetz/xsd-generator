@@ -1,7 +1,9 @@
 use std::{borrow::Cow, collections::HashMap};
 
+use hstr::Atom;
+
 use crate::ist::{
-    CompositeType, Member, Name, Quant, Type, TypeBinding, TypeIndex, TypeRef, builder::IstBuilder,
+    CompositeType, Member, Quant, Type, TypeBinding, TypeIndex, TypeRef, builder::IstBuilder,
 };
 
 #[derive(Debug)]
@@ -15,12 +17,8 @@ fn merge_names_str<'a>(left: Option<&'a str>, right: Option<&'a str>) -> Option<
     }
 }
 
-fn merge_names(left: Option<&Name>, right: Option<&Name>) -> Option<Name> {
-    merge_names_str(
-        left.map(|n| n.name.as_str()),
-        right.map(|n| n.name.as_str()),
-    )
-    .map(|name| Name::new(name.into()))
+fn merge_names(left: Option<&Atom>, right: Option<&Atom>) -> Option<Atom> {
+    merge_names_str(left.map(|v| &**v), right.map(|v| &**v)).map(Atom::new)
 }
 
 /// Tries to inline a field into the parent structure, returning true if the field was inlined, and
@@ -261,26 +259,26 @@ mod tests {
 
     use super::*;
     use crate::ist::builder::IstBuilder;
-    use crate::ist::{ExternalKind, FieldSource, Name, Visibility};
+    use crate::ist::{ExternalKind, FieldSource, Visibility};
 
     #[test]
     fn incoming_references_correct() {
         let mut ist = IstBuilder::new();
         let a = ist.create_type_no_id(
             Type::create_structure(vec![]),
-            Some(Name::new("struct_a".into())),
+            Some(Atom::new("struct_a")),
             Visibility::Public,
             None,
         );
         let b = ist.create_type_no_id(
             Type::create_structure(vec![Member {
-                name: Some(Name::new("field_b_1".into())),
+                name: Some(Atom::new("field_b_1")),
                 type_: TypeRef::Internal(a),
                 source: FieldSource::Term,
                 documentation: None,
                 quant: Quant::default(),
             }]),
-            Some(Name::new("struct_b".into())),
+            Some(Atom::new("struct_b")),
             Visibility::Public,
             None,
         );
@@ -301,7 +299,7 @@ mod tests {
         let mut ist = IstBuilder::new();
         let a = ist.create_type_no_id(
             Type::create_structure(vec![Member {
-                name: Some(Name::new("field_a_1".into())),
+                name: Some(Atom::new("field_a_1")),
                 type_: TypeRef::External(
                     QName::without_namespace("dummy_type"),
                     ExternalKind::TypeDefinition,
@@ -319,13 +317,13 @@ mod tests {
 
         let _b = ist.create_type_no_id(
             Type::create_structure(vec![Member {
-                name: Some(Name::new("field_b_1".into())),
+                name: Some(Atom::new("field_b_1")),
                 type_: TypeRef::Internal(a),
                 source: FieldSource::Term,
                 documentation: None,
                 quant: Quant::default(),
             }]),
-            Some(Name::new("struct_b".into())),
+            Some(Atom::new("struct_b")),
             Visibility::Public,
             None,
         );
@@ -337,10 +335,7 @@ mod tests {
         let b = ist.types.get(&_b).unwrap();
         let b = b.type_.as_structure().expect("Expected structure type");
         assert_eq!(b.members.len(), 1);
-        assert_eq!(
-            b.members[0].name.as_ref().unwrap().name,
-            "field_b_1_field_a_1"
-        );
+        assert_eq!(b.members[0].name.as_ref().unwrap(), "field_b_1_field_a_1");
         assert_eq!(
             b.members[0].type_.as_external().unwrap().0.local_name(),
             "dummy_type"
@@ -369,13 +364,13 @@ mod tests {
         let mut ist = IstBuilder::new();
         let t = ist.create_type_no_id(
             Type::create_structure(vec![Member {
-                name: Some(Name::new("field_a_1".into())),
+                name: Some(Atom::new("field_a_1")),
                 type_: TypeRef::Builtin(dt_xsd::TypeDefinition::Simple(dummy_ref())),
                 source: FieldSource::Term,
                 documentation: None,
                 quant: Quant::default(),
             }]),
-            Some(Name::new("struct_a".into())),
+            Some(Atom::new("struct_a")),
             Visibility::Public,
             None,
         );
@@ -388,7 +383,7 @@ mod tests {
         let t = ist.types.get(&t).unwrap();
         let t = t.type_.as_structure().expect("Expected structure type");
         assert_eq!(t.members.len(), 1);
-        assert_eq!(t.members[0].name.as_ref().unwrap().name, "field_a_1");
+        assert_eq!(t.members[0].name.as_ref().unwrap(), "field_a_1");
         assert!(matches!(
             t.members[0].type_,
             TypeRef::Builtin(dt_xsd::TypeDefinition::Simple(_))
@@ -406,7 +401,7 @@ mod tests {
                 ),
                 Quant::exactly_one(),
             ),
-            Some(Name::new("struct_a".into())),
+            Some(Atom::new("struct_a")),
             Visibility::Public,
             None,
         );
@@ -422,14 +417,14 @@ mod tests {
                     quant: Quant::default(),
                 },
                 Member {
-                    name: Some(Name::new("field_b_2".into())),
+                    name: Some(Atom::new("field_b_2")),
                     type_: TypeRef::Builtin(dt_xsd::TypeDefinition::Simple(dummy_ref())),
                     source: FieldSource::SimpleContent,
                     documentation: None,
                     quant: Quant::default(),
                 },
             ]),
-            Some(Name::new("struct_b".into())),
+            Some(Atom::new("struct_b")),
             Visibility::Public,
             None,
         );
@@ -441,12 +436,12 @@ mod tests {
         let b = ist.types.get(&_b).unwrap();
         let b = b.type_.as_structure().expect("Expected structure type");
         assert_eq!(b.members.len(), 2);
-        assert_eq!(b.members[0].name.as_ref().unwrap().name, "struct_a"); // TODO
+        assert_eq!(b.members[0].name.as_ref().unwrap(), "struct_a"); // TODO
         assert_eq!(
             b.members[0].type_.as_external().unwrap().0.local_name(),
             "dummy_type"
         );
-        assert_eq!(b.members[1].name.as_ref().unwrap().name, "field_b_2");
+        assert_eq!(b.members[1].name.as_ref().unwrap(), "field_b_2");
         assert!(matches!(
             b.members[1].type_,
             TypeRef::Builtin(dt_xsd::TypeDefinition::Simple(_))

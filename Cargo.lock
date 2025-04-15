@@ -355,6 +355,7 @@ dependencies = [
  "clap",
  "dt-xsd",
  "heck",
+ "hstr",
  "prettyplease",
  "quote",
  "reqwest",
