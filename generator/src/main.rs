@@ -8,7 +8,7 @@ use dt_xsd::{
     RootContext, Schema,
     import::{Import, ImportError, ImportResolver},
 };
-use ist::{builder::IstBuildVisitor, passes::inline::InlineSettings};
+use ist::{TypeRef, builder::IstBuildVisitor, passes::inline::InlineSettings};
 
 struct HttpImportResolver;
 
@@ -78,6 +78,21 @@ fn main() {
     ist_builder.visit_schema(&schema);
 
     let mut ist = ist_builder.into_ist();
+
+    eprintln!("digraph ist {{");
+    for (k, v) in &ist.types {
+        for child in v.type_.children() {
+            let TypeRef::Internal(child) = child else {
+                continue;
+            };
+            eprintln!("  \"{:?}\" -> \"{:?}\";", k.sort_key(), child.sort_key());
+        }
+
+        // if v.type_.children().count() == 0 {
+        //     eprintln!("  \"{:?}\";", k);
+        // }
+    }
+    eprintln!("}}");
 
     if cli.print_ist {
         eprintln!("{:#?}", ist.types);

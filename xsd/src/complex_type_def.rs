@@ -695,29 +695,34 @@ impl ComplexTypeDefinition {
 
             // 3 The attribute uses "inherited" from the {base type definition} T, as described by
             //   the appropriate case among the following:
-            //  3.1 If T is a complex type definition and {derivation method} = extension, then the
-            //    attribute uses in T.{attribute uses} are inherited.
-            //  3.2 If T is a complex type definition and {derivation method} = restriction, then
-            //    the attribute uses in T.{attribute uses} are inherited, with the exception of
-            //    those with an {attribute declaration} whose expanded name is one of the
-            //    following:
-            //   3.2.1 the expanded name of the {attribute declaration} of an attribute use which
-            //     has already been included in the set, following the rules in clause 1 or clause
-            //     2 above;
-            //   3.2.2 the expanded name of the {attribute declaration} of what would have been an
-            //     attribute use corresponding to an <attribute> [child], if the <attribute> had
-            //     not had use = prohibited. Note: This sub-clause handles the case where the base
-            //     type definition T allows the attribute in question, but the restriction
-            //     prohibits it.
-            //  3.3 otherwise no attribute use is inherited.
             if let TypeDefinition::Complex(base_type_definition) = base_type_definition {
+                // If T is a complex type definition ...
+                let base_type_definition = context.request(base_type_definition)?;
                 match derivation_method {
-                    DerivationMethod::Extension => attribute_uses
-                        .extend(context.request(base_type_definition)?.attribute_uses.iter()),
+                    DerivationMethod::Extension => {
+                        // 3.1 ... and {derivation method} = extension, then the attribute uses in
+                        //   T.{attribute uses} are inherited.
+                        attribute_uses.extend(base_type_definition.attribute_uses.iter())
+                    }
                     DerivationMethod::Restriction => {
+                        // 3.2 ... and {derivation method} = restriction, then the attribute uses
+                        //   in T.{attribute uses} are inherited, with the exception of those with
+                        //   an {attribute declaration} whose expanded name is one of the
+                        //   following:
+                        //  3.2.1 the expanded name of the {attribute declaration} of an attribute
+                        //    use which has already been included in the set, following the rules
+                        //    in clause 1 or clause
+                        //    2 above;
+                        //  3.2.2 the expanded name of the {attribute declaration} of what would
+                        //    have been an attribute use corresponding to an <attribute> [child],
+                        //    if the <attribute> had not had use = prohibited. Note: This
+                        //    sub-clause handles the case where the base type definition T allows
+                        //    the attribute in question, but the restriction prohibits it.
                         // TODO
                     }
                 }
+                //  3.3 otherwise no attribute use is inherited.
+                //  (not needed here)
             }
 
             Ok(attribute_uses)

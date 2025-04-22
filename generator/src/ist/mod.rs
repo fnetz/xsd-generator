@@ -382,9 +382,18 @@ impl<'a> Iterator for Children<'a> {
             Children::Enum(iter) => iter.next(),
         }
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match self {
+            Children::Composite(iter) => iter.size_hint(),
+            Children::Enum(iter) => iter.size_hint(),
+        }
+    }
 }
 
 impl FusedIterator for Children<'_> {}
+
+impl ExactSizeIterator for Children<'_> {}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Visibility {
