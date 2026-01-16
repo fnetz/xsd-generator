@@ -261,7 +261,9 @@ impl<'a, 'b, 'input: 'a, 'p> MappingContext<'a, 'b, 'input, 'p> {
         let dynref: DynamicRef = ref_.into();
 
         if self.in_progress_top_level.contains(&dynref) {
-            return Err(XsdError::UnsupportedCircularReference);
+            return Err(XsdError::UnsupportedCircularReference(
+                node.tag_name().name().to_string(),
+            ));
         }
 
         if !self.root.components.is_present(ref_) {

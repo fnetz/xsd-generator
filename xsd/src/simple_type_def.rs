@@ -80,7 +80,7 @@ pub enum Variety {
     Union,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 enum ChildType {
     Restriction,
     List,
@@ -123,236 +123,56 @@ impl SimpleTypeDefinition {
 
         let self_ref = tlref.unwrap_or_else(|| ctx.reserve());
 
-        // {name}
-        //   The ·actual value· of the name [attribute] if present on the <simpleType> element,
-        //   otherwise ·absent·.
-        let name = simple_type
-            .attribute("name")
-            .map(|v| actual_value::<String>(v, simple_type));
+        let this_p0 = SimpleTypeDefP0::map_from_xml(simple_type, schema)?;
 
-        // {target namespace}
-        //   The ·actual value· of the targetNamespace [attribute] of the ancestor <schema> element
-        //   information item if present, otherwise ·absent·.
-        let target_namespace = schema
-            .attribute("targetNamespace")
-            .map(|v| actual_value::<AnyURI>(v, simple_type));
+        let name = this_p0.name;
 
-        let (child_type, child) = if let Some(restriction) = simple_type
-            .children()
-            .find(|e| e.tag_name().name() == "restriction")
-        {
-            (ChildType::Restriction, restriction)
-        } else if let Some(list) = simple_type
-            .children()
-            .find(|e| e.tag_name().name() == "list")
-        {
-            (ChildType::List, list)
-        } else if let Some(union) = simple_type
-            .children()
-            .find(|e| e.tag_name().name() == "union")
-        {
-            (ChildType::Union, union)
-        } else {
-            unreachable!()
+        let target_namespace = this_p0.target_namespace;
+
+        let base_type_definition: TypeDefinition = match this_p0.base_type_definition {
+            SimpleTypeDefP0RefOrOwn::ReferencedType(qname) => {
+                // TODO: unwrap
+                ctx.resolve(&qname).unwrap()
+            }
+            SimpleTypeDefP0RefOrOwn::OwnedSimpleType(simple_type_def_p0) => {
+                todo!("map p0 to final")
+            }
         };
 
-        // {base type definition} The appropriate case among the following:
-        let base_type_definition = if child_type == ChildType::Restriction {
-            // 1 If the <restriction> alternative is chosen, then the type definition ·resolved· to
-            //   by the ·actual value· of the base [attribute] of <restriction>, if present,
-            //   otherwise the type definition corresponding to the <simpleType> among the
-            //   [children] of <restriction>.
-            child
-                .attribute("base")
-                .map(|v| actual_value::<QName>(v, child))
-                .map(|name| ctx.resolve(&name).unwrap()) // TODO
-                .unwrap_or_else(|| {
-                    let st = child
-                        .children()
-                        .find(|c| c.tag_name().name() == Self::TAG_NAME)
-                        .unwrap();
-                    let st = Self::map_from_xml(
-                        ctx,
-                        st,
-                        schema,
-                        None,
-                        Some(Context::SimpleType(self_ref)),
-                    )
-                    .unwrap(); // TODO
-                    TypeDefinition::Simple(st)
-                })
-        } else {
-            // 2 If the <list> or <union> alternative is chosen, then ·xs:anySimpleType·.
-            ctx.resolve(&XS_ANY_SIMPLE_TYPE_NAME)
-                .expect("Built-in type xs:anySimpleType must be present")
+        let final_ = this_p0.final_;
+
+        let facets = this_p0.facets.into_iter().map(|f| ctx.create(f)).collect();
+        let facets = ConstrainingFacets::from(facets);
+
+        let context = this_p0
+            .context_present
+            .then(|| parent.expect("Unnamed simple type must have a parent"));
+
+        let variety = match this_p0.variety {
+            SimpleTypeDefP0Variety::Final(variety) => Some(variety),
+            SimpleTypeDefP0Variety::BaseTypeDefinitionVariety => {
+                let base_type_definition = base_type_definition
+                    .simple()
+                    .expect("Any type which is not anySimpleType must have a simple type as base");
+
+                let variety = ctx
+                    .request(base_type_definition)?
+                    .variety
+                    .expect("Any type which is not anySimpleType must have a variety");
+
+                Some(variety)
+            }
         };
 
-        // {final}
-        //   A subset of {restriction, extension, list, union}, determined as follows.
-        //   Let FS be the ·actual value· of the final [attribute], if present, otherwise the
-        //   ·actual value· of the finalDefault [attribute] of the ancestor schema element, if
-        //   present, otherwise the empty string.
-        let fs = simple_type
-            .attribute("final")
-            .or_else(|| schema.attribute("finalDefault"))
-            .map(|v| actual_value::<String>(v, simple_type))
-            .unwrap_or_default();
-        // Then the property value is the appropriate case among the following:
-        //   1 If ·FS· is the empty string, then the empty set;
-        //   2 If ·FS· is "#all", then {restriction, extension, list, union};
-        //   3 otherwise Consider ·FS· as a space-separated list, and include restriction if
-        //     "restriction" is in that list, and similarly for extension, list and union.
-        let final_ = if fs.is_empty() {
-            Set::new()
-        } else if fs == "#all" {
-            [
-                DerivationMethod::Restriction,
-                DerivationMethod::Extension,
-                DerivationMethod::List,
-                DerivationMethod::Union,
-            ]
+        let annotations = this_p0
+            .annotations
             .into_iter()
-            .collect()
-        } else {
-            let fs = fs.split_whitespace();
-            fs.map(|v| match v {
-                "restriction" => DerivationMethod::Restriction,
-                "extension" => DerivationMethod::Extension,
-                "list" => DerivationMethod::List,
-                "union" => DerivationMethod::Union,
-                _ => panic!("Invalid value in final set"),
-            })
-            .collect()
-        };
-
-        // {facets} The appropriate case among the following:
-        let facets = match child_type {
-            // 1 If the <restriction> alternative is chosen and the children of the <restriction>
-            //   element are all either <simpleType> elements, <annotation> elements, or elements
-            //   which specify constraining facets supported by the processor, then the set of
-            //   Constraining Facet components obtained by ·overlaying· the {facets} of the {base
-            //   type definition} with the set of Constraining Facet components corresponding to
-            //   those [children] of <restriction> which specify facets, as defined in Simple Type
-            //   Restriction (Facets) (§3.16.6.4).
-            // 2 If the <restriction> alternative is chosen and the children of the <restriction>
-            //   element include at least one element of which the processor has no prior knowledge
-            //   (i.e. not a <simpleType> element, an <annotation> element, or an element denoting
-            //   a constraining facet known to and supported by the processor), then the
-            //   <simpleType> element maps to no component at all (but is not in error solely on
-            //   account of the presence of the unknown element).
-            ChildType::Restriction => {
-                if target_namespace.as_deref() == XS_ANY_SIMPLE_TYPE_NAME.namespace_name()
-                    && name.as_deref() == Some(XS_ANY_SIMPLE_TYPE_NAME.local_name())
-                {
-                    // Special handling for xs:anySimpleType, in case it is ever loaded via this
-                    // route and not as builtin: As the base is complex and anySimpleType doesn't
-                    // have any facets, we just yield the empty set here.
-                    ConstrainingFacets::new()
-                } else {
-                    let base_type_definition = base_type_definition.simple().expect(
-                        "Any type which is not anySimpleType must have a simple type as base",
-                    );
-
-                    let mut facet_nodes = Vec::new();
-                    for facet in child.children() {
-                        if !facet.is_element() {
-                            continue;
-                        }
-                        if [Self::TAG_NAME, Annotation::TAG_NAME].contains(&facet.tag_name().name())
-                        {
-                            continue;
-                        }
-                        facet_nodes.push(facet);
-                    }
-                    let facets =
-                        ConstrainingFacet::map_from_xml(ctx, &facet_nodes, schema).unwrap();
-
-                    // Request the component here to avoid a mutable borrow through b
-                    ctx.request(base_type_definition)?;
-
-                    // Given two sets of facets B and S, the result of overlaying B with S is the
-                    // set of facets R for which all of the following are true:
-                    let s = facets;
-                    let b = &base_type_definition.get(ctx.components()).facets;
-                    let mut r = Vec::<Ref<ConstrainingFacet>>::new();
-
-                    // 1 Every facet in S is in R.
-                    r.extend(s.iter());
-
-                    // 2 Every facet in B is in R, unless it is of the same kind as some facet in S,
-                    //   in which case it is not included in R.
-                    r.extend(b.iter().filter(|f1| {
-                        let f1 = f1.get(ctx.components());
-                        s.iter()
-                            .any(|f2| f1.is_of_same_kind_as(f2.get(ctx.components())))
-                    }));
-
-                    // 3 Every facet in R is required by clause 1 or clause 2 above.
-                    //   --trivial--
-
-                    ConstrainingFacets::from(r)
-                }
-            }
-            // 3 If the <list> alternative is chosen, then a set with one member, a whiteSpace facet
-            //   with {value} = collapse and {fixed} = true.
-            ChildType::List => {
-                let ws = ctx.create(ConstrainingFacet::WhiteSpace(WhiteSpace::new(
-                    WhiteSpaceValue::Collapse,
-                    true,
-                )));
-                ConstrainingFacets::from(vec![ws])
-            }
-            // 4 otherwise the empty set
-            _ => ConstrainingFacets::new(),
-        };
-
-        // {context} The appropriate case among the following:
-        let context = if simple_type.has_attribute("name") {
-            // 1 If the name [attribute] is present, then ·absent·
-            None
-        } else {
-            // 2 otherwise the appropriate case among the following:
-            //   (see spec; in our case, the caller already knows the appropriate case)
-            let context = parent.expect("Unnamed simple type must have a parent");
-            Some(context)
-        };
-
-        // {variety}
-        //   If the <list> alternative is chosen, then list, otherwise if the <union> alternative is
-        //   chosen, then union, otherwise (the <restriction> alternative is chosen), then the
-        //   {variety} of the {base type definition}.
-        let variety = match child_type {
-            ChildType::List => Some(Variety::List),
-            ChildType::Union => Some(Variety::Union),
-            ChildType::Restriction => {
-                if target_namespace.as_deref() == XS_ANY_ATOMIC_TYPE_NAME.namespace_name()
-                    && name.as_deref() == Some(XS_ANY_ATOMIC_TYPE_NAME.local_name())
-                {
-                    // The type ·xs:anyAtomicType· is an exception because its {base type
-                    // definition} is ·xs:anySimpleType·, whose {variety} is ·absent·.
-                    // (See pt. 1, §3.16.6.2, clause 1.1)
-                    Some(Variety::Atomic)
-                } else {
-                    let base_type_definition = base_type_definition.simple().expect(
-                        "Any type which is not anySimpleType must have a simple type as base",
-                    );
-
-                    let variety = ctx
-                        .request(base_type_definition)?
-                        .variety
-                        .expect("Any type which is not anySimpleType must have a variety");
-
-                    Some(variety)
-                }
-            }
-        };
-
+            .map(|a| ctx.create(a))
+            .collect();
         // {annotations}
         //   The ·annotation mapping· of the set of elements containing the <simpleType>, and one of
         //   the <restriction>, <list> or <union> [children], whichever is present, as defined in
         //   XML Representation of Annotation Schema Components (§3.15.2).
-        let annotations =
-            Annotation::xml_element_set_annotation_mapping(ctx, &[simple_type, child]);
 
         let mut primitive_type_definition = None;
         let mut item_type_definition = None;
@@ -362,7 +182,10 @@ impl SimpleTypeDefinition {
             Variety::Atomic => {
                 // {primitive type definition}
                 // From among the ·ancestors· of this Simple Type Definition, that Simple Type
-                // Definition which corresponds to a primitive datatype.
+                // Definition which corresponds to a primitive datatype. (pt. 1, section 3.16.2.2
+                // and pt. 2, section 4.1.2)
+                // The ancestors of a type definition are its {base type definition} and the
+                // ·ancestors· of its {base type definition}. (pt. 2, section 4.1.2)
                 let ancestors = std::iter::once(base_type_definition)
                     .chain(base_type_definition.ancestors(ctx.components()));
                 primitive_type_definition = Some(
@@ -377,8 +200,6 @@ impl SimpleTypeDefinition {
                 );
             }
             Variety::List => {
-                let list = child;
-
                 // {item type definition} The appropriate case among the following:
                 item_type_definition = Some(
                     if base_type_definition.name(ctx.components()).as_ref()
@@ -390,24 +211,16 @@ impl SimpleTypeDefinition {
                         //       <list>, or
                         //   (b) corresponding to the <simpleType> among the [children] of <list>,
                         //       whichever is present.
-                        list.attribute("itemType")
-                            .map(|item_type| actual_value::<QName>(item_type, list))
-                            .map(|item_type| ctx.resolve(&item_type).unwrap()) // TODO
-                            .or_else(|| {
-                                list.children()
-                                    .find(|c| c.tag_name().name() == Self::TAG_NAME)
-                                    .map(|simple_type| {
-                                        Self::map_from_xml(
-                                            ctx,
-                                            simple_type,
-                                            schema,
-                                            None,
-                                            Some(Context::SimpleType(self_ref)),
-                                        )
-                                        .unwrap() // TODO
-                                    })
-                            })
-                            .unwrap()
+                        match this_p0.list_item_type {
+                            Some(SimpleTypeDefP0RefOrOwn::ReferencedType(name)) => {
+                                // TODO: unwrap
+                                ctx.resolve(&name).unwrap()
+                            }
+                            Some(SimpleTypeDefP0RefOrOwn::OwnedSimpleType(typ)) => {
+                                todo!("map p0 to final")
+                            }
+                            None => todo!("list item type is None"),
+                        }
                     } else {
                         // 2 otherwise (that is, the {base type definition} is not
                         //   ·xs:anySimpleType·), the {item type definition} of the {base type
@@ -419,8 +232,6 @@ impl SimpleTypeDefinition {
                 )
             }
             Variety::Union => {
-                let union_ = child;
-
                 // {member type definitions} The appropriate case among the following:
                 let base_type_definition = ctx.request(base_type_definition.simple().unwrap())?;
                 member_type_definitions = Some(
@@ -431,34 +242,20 @@ impl SimpleTypeDefinition {
                         //       memberTypes [attribute] of <union>, if any, and
                         //   (b) corresponding to the <simpleType>s among the [children] of
                         //       <union>, if any, in order.
-                        let mut member_types = union_
-                            .attribute("memberTypes")
-                            .map(|member_types| actual_value::<Vec<QName>>(member_types, union_))
-                            .map(|member_types| {
-                                member_types
-                                    .into_iter()
-                                    .map(|member_type| {
-                                        ctx.resolve::<Ref<SimpleTypeDefinition>>(&member_type)
-                                            .unwrap() // TODO
-                                    })
-                                    .collect::<Vec<_>>()
+                        let mut member_types = this_p0
+                            .union_member_types_attrib
+                            .into_iter()
+                            .map(|member_type| {
+                                ctx.resolve::<Ref<SimpleTypeDefinition>>(&member_type)
+                                    .unwrap() // TODO
                             })
-                            .unwrap_or_default();
+                            .collect::<Vec<_>>();
 
                         member_types.extend(
-                            union_
-                                .children()
-                                .filter(|c| c.tag_name().name() == Self::TAG_NAME)
-                                .map(|simple_type| {
-                                    Self::map_from_xml(
-                                        ctx,
-                                        simple_type,
-                                        schema,
-                                        None,
-                                        Some(Context::SimpleType(self_ref)),
-                                    )
-                                    .unwrap() // TODO
-                                }),
+                            this_p0
+                                .union_member_types_owned
+                                .into_iter()
+                                .map(|simple_type| todo!("map p0 to final")),
                         );
 
                         member_types
@@ -799,5 +596,312 @@ impl TopLevelMappable for SimpleTypeDefinition {
     ) -> Result<(), XsdError> {
         Self::map_from_xml(context, simple_type, schema, Some(self_ref), None)?;
         Ok(())
+    }
+}
+
+pub(crate) struct SimpleTypeDefP0 {
+    name: Option<String>,
+    target_namespace: Option<String>,
+    base_type_definition: SimpleTypeDefP0RefOrOwn,
+    final_: Set<DerivationMethod>,
+    facets: Vec<ConstrainingFacet>,
+    context_present: bool,
+    variety: SimpleTypeDefP0Variety,
+    annotations: Vec<Annotation>,
+    list_item_type: Option<SimpleTypeDefP0RefOrOwn>,
+    union_member_types_attrib: Vec<QName>,
+    union_member_types_owned: Vec<SimpleTypeDefP0>,
+}
+
+pub(crate) enum SimpleTypeDefP0RefOrOwn {
+    ReferencedType(QName),
+    OwnedSimpleType(Box<SimpleTypeDefP0>),
+}
+
+pub(crate) enum SimpleTypeDefP0Variety {
+    Final(Variety),
+    BaseTypeDefinitionVariety,
+}
+
+impl SimpleTypeDefP0 {
+    /// {name}
+    fn map_name(simple_type: Node) -> Result<Option<String>, XsdError> {
+        // The ·actual value· of the name [attribute] if present on the <simpleType> element,
+        // otherwise ·absent·.
+        Ok(simple_type
+            .attribute("name")
+            .map(|v| actual_value::<String>(v, simple_type)))
+    }
+
+    /// {target namespace}
+    fn map_target_namespace(simple_type: Node, schema: Node) -> Result<Option<String>, XsdError> {
+        // The ·actual value· of the targetNamespace [attribute] of the ancestor <schema> element
+        // information item if present, otherwise ·absent·.
+        Ok(schema
+            .attribute("targetNamespace")
+            .map(|v| actual_value::<AnyURI>(v, simple_type)))
+    }
+
+    /// {base type definition}
+    fn map_base_type_definition(
+        schema: Node,
+        child_type: ChildType,
+        child: Node,
+    ) -> Result<SimpleTypeDefP0RefOrOwn, XsdError> {
+        // The appropriate case among the following:
+        match child_type {
+            ChildType::Restriction => {
+                // 1 If the <restriction> alternative is chosen, then the type definition
+                //   ·resolved· to by the ·actual value· of the base [attribute] of <restriction>,
+                //   if present, otherwise the type definition corresponding to the <simpleType>
+                //   among the [children] of <restriction>.
+                if let Some(base) = child.attribute("base") {
+                    let base = actual_value::<QName>(base, child);
+                    return Ok(SimpleTypeDefP0RefOrOwn::ReferencedType(base));
+                };
+
+                let st = child
+                    .children()
+                    .find(|c| c.tag_name().name() == SimpleTypeDefinition::TAG_NAME)
+                    .unwrap();
+                let st = Self::map_from_xml(st, schema)?;
+                Ok(SimpleTypeDefP0RefOrOwn::OwnedSimpleType(Box::new(st)))
+            }
+            ChildType::List | ChildType::Union => {
+                // 2 If the <list> or <union> alternative is chosen, then ·xs:anySimpleType·.
+                Ok(SimpleTypeDefP0RefOrOwn::ReferencedType(
+                    XS_ANY_SIMPLE_TYPE_NAME.clone(),
+                ))
+            }
+        }
+    }
+
+    // {final}
+    fn map_final(simple_type: Node, schema: Node) -> Result<Set<DerivationMethod>, XsdError> {
+        // A subset of {restriction, extension, list, union}, determined as follows.
+        // Let FS be the ·actual value· of the final [attribute], if present, otherwise the
+        // ·actual value· of the finalDefault [attribute] of the ancestor schema element, if
+        // present, otherwise the empty string.
+        let fs = simple_type
+            .attribute("final")
+            .or_else(|| schema.attribute("finalDefault"))
+            .map(|v| actual_value::<String>(v, simple_type))
+            .unwrap_or_default();
+
+        // Then the property value is the appropriate case among the following:
+        //   1 If ·FS· is the empty string, then the empty set;
+        //   2 If ·FS· is "#all", then {restriction, extension, list, union};
+        //   3 otherwise Consider ·FS· as a space-separated list, and include restriction if
+        //     "restriction" is in that list, and similarly for extension, list and union.
+        Ok(if fs.is_empty() {
+            Set::new()
+        } else if fs == "#all" {
+            [
+                DerivationMethod::Restriction,
+                DerivationMethod::Extension,
+                DerivationMethod::List,
+                DerivationMethod::Union,
+            ]
+            .into_iter()
+            .collect()
+        } else {
+            let fs = fs.split_whitespace();
+            fs.map(|v| match v {
+                "restriction" => DerivationMethod::Restriction,
+                "extension" => DerivationMethod::Extension,
+                "list" => DerivationMethod::List,
+                "union" => DerivationMethod::Union,
+                _ => panic!("Invalid value in final set"),
+            })
+            .collect()
+        })
+    }
+
+    /// {facets}
+    fn map_facets(
+        child_type: ChildType,
+        child: Node,
+        target_namespace: Option<&str>,
+        name: Option<&str>,
+    ) -> Result<Vec<ConstrainingFacet>, XsdError> {
+        // The appropriate case among the following:
+        Ok(match child_type {
+            // 1 If the <restriction> alternative is chosen and the children of the <restriction>
+            //   element are all either <simpleType> elements, <annotation> elements, or elements
+            //   which specify constraining facets supported by the processor, then the set of
+            //   Constraining Facet components obtained by ·overlaying· the {facets} of the {base
+            //   type definition} with the set of Constraining Facet components corresponding to
+            //   those [children] of <restriction> which specify facets, as defined in Simple Type
+            //   Restriction (Facets) (§3.16.6.4).
+            // 2 If the <restriction> alternative is chosen and the children of the <restriction>
+            //   element include at least one element of which the processor has no prior knowledge
+            //   (i.e. not a <simpleType> element, an <annotation> element, or an element denoting
+            //   a constraining facet known to and supported by the processor), then the
+            //   <simpleType> element maps to no component at all (but is not in error solely on
+            //   account of the presence of the unknown element).
+            ChildType::Restriction => {
+                if target_namespace == XS_ANY_SIMPLE_TYPE_NAME.namespace_name()
+                    && name == Some(XS_ANY_SIMPLE_TYPE_NAME.local_name())
+                {
+                    // Special handling for xs:anySimpleType, in case it is ever loaded via this
+                    // route and not as builtin: As the base is complex and anySimpleType doesn't
+                    // have any facets, we just yield the empty set here.
+                    vec![]
+                } else {
+                    let mut facet_nodes = Vec::new();
+                    for facet in child.children() {
+                        if !facet.is_element() {
+                            continue;
+                        }
+                        if [SimpleTypeDefinition::TAG_NAME, Annotation::TAG_NAME]
+                            .contains(&facet.tag_name().name())
+                        {
+                            continue;
+                        }
+                        facet_nodes.push(facet);
+                    }
+                    // let facets =
+                    //     ConstrainingFacet::map_from_xml(ctx, &facet_nodes, schema).unwrap();
+                    todo!()
+                }
+            }
+            // 3 If the <list> alternative is chosen, then a set with one member, a whiteSpace facet
+            //   with {value} = collapse and {fixed} = true.
+            ChildType::List => {
+                let ws =
+                    ConstrainingFacet::WhiteSpace(WhiteSpace::new(WhiteSpaceValue::Collapse, true));
+                vec![ws]
+            }
+            // 4 otherwise the empty set
+            _ => vec![],
+        })
+    }
+
+    /// {context}: Returns whether there should be a parent context present.
+    fn map_context(simple_type: Node) -> Result<bool, XsdError> {
+        // The appropriate case among the following:
+        // 1 If the name [attribute] is present, then ·absent·
+        // 2 otherwise the appropriate case among the following:
+        //   (see spec; in our case, the caller already knows the appropriate case)
+        Ok(!simple_type.has_attribute("name"))
+    }
+
+    /// {variety}
+    fn map_variety(
+        child_type: ChildType,
+        target_namespace: Option<&str>,
+        name: Option<&str>,
+    ) -> Result<SimpleTypeDefP0Variety, XsdError> {
+        // If the <list> alternative is chosen, then list, otherwise if the <union> alternative is
+        // chosen, then union, otherwise (the <restriction> alternative is chosen), then the
+        // {variety} of the {base type definition}.
+        Ok(match child_type {
+            ChildType::List => SimpleTypeDefP0Variety::Final(Variety::List),
+            ChildType::Union => SimpleTypeDefP0Variety::Final(Variety::Union),
+            ChildType::Restriction => {
+                if target_namespace.as_deref() == XS_ANY_ATOMIC_TYPE_NAME.namespace_name()
+                    && name.as_deref() == Some(XS_ANY_ATOMIC_TYPE_NAME.local_name())
+                {
+                    // The type ·xs:anyAtomicType· is an exception because its {base type
+                    // definition} is ·xs:anySimpleType·, whose {variety} is ·absent·.
+                    // (See pt. 1, §3.16.6.2, clause 1.1)
+                    SimpleTypeDefP0Variety::Final(Variety::Atomic)
+                } else {
+                    SimpleTypeDefP0Variety::BaseTypeDefinitionVariety
+                }
+            }
+        })
+    }
+
+    /// {annotations}
+    fn map_annotations(simple_type: Node, child: Node) -> Result<Vec<Annotation>, XsdError> {
+        // The ·annotation mapping· of the set of elements containing the <simpleType>, and one of
+        // the <restriction>, <list> or <union> [children], whichever is present, as defined in
+        // XML Representation of Annotation Schema Components (§3.15.2).
+        let annotations = vec![];
+        // TODO: Annotation::xml_element_set_annotation_mapping(ctx, &[simple_type, child]);
+        Ok(annotations)
+    }
+
+    /// {item type definition} (if variety == list)
+    fn map_list_item_type_definition(
+        list: Node,
+        schema: Node,
+    ) -> Result<Option<SimpleTypeDefP0RefOrOwn>, XsdError> {
+        // 1 [..] the Simple Type Definition
+        //   (a) ·resolved· to by the ·actual value· of the itemType [attribute] of
+        //       <list>, or
+        //   (b) corresponding to the <simpleType> among the [children] of <list>,
+        //       whichever is present.
+        let item_type = list.attribute("itemType");
+        if let Some(item_type) = item_type {
+            return Ok(Some(SimpleTypeDefP0RefOrOwn::ReferencedType(actual_value(
+                item_type, list,
+            ))));
+        }
+
+        let simple_type = list
+            .children()
+            .find(|c| c.tag_name().name() == SimpleTypeDefinition::TAG_NAME);
+        if let Some(simple_type) = simple_type {
+            return Ok(Some(SimpleTypeDefP0RefOrOwn::OwnedSimpleType(Box::new(
+                SimpleTypeDefP0::map_from_xml(simple_type, schema)?,
+            ))));
+        }
+
+        // TODO: Is this an error?
+        Ok(None)
+    }
+
+    pub(crate) fn map_from_xml(simple_type: Node, schema: Node) -> Result<Self, XsdError> {
+        let (child_type, child) = if let Some(restriction) = simple_type
+            .children()
+            .find(|e| e.tag_name().name() == "restriction")
+        {
+            (ChildType::Restriction, restriction)
+        } else if let Some(list) = simple_type
+            .children()
+            .find(|e| e.tag_name().name() == "list")
+        {
+            (ChildType::List, list)
+        } else if let Some(union) = simple_type
+            .children()
+            .find(|e| e.tag_name().name() == "union")
+        {
+            (ChildType::Union, union)
+        } else {
+            unreachable!()
+        };
+
+        let name = Self::map_name(simple_type)?;
+        let target_namespace = Self::map_target_namespace(simple_type, schema)?;
+        let base_type_definition = Self::map_base_type_definition(schema, child_type, child)?;
+        let final_ = Self::map_final(simple_type, schema)?;
+        let facets = Self::map_facets(
+            child_type,
+            child,
+            target_namespace.as_deref(),
+            name.as_deref(),
+        )?;
+        let context_present = Self::map_context(simple_type)?;
+        let variety = Self::map_variety(child_type, target_namespace.as_deref(), name.as_deref())?;
+        let annotations = Self::map_annotations(simple_type, child)?;
+        let list_item_type = if child_type == ChildType::List {
+            Self::map_list_item_type_definition(child, schema)?
+        } else {
+            None
+        };
+
+        Ok(Self {
+            name,
+            target_namespace,
+            base_type_definition,
+            final_,
+            facets,
+            context_present,
+            variety,
+            annotations,
+            list_item_type,
+        })
     }
 }

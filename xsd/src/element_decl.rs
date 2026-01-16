@@ -2,16 +2,16 @@ use crate::{
     MappingContext, Particle, Ref, SimpleTypeDefinition, Term,
     annotation::Annotation,
     builtins::{XS_ANY_TYPE_NAME, XS_STRING_NAME},
-    complex_type_def::{self, ComplexTypeDefinition, ContentType},
+    complex_type_def::{self, ComplexTypeDefP0, ComplexTypeDefinition, ContentType},
     components::{Component, Named, NamedXml},
     error::XsdError,
-    identity_constraint_def::IdentityConstraintDefinition,
+    identity_constraint_def::{IdentityConstraintDefinition, IdentityConstraintDefinitionP0},
     mapping_context::TopLevelMappable,
     model_group_def::ModelGroupDefinition,
     particle::MaxOccurs,
     shared::{self, TypeDefinition},
-    simple_type_def::Context as SimpleContext,
-    type_alternative::TypeAlternative,
+    simple_type_def::{Context as SimpleContext, SimpleTypeDefP0},
+    type_alternative::{TypeAlternative, TypeAlternativeP0},
     values::{ActualValue, actual_value},
     xstypes::{AnyURI, NCName, QName, Sequence, Set},
 };
@@ -96,6 +96,338 @@ impl NamedXml for ElementDeclaration {
     }
 }
 
+pub(crate) struct ElementDeclarationPhase0 {
+    name: NCName,
+    type_definition: ElDeclP0TypeDefinition,
+    type_table: Option<ElDeclP0TypeTable>,
+    nillable: bool,
+    value_constraint: Option<ElDeclP0ValueConstraint>,
+    identity_constraint_definitions: Vec<IdentityConstraintDefinitionP0>,
+    substitution_group_affiliations: MustResolve<Vec<QName>>,
+    disallowed_substitutions: Vec<SubstitutionMethod>,
+    substitution_group_exclusions: Vec<complex_type_def::DerivationMethod>,
+    abstract_: bool,
+    annotations: Vec<Annotation>,
+}
+
+pub(crate) enum ElDeclP0TypeDefinition {
+    OwnedSimpleType(SimpleTypeDefP0),
+    OwnedComplexType(ComplexTypeDefP0),
+    ReferencedType(MustResolve<QName>),
+    TypeDefinitionOfReferencedElementDeclaration(MustResolve<QName>),
+}
+
+pub(crate) struct ElDeclP0TypeTable {
+    alternatives: Sequence<TypeAlternativeP0>,
+    default_type_definition: TypeAlternativeP0,
+}
+
+pub(crate) struct ActualValueWithRespectToEffectiveSimpleType(String);
+pub(crate) struct NormalizedValueWithRespectToEffectiveSimpleType(String);
+#[repr(transparent)]
+pub(crate) struct MustResolve<T>(T);
+
+pub(crate) struct ElDeclP0ValueConstraint {
+    variety: ValueConstraintVariety,
+    value: ActualValueWithRespectToEffectiveSimpleType,
+    lexical_form: NormalizedValueWithRespectToEffectiveSimpleType,
+}
+
+impl ElementDeclarationPhase0 {
+    /// {name}
+    fn map_name(element: Node) -> Result<String, XsdError> {
+        // The ·actual value· of the name [attribute].
+        Ok(element
+            .attribute("name")
+            .map(|v| actual_value::<String>(v, element))
+            .unwrap())
+    }
+
+    /// {type definition}
+    fn map_type_definition(
+        element: Node,
+        schema: Node,
+    ) -> Result<ElDeclP0TypeDefinition, XsdError> {
+        //   The first of the following that applies:
+
+        //   1 The type definition corresponding to the <simpleType> or
+        //     <complexType> element information item in the [children], if
+        //     either is present.
+        let simple_type_in_children = element
+            .children()
+            .find(|c| c.tag_name().name() == "simpleType");
+        if let Some(simple_type_in_children) = simple_type_in_children {
+            return SimpleTypeDefP0::map_from_xml(simple_type_in_children, schema)
+                .map(ElDeclP0TypeDefinition::OwnedSimpleType);
+        }
+
+        let complex_type_in_children = element
+            .children()
+            .find(|c| c.tag_name().name() == "complexType");
+        if let Some(complex_type_in_children) = complex_type_in_children {
+            return ComplexTypeDefP0::map_from_xml(complex_type_in_children)
+                .map(ElDeclP0TypeDefinition::OwnedComplexType);
+        }
+
+        //   2 The type definition ·resolved· to by the ·actual value· of the
+        //     type [attribute], if it is present.
+        let type_attrib = element
+            .attribute("type")
+            .map(|type_| actual_value::<QName>(type_, element));
+        if let Some(type_attrib) = type_attrib {
+            return Ok(ElDeclP0TypeDefinition::ReferencedType(MustResolve(
+                type_attrib,
+            )));
+        }
+
+        //   3 The declared {type definition} of the Element Declaration
+        //     ·resolved· to by the first QName in the ·actual value· of the
+        //     substitutionGroup [attribute], if present.
+        let first_subst_element_decl = element
+            .attribute("substitutionGroup")
+            .map(|v| actual_value::<Vec<QName>>(v, element))
+            .and_then(|v| v.first().cloned());
+        if let Some(first_subst_element_decl) = first_subst_element_decl {
+            return Ok(
+                ElDeclP0TypeDefinition::TypeDefinitionOfReferencedElementDeclaration(MustResolve(
+                    first_subst_element_decl,
+                )),
+            );
+        }
+
+        //   4 ·xs:anyType·.
+        Ok(ElDeclP0TypeDefinition::ReferencedType(MustResolve(
+            XS_ANY_TYPE_NAME.clone(),
+        )))
+    }
+
+    /// {type table}
+    fn map_type_table(element: Node, schema: Node) -> Result<Option<ElDeclP0TypeTable>, XsdError> {
+        //   A Type Table corresponding to the <alternative> element information items among the
+        //   [children], if any, as follows, otherwise ·absent·.
+        let alternative_elements = element
+            .children()
+            .filter(|c| c.tag_name().name() == "alternative")
+            .collect::<Vec<_>>();
+
+        if !alternative_elements.is_empty() {
+            // {alternatives}
+            //   A sequence of Type Alternatives, each corresponding, in order, to one of the
+            //   <alternative> elements which have a test [attribute].
+            let alternatives = alternative_elements
+                .iter()
+                .filter(|a| a.has_attribute("test"))
+                .map(|&a| TypeAlternativeP0::map_from_xml(a, schema))
+                .collect::<Result<Sequence<_>, _>>()?;
+
+            // {default type definition}
+            //   Depends upon the final <alternative> element among the [children].
+            let final_alternative = *alternative_elements.last().unwrap();
+
+            //   If it has no test [attribute], the final <alternative> maps to the {default type
+            //   definition}; if it does have a test attribute, it is covered by the rule for
+            //   {alternatives} and the {default type definition} is taken from the declared type
+            //   of the Element Declaration. So the value of the {default type definition} is given
+            //   by the appropriate case among the following:
+            let default_type_definition = if !final_alternative.has_attribute("test") {
+                // 1 If the <alternative> has no test [attribute], then a Type Alternative
+                //   corresponding to the <alternative>.
+                TypeAlternativeP0::map_from_xml(final_alternative, schema)?
+            } else {
+                // 2 otherwise (the <alternative> has a test) a Type Alternative with the following
+                //   properties:
+                //   {test}             ·absent·.
+                //   {type definition}  the {type definition} property of the parent Element
+                //                      Declaration.
+                //   {annotations}      the empty sequence.
+                TypeAlternativeP0::when_alternative_has_test()? // TODO:
+            };
+
+            Ok(Some(ElDeclP0TypeTable {
+                alternatives,
+                default_type_definition,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// {nillable}
+    fn map_nillable(element: Node) -> Result<bool, XsdError> {
+        //   The ·actual value· of the nillable [attribute], if present, otherwise false.
+        Ok(element
+            .attribute("nillable")
+            .map(|v| actual_value::<bool>(v, element))
+            .unwrap_or(false))
+    }
+
+    /// {value constraint}
+    fn map_value_constraint(element: Node) -> Result<Option<ElDeclP0ValueConstraint>, XsdError> {
+        //   If there is a default or a fixed [attribute], then a Value Constraint as follows,
+        //   otherwise ·absent·.
+        if element.has_attribute("default") || element.has_attribute("fixed") {
+            // [Definition:]
+            //   Use the name effective simple type definition for the declared {type definition},
+            //   if it is a simple type definition, or, if {type definition}.{content type}
+            //   .{variety} = simple, for {type definition}.{content type}.{simple type definition},
+            //   or else for the built-in string simple type definition).
+            // let _effective_simple_type_definition =
+            //     if let TypeDefinition::Simple(st) = type_definition {
+            //         st
+            //     } else {
+            //         let ct = context.request(type_definition.complex().unwrap())?;
+            //         if let ContentType::Simple {
+            //             simple_type_definition,
+            //         } = ct.content_type
+            //         {
+            //             simple_type_definition
+            //         } else {
+            //             context.resolve(&XS_STRING_NAME).unwrap() // TODO
+            //         }
+            //     };
+
+            let (variety, value) = if let Some(default) = element.attribute("default") {
+                (ValueConstraintVariety::Default, default)
+            } else if let Some(fixed) = element.attribute("fixed") {
+                (ValueConstraintVariety::Fixed, fixed)
+            } else {
+                unreachable!()
+            };
+
+            Ok(Some(ElDeclP0ValueConstraint {
+                // {variety}: either default or fixed, as appropriate
+                variety,
+                // {value}: the ·actual value· (with respect to the ·effective simple type definition·)
+                //   of the [attribute]
+                value: ActualValueWithRespectToEffectiveSimpleType(value.into()),
+                // {lexical form}: the ·normalized value· (with respect to the ·effective simple type
+                //   definition·) of the [attribute]
+                lexical_form: NormalizedValueWithRespectToEffectiveSimpleType(value.into()),
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// {identity-constraint definitions}
+    fn map_identity_constraint_definitions(
+        element: Node,
+        schema: Node,
+    ) -> Result<Vec<IdentityConstraintDefinitionP0>, XsdError> {
+        //   A set consisting of the identity-constraint-definitions corresponding to all the
+        //   <key>, <unique> and <keyref> element information items in the [children], if any,
+        //   otherwise the empty set.
+        element
+            .children()
+            .filter(|c| {
+                [
+                    IdentityConstraintDefinition::KEY_TAG_NAME,
+                    IdentityConstraintDefinition::UNIQUE_TAG_NAME,
+                    IdentityConstraintDefinition::KEYREF_TAG_NAME,
+                ]
+                .contains(&c.tag_name().name())
+            })
+            .map(|icd| IdentityConstraintDefinitionP0::map_from_xml_local(icd, schema))
+            .collect::<Result<Vec<_>, _>>()
+    }
+
+    /// {substitution group affiliations}
+    fn map_substitution_group_affiliations(
+        element: Node,
+    ) -> Result<MustResolve<Vec<QName>>, XsdError> {
+        //   A set of the element declarations ·resolved· to by the items in the ·actual value· of
+        //   the substitutionGroup [attribute], if present, otherwise the empty set.
+        Ok(MustResolve(
+            element
+                .attribute("substitutionGroup")
+                .map(|v| actual_value::<Vec<QName>>(v, element))
+                .unwrap_or_default(),
+        ))
+    }
+
+    /// {disallowed substitutions}
+    fn map_disallowed_substitutions(
+        element: Node,
+        schema: Node,
+    ) -> Result<Vec<SubstitutionMethod>, XsdError> {
+        // (see the helper function for explanation)
+        Ok(ElementDeclaration::map_attrib_set_helper(
+            "block",
+            "blockDefault",
+            &[
+                SubstitutionMethod::Extension,
+                SubstitutionMethod::Restriction,
+                SubstitutionMethod::Substitution,
+            ],
+            element,
+            schema,
+        ))
+    }
+
+    /// {substitution group exclusions}
+    fn map_substitution_group_exclusions(
+        element: Node,
+        schema: Node,
+    ) -> Result<Vec<complex_type_def::DerivationMethod>, XsdError> {
+        // As for {disallowed substitutions} above, but using the final and finalDefault
+        // [attributes] in place of the block and blockDefault [attributes] and with the relevant
+        // set being {extension, restriction}.
+        Ok(ElementDeclaration::map_attrib_set_helper(
+            "final",
+            "finalDefault",
+            &[
+                complex_type_def::DerivationMethod::Extension,
+                complex_type_def::DerivationMethod::Restriction,
+            ],
+            element,
+            schema,
+        ))
+    }
+
+    /// {abstract}
+    fn map_abstract(element: Node) -> Result<bool, XsdError> {
+        //   The ·actual value· of the abstract [attribute], if present, otherwise false.
+        Ok(element
+            .attribute("abstract")
+            .map(|v| actual_value::<bool>(v, element))
+            .unwrap_or(false))
+    }
+
+    /// {annotations}
+    fn map_annotations(element: Node) -> Result<Vec<Annotation>, XsdError> {
+        let mut annot_elements = vec![element];
+        annot_elements.extend(
+            element
+                .children()
+                .filter(|e| ["unique", "key", "keyref"].contains(&e.tag_name().name()))
+                .filter(|e| e.has_attribute("ref")),
+        );
+        // TODO: map annotations: Annotation::xml_element_set_annotation_mapping(context, &annot_elements);
+        eprintln!("TODO: P0 map annotations");
+        Ok(vec![])
+    }
+
+    fn map_from_xml_common(element: Node, schema: Node) -> Result<Self, XsdError> {
+        Ok(ElementDeclarationPhase0 {
+            name: Self::map_name(element)?,
+            type_definition: Self::map_type_definition(element, schema)?,
+            type_table: Self::map_type_table(element, schema)?,
+            nillable: Self::map_nillable(element)?,
+            value_constraint: Self::map_value_constraint(element)?,
+            identity_constraint_definitions: Self::map_identity_constraint_definitions(
+                element, schema,
+            )?,
+            substitution_group_affiliations: Self::map_substitution_group_affiliations(element)?,
+            disallowed_substitutions: Self::map_disallowed_substitutions(element, schema)?,
+            substitution_group_exclusions: Self::map_substitution_group_exclusions(
+                element, schema,
+            )?,
+            abstract_: Self::map_abstract(element)?,
+            annotations: Self::map_annotations(element)?,
+        })
+    }
+}
+
 impl ElementDeclaration {
     pub const TAG_NAME: &'static str = "element";
 
@@ -108,73 +440,27 @@ impl ElementDeclaration {
         // NOTE: For now, get_name_from_xml() can't be used as the common case doesn't handle the
         //       target namespace
 
-        // {name} The ·actual value· of the name [attribute].
-        let name = element
-            .attribute("name")
-            .map(|v| actual_value::<String>(v, element))
-            .unwrap();
+        let this_p0 = ElementDeclarationPhase0::map_from_xml_common(element, schema)?;
 
-        // {type definition}
-        //   The first of the following that applies:
-        //   1 The type definition corresponding to the <simpleType> or
-        //     <complexType> element information item in the [children], if
-        //     either is present.
-        //   2 The type definition ·resolved· to by the ·actual value· of the
-        //     type [attribute], if it is present.
-        //   3 The declared {type definition} of the Element Declaration
-        //     ·resolved· to by the first QName in the ·actual value· of the
-        //     substitutionGroup [attribute], if present.
-        //   4 ·xs:anyType·.
-        let type_definition = element
-            .children()
-            .find(|c| c.tag_name().name() == "simpleType")
-            .map(|simple_type| {
-                let simple_type_def = SimpleTypeDefinition::map_from_xml(
-                    context,
-                    simple_type,
-                    schema,
-                    None,
-                    Some(SimpleContext::Element(self_ref)),
-                )
-                .unwrap(); // TODO
-                TypeDefinition::Simple(simple_type_def)
-            })
-            .or_else(|| {
-                element
-                    .children()
-                    .find(|c| c.tag_name().name() == "complexType")
-                    .map(|complex_type| {
-                        let complex_type_def = ComplexTypeDefinition::map_from_xml(
-                            context,
-                            complex_type,
-                            schema,
-                            Some(self_ref),
-                            None,
-                        )
-                        .unwrap(); // TODO
-                        TypeDefinition::Complex(complex_type_def)
-                    })
-            })
-            .or_else(|| {
-                element
-                    .attribute("type")
-                    .map(|type_| actual_value::<QName>(type_, element))
-                    .map(|type_| context.resolve(&type_).unwrap()) // TODO
-            })
-            .or_else(|| {
-                element
-                    .attribute("substitutionGroup")
-                    .map(|v| actual_value::<Vec<QName>>(v, element))
-                    .and_then(|v| v.first().cloned())
-                    .map(|name| context.resolve::<Ref<ElementDeclaration>>(&name).unwrap()) // TODO
-                    .map(|element_decl| {
-                        context
-                            .request(element_decl)
-                            .unwrap() // TODO
-                            .type_definition
-                    })
-            })
-            .unwrap_or_else(|| context.resolve(&XS_ANY_TYPE_NAME).unwrap()); // TODO
+        let name = this_p0.name;
+
+        let type_definition: TypeDefinition = match this_p0.type_definition {
+            ElDeclP0TypeDefinition::OwnedSimpleType(simple_type_def_p0) => {
+                todo!()
+            }
+            ElDeclP0TypeDefinition::OwnedComplexType(complex_type_def_p0) => todo!(),
+            ElDeclP0TypeDefinition::ReferencedType(type_) => {
+                // TODO: unwrap
+                context.resolve(&type_.0).unwrap()
+            }
+            ElDeclP0TypeDefinition::TypeDefinitionOfReferencedElementDeclaration(name) => {
+                // TODO: unwrap
+                let element_decl: Ref<ElementDeclaration> = context.resolve(&name.0).unwrap();
+
+                // TODO: unwrap
+                context.request(element_decl).unwrap().type_definition
+            }
+        };
 
         // {type table}
         //   A Type Table corresponding to the <alternative> element information items among the
@@ -229,55 +515,16 @@ impl ElementDeclaration {
             None
         };
 
-        // {nillable}
-        //   The ·actual value· of the nillable [attribute], if present, otherwise false.
-        let nillable = element
-            .attribute("nillable")
-            .map(|v| actual_value::<bool>(v, element))
-            .unwrap_or(false);
+        let nillable = this_p0.nillable;
 
         // {value constraint}
         //   If there is a default or a fixed [attribute], then a Value Constraint as follows,
         //   otherwise ·absent·.
-        let value_constraint = if element.has_attribute("default") || element.has_attribute("fixed")
-        {
-            // [Definition:]
-            //   Use the name effective simple type definition for the declared {type definition},
-            //   if it is a simple type definition, or, if {type definition}.{content type}
-            //   .{variety} = simple, for {type definition}.{content type}.{simple type definition},
-            //   or else for the built-in string simple type definition).
-            // TODO store as the effective type
-            let _effective_simple_type_definition =
-                if let TypeDefinition::Simple(st) = type_definition {
-                    st
-                } else {
-                    let ct = context.request(type_definition.complex().unwrap())?;
-                    if let ContentType::Simple {
-                        simple_type_definition,
-                    } = ct.content_type
-                    {
-                        simple_type_definition
-                    } else {
-                        context.resolve(&XS_STRING_NAME).unwrap() // TODO
-                    }
-                };
-
-            let (variety, value) = if let Some(default) = element.attribute("default") {
-                (ValueConstraintVariety::Default, default)
-            } else if let Some(fixed) = element.attribute("fixed") {
-                (ValueConstraintVariety::Fixed, fixed)
-            } else {
-                unreachable!()
-            };
-
-            Some(ValueConstraint {
-                variety,
-                value: value.into(),
-                lexical_form: value.into(),
-            })
-        } else {
-            None
-        };
+        let value_constraint = this_p0.value_constraint.map(|vc| ValueConstraint {
+            variety: vc.variety,
+            value: vc.value.0,               // TODO: actual value
+            lexical_form: vc.lexical_form.0, // TODO: normalized value
+        });
 
         // {identity-constraint definitions}
         //   A set consisting of the identity-constraint-definitions corresponding to all the
@@ -299,57 +546,34 @@ impl ElementDeclaration {
         // {substitution group affiliations}
         //   A set of the element declarations ·resolved· to by the items in the ·actual value· of
         //   the substitutionGroup [attribute], if present, otherwise the empty set.
-        let substitution_group_affiliations = element
-            .attribute("substitutionGroup")
-            .map(|v| actual_value::<Vec<QName>>(v, element))
-            .map(|v| v.iter().map(|c| context.resolve(c).unwrap()).collect()) // TODO
-            .unwrap_or_default();
+        let substitution_group_affiliations = this_p0
+            .substitution_group_affiliations
+            .0
+            .into_iter()
+            .map(|c| context.resolve(&c).unwrap()) // TODO: unwrap
+            .collect();
 
         // {disallowed substitutions} (see the helper function for explanation)
-        let disallowed_substitutions = Self::map_attrib_set_helper(
-            "block",
-            "blockDefault",
-            &[
-                SubstitutionMethod::Extension,
-                SubstitutionMethod::Restriction,
-                SubstitutionMethod::Substitution,
-            ],
-            element,
-            schema,
-        );
+        let disallowed_substitutions = this_p0.disallowed_substitutions;
 
         // As for {disallowed substitutions} above, but using the final and finalDefault
         // [attributes] in place of the block and blockDefault [attributes] and with the relevant
         // set being {extension, restriction}.
-        let substitution_group_exclusions = Self::map_attrib_set_helper(
-            "final",
-            "finalDefault",
-            &[
-                complex_type_def::DerivationMethod::Extension,
-                complex_type_def::DerivationMethod::Restriction,
-            ],
-            element,
-            schema,
-        );
+        let substitution_group_exclusions = this_p0.substitution_group_exclusions;
 
         // {abstract}
         //   The ·actual value· of the abstract [attribute], if present, otherwise false.
-        let abstract_ = element
-            .attribute("abstract")
-            .map(|v| actual_value::<bool>(v, element))
-            .unwrap_or(false);
+        let abstract_ = this_p0.abstract_;
 
         // {annotations}
         //   The ·annotation mapping· of the <element> element and any of its <unique>, <key> and
         //   <keyref> [children] with a ref [attribute], as defined in XML Representation of
         //   Annotation Schema Components (§3.15.2).
-        let mut annot_elements = vec![element];
-        element
-            .children()
-            .filter(|e| ["unique", "key", "keyref"].contains(&e.tag_name().name()))
-            .filter(|e| e.has_attribute("ref"))
-            .for_each(|e| annot_elements.push(e));
-        let annotations = Annotation::xml_element_set_annotation_mapping(context, &annot_elements);
+        let annotations = this_p0
+            .annotations
+            .into_iter()
+            .map(|a| context.create(a))
+            .collect();
 
         Ok(Self {
             annotations,

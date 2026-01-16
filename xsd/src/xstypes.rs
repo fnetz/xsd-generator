@@ -3,6 +3,7 @@ use std::{borrow::Cow, fmt};
 
 pub type NCName = String;
 pub type AnyURI = String;
+pub type Token = String;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct QName {

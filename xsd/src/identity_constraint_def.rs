@@ -177,3 +177,11 @@ impl TopLevelMappable for IdentityConstraintDefinition {
         Ok(())
     }
 }
+
+pub(crate) struct IdentityConstraintDefinitionP0 {}
+
+impl IdentityConstraintDefinitionP0 {
+    pub(crate) fn map_from_xml_local(icd: Node, schema: Node) -> Result<Self, XsdError> {
+        todo!()
+    }
+}

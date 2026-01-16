@@ -1244,6 +1244,14 @@ impl TopLevelMappable for ComplexTypeDefinition {
     }
 }
 
+pub(crate) struct ComplexTypeDefP0 {}
+
+impl ComplexTypeDefP0 {
+    pub fn map_from_xml(element: Node) -> Result<Self, XsdError> {
+        todo!()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{

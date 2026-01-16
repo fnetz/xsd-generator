@@ -3,6 +3,7 @@ use crate::{
     annotation::Annotation,
     assertion::XPathExpression,
     components::{AnnotatedComponent, Component},
+    error::XsdError,
     shared::TypeDefinition,
     xstypes::Sequence,
 };
@@ -29,5 +30,17 @@ impl Component for TypeAlternative {
 impl AnnotatedComponent for TypeAlternative {
     fn annotations(&self) -> &[Ref<Annotation>] {
         &self.annotations
+    }
+}
+
+pub(crate) struct TypeAlternativeP0 {}
+
+impl TypeAlternativeP0 {
+    pub(crate) fn map_from_xml(alternative: Node, schema: Node) -> Result<Self, XsdError> {
+        todo!("type alternative phase 0")
+    }
+
+    pub(crate) fn when_alternative_has_test() -> Result<Self, XsdError> {
+        todo!()
     }
 }
